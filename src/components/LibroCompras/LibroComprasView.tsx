@@ -16,6 +16,7 @@ import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewPurchaseModal } from './NewPurchaseModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
+import { exportComprasPdf } from '../../utils/pdfGenerator';
 
 export const LibroComprasView: React.FC = () => {
   const {
@@ -29,6 +30,18 @@ export const LibroComprasView: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
+
+  const handleExportPdf = async () => {
+    try {
+      setIsExportingPdf(true);
+      await exportComprasPdf(currentCompany, filteredPurchases, monthFilter);
+    } catch (err) {
+      console.error('Error generating PDF:', err);
+    } finally {
+      setIsExportingPdf(false);
+    }
+  };
 
   const filteredPurchases = purchases
     .filter(p => {
@@ -92,6 +105,15 @@ export const LibroComprasView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button
+              onClick={handleExportPdf}
+              disabled={isExportingPdf || filteredPurchases.length === 0}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300 shadow-sm"
+              title="Descargar archivo PDF oficial del Libro de Compras con logo y márgenes SENIAT"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF Oficial'}
+            </button>
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
@@ -335,6 +357,22 @@ export const LibroComprasView: React.FC = () => {
             <span className="text-[11px] text-slate-400 block">Compras Exentas y No Sujetas:</span>
             <span className="text-base font-bold text-slate-300 mt-1 block">{formatBs(totalExentoBs)}</span>
           </div>
+        </div>
+      </div>
+
+      {/* Official Signatures block (print-only) */}
+      <div className="hidden print:grid grid-cols-2 gap-12 pt-12 pb-6 text-xs print-break-inside-avoid">
+        <div className="text-center space-y-1">
+          <div className="border-t border-slate-900 w-48 mx-auto pt-2 font-bold text-slate-900">
+            CONTADOR PÚBLICO COLEGIADO
+          </div>
+          <div className="text-[11px] text-slate-500">C.P.C. N° ___________</div>
+        </div>
+        <div className="text-center space-y-1">
+          <div className="border-t border-slate-900 w-48 mx-auto pt-2 font-bold text-slate-900">
+            REPRESENTANTE LEGAL
+          </div>
+          <div className="text-[11px] text-slate-500">{currentCompany.name}</div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
-import { Company, JournalEntry } from '../types/accounting';
+import { Company, JournalEntry, PurchaseRecord, SaleRecord } from '../types/accounting';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from './formatters';
 import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 
@@ -748,4 +748,225 @@ export async function exportConciliacionPdf(
   const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
   doc.save(`Conciliacion_Bancaria_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
 }
+
+/**
+ * 7. EXPORT LIBRO DE COMPRAS FISCAL TO PDF (SENIAT)
+ */
+export async function exportComprasPdf(
+  company: Company,
+  purchases: PurchaseRecord[],
+  monthFilter?: string
+) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+
+  const periodLabel = monthFilter
+    ? `Período Fiscal: ${monthFilter}`
+    : `Ejercicio Económico ${company.fiscalYear}`;
+
+  const startY = await addPdfHeader(
+    doc,
+    company,
+    'Libro de Compras Fiscal',
+    `${periodLabel} • Providencia Administrativa SNAT/2015/0049 • SENIAT`
+  );
+
+  let totalMonto = 0;
+  let totalExento = 0;
+  let totalBase = 0;
+  let totalIva = 0;
+  let totalRetenido = 0;
+
+  const tableBody: any[] = purchases.map(p => {
+    totalMonto += p.totalAmountBs || 0;
+    totalExento += p.exemptAmountBs || 0;
+    totalBase += p.taxableBaseBs || 0;
+    totalIva += p.vatAmountBs || 0;
+    totalRetenido += p.vatWithheldBs || 0;
+
+    return [
+      p.opNumber,
+      formatDate(p.invoiceDate),
+      p.supplierRif,
+      p.supplierName.slice(0, 32),
+      p.invoiceNumber,
+      p.controlNumber,
+      formatNumberVe(p.totalAmountBs),
+      p.exemptAmountBs > 0 ? formatNumberVe(p.exemptAmountBs) : '-',
+      formatNumberVe(p.taxableBaseBs),
+      `${p.taxRate}%`,
+      formatNumberVe(p.vatAmountBs),
+      p.retentionRate > 0 ? `${p.retentionRate}%` : '0%',
+      p.vatWithheldBs > 0 ? formatNumberVe(p.vatWithheldBs) : '-'
+    ];
+  });
+
+  // Totals row
+  tableBody.push([
+    { content: 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } },
+    { content: formatNumberVe(totalIva), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [52, 211, 153] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } },
+    { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } }
+  ]);
+
+  autoTable(doc, {
+    startY,
+    head: [[
+      'Op.',
+      'Fecha',
+      'RIF Proveedor',
+      'Razón Social',
+      'N° Factura',
+      'N° Control',
+      'Total Compras (Bs.)',
+      'Exento (Bs.)',
+      'Base Imp. (Bs.)',
+      '% Alíc.',
+      'IVA Débito (Bs.)',
+      '% Ret.',
+      'IVA Retenido (Bs.)'
+    ]],
+    body: tableBody,
+    theme: 'grid',
+    styles: { fontSize: 7, cellPadding: 1.8, font: 'helvetica' },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 18, font: 'courier' },
+      2: { cellWidth: 22, font: 'courier' },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 20, font: 'courier' },
+      5: { cellWidth: 20, font: 'courier' },
+      6: { cellWidth: 24, halign: 'right', font: 'courier', fontStyle: 'bold' },
+      7: { cellWidth: 20, halign: 'right', font: 'courier' },
+      8: { cellWidth: 22, halign: 'right', font: 'courier' },
+      9: { cellWidth: 12, halign: 'center' },
+      10: { cellWidth: 22, halign: 'right', font: 'courier' },
+      11: { cellWidth: 12, halign: 'center' },
+      12: { cellWidth: 22, halign: 'right', font: 'courier' }
+    },
+    margin: { left: 14, right: 14, bottom: 20 }
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY || 100;
+  addSignatureBlock(doc, finalY, company);
+  addPdfFooter(doc);
+
+  const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
+  doc.save(`Libro_Compras_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
+/**
+ * 8. EXPORT LIBRO DE VENTAS FISCAL TO PDF (SENIAT)
+ */
+export async function exportVentasPdf(
+  company: Company,
+  sales: SaleRecord[],
+  monthFilter?: string
+) {
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
+
+  const periodLabel = monthFilter
+    ? `Período Fiscal: ${monthFilter}`
+    : `Ejercicio Económico ${company.fiscalYear}`;
+
+  const startY = await addPdfHeader(
+    doc,
+    company,
+    'Libro de Ventas Fiscal',
+    `${periodLabel} • Providencia Administrativa SNAT/2015/0049 • SENIAT`
+  );
+
+  let totalMonto = 0;
+  let totalExento = 0;
+  let totalBase = 0;
+  let totalIva = 0;
+  let totalRetenido = 0;
+
+  const tableBody: any[] = sales.map(s => {
+    totalMonto += s.totalAmountBs || 0;
+    totalExento += s.exemptAmountBs || 0;
+    totalBase += s.taxableBaseBs || 0;
+    totalIva += s.vatAmountBs || 0;
+    totalRetenido += s.vatWithheldBs || 0;
+
+    return [
+      s.opNumber,
+      formatDate(s.invoiceDate),
+      s.customerRif,
+      s.customerName.slice(0, 32),
+      s.invoiceNumber,
+      s.controlNumber,
+      formatNumberVe(s.totalAmountBs),
+      s.exemptAmountBs > 0 ? formatNumberVe(s.exemptAmountBs) : '-',
+      formatNumberVe(s.taxableBaseBs),
+      `${s.taxRate}%`,
+      formatNumberVe(s.vatAmountBs),
+      s.vatWithheldBs > 0 ? formatNumberVe(s.vatWithheldBs) : '-',
+      s.retentionVoucherNumber || '-'
+    ];
+  });
+
+  // Totals row
+  tableBody.push([
+    { content: 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } },
+    { content: formatNumberVe(totalIva), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [52, 211, 153] } },
+    { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } }
+  ]);
+
+  autoTable(doc, {
+    startY,
+    head: [[
+      'Op.',
+      'Fecha',
+      'RIF Cliente',
+      'Nombre o Razón Social',
+      'N° Factura',
+      'N° Control',
+      'Total Ventas (Bs.)',
+      'Exento (Bs.)',
+      'Base Imp. (Bs.)',
+      '% Alíc.',
+      'IVA Débito (Bs.)',
+      'IVA Retenido (Bs.)',
+      'Comprobante Ret.'
+    ]],
+    body: tableBody,
+    theme: 'grid',
+    styles: { fontSize: 7, cellPadding: 1.8, font: 'helvetica' },
+    headStyles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold' },
+    columnStyles: {
+      0: { cellWidth: 10, halign: 'center' },
+      1: { cellWidth: 18, font: 'courier' },
+      2: { cellWidth: 22, font: 'courier' },
+      3: { cellWidth: 'auto' },
+      4: { cellWidth: 20, font: 'courier' },
+      5: { cellWidth: 20, font: 'courier' },
+      6: { cellWidth: 24, halign: 'right', font: 'courier', fontStyle: 'bold' },
+      7: { cellWidth: 20, halign: 'right', font: 'courier' },
+      8: { cellWidth: 22, halign: 'right', font: 'courier' },
+      9: { cellWidth: 12, halign: 'center' },
+      10: { cellWidth: 22, halign: 'right', font: 'courier' },
+      11: { cellWidth: 22, halign: 'right', font: 'courier' },
+      12: { cellWidth: 26, font: 'courier' }
+    },
+    margin: { left: 14, right: 14, bottom: 20 }
+  });
+
+  const finalY = (doc as any).lastAutoTable.finalY || 100;
+  addSignatureBlock(doc, finalY, company);
+  addPdfFooter(doc);
+
+  const cleanName = company.name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 20);
+  doc.save(`Libro_Ventas_${cleanName}_${new Date().toISOString().slice(0, 10)}.pdf`);
+}
+
 

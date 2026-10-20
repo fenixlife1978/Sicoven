@@ -17,23 +17,23 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full my-6 overflow-hidden border border-slate-300">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-2 sm:p-4 overflow-y-auto">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-4xl w-full my-4 sm:my-6 overflow-hidden border border-slate-300">
         {/* Top Control Bar (no-print) */}
-        <div className="flex items-center justify-between px-6 py-3.5 bg-slate-900 text-white no-print">
-          <div className="flex items-center gap-2">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" />
-            <span className="font-semibold text-sm">
-              Comprobante Oficial de Retención de IVA (Providencia SNAT/2015/0049)
+        <div className="flex items-center justify-between px-4 sm:px-6 py-3 bg-slate-900 text-white no-print">
+          <div className="flex items-center gap-2 min-w-0">
+            <ShieldCheck className="w-5 h-5 text-emerald-400 flex-shrink-0" />
+            <span className="font-semibold text-xs sm:text-sm truncate">
+              Comprobante de Retención de IVA (SNAT/2015/0049)
             </span>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-shrink-0">
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-3.5 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition cursor-pointer shadow"
+              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 rounded-lg text-white transition cursor-pointer shadow"
             >
               <Printer className="w-3.5 h-3.5" />
-              Imprimir Comprobante
+              <span className="hidden xs:inline">Imprimir</span>
             </button>
             <button
               onClick={onClose}
@@ -45,22 +45,22 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
         </div>
 
         {/* Printable Official Voucher Document */}
-        <div className="p-8 text-black bg-white space-y-4 print:p-0 print:space-y-3 font-sans text-xs">
+        <div className="p-3 sm:p-8 text-black bg-white space-y-3 sm:space-y-4 print:p-0 print:space-y-3 font-sans text-xs">
           {/* Header Title */}
-          <div className="border border-black p-3 text-center space-y-1">
-            <h1 className="font-black text-sm tracking-wide uppercase">
+          <div className="border border-black p-2 sm:p-3 text-center space-y-1">
+            <h1 className="font-black text-xs sm:text-sm tracking-wide uppercase">
               REPÚBLICA BOLIVARIANA DE VENEZUELA
             </h1>
-            <h2 className="font-bold text-xs uppercase text-slate-800">
+            <h2 className="font-bold text-[11px] sm:text-xs uppercase text-slate-800">
               COMPROBANTE DE RETENCIÓN DEL IMPUESTO AL VALOR AGREGADO (IVA)
             </h2>
-            <p className="text-[10px] text-slate-700 italic">
+            <p className="text-[9px] sm:text-[10px] text-slate-700 italic">
               (Ley que Establece el Impuesto al Valor Agregado - Art. 11 y Providencia Administrativa SNAT/2015/0049)
             </p>
           </div>
 
           {/* Identification Box */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {/* Voucher and Dates */}
             <div className="border border-black p-2.5 space-y-1">
               <div>
@@ -100,8 +100,8 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
             <div className="font-bold bg-slate-200 print:bg-slate-300 px-1 py-0.5 uppercase text-[11px]">
               1. DATOS DEL AGENTE DE RETENCIÓN
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <div className="sm:col-span-2">
                 <span className="font-bold">NOMBRE O RAZÓN SOCIAL: </span>
                 <span className="font-semibold">{company.name}</span>
               </div>
@@ -121,8 +121,8 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
             <div className="font-bold bg-slate-200 print:bg-slate-300 px-1 py-0.5 uppercase text-[11px]">
               2. DATOS DEL SUJETO RETENIDO (PROVEEDOR)
             </div>
-            <div className="grid grid-cols-3 gap-2 pt-1">
-              <div className="col-span-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 pt-1">
+              <div className="sm:col-span-2">
                 <span className="font-bold">NOMBRE O RAZÓN SOCIAL: </span>
                 <span className="font-semibold">{voucher.supplierName}</span>
               </div>
@@ -138,7 +138,7 @@ export const VatVoucherModal: React.FC<VatVoucherModalProps> = ({ voucher, compa
           </div>
 
           {/* Table of operations */}
-          <div className="border border-black overflow-hidden">
+          <div className="border border-black overflow-x-auto w-full">
             <table className="w-full text-left border-collapse text-[10px]">
               <thead>
                 <tr className="bg-slate-200 print:bg-slate-300 border-b border-black font-bold text-center">
