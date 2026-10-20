@@ -1,0 +1,250 @@
+import React, { useState } from 'react';
+import { useAccounting } from '../../context/AccountingContext';
+import { ArrowLeftRight, X, Check } from 'lucide-react';
+import { formatBs, formatUsd } from '../../utils/formatters';
+
+interface NewMovementModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  defaultProductId?: string;
+}
+
+export const NewMovementModal: React.FC<NewMovementModalProps> = ({
+  isOpen,
+  onClose,
+  defaultProductId
+}) => {
+  const { currentCompany, products, addMovement } = useAccounting();
+
+  const [productId, setProductId] = useState<string>(
+    defaultProductId || products[0]?.id || ''
+  );
+  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
+  const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE'>('COMPRA');
+  const [documentRef, setDocumentRef] = useState<string>('');
+  const [quantity, setQuantity] = useState<number>(1);
+  const [unitCostBs, setUnitCostBs] = useState<number>(0);
+
+  const selectedProduct = products.find(p => p.id === productId) || products[0];
+
+  // Auto-set cost when product changes
+  React.useEffect(() => {
+    if (selectedProduct) {
+      setUnitCostBs(selectedProduct.avgCostBs || 0);
+    }
+  }, [productId, selectedProduct]);
+
+  if (!isOpen || !selectedProduct) return null;
+
+  const bcvRate = currentCompany.bcvRate || 68.50;
+  const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
+  const totalCostBs = quantity * unitCostBs;
+  const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
+
+  // Compute prospective balance
+  let balanceQty = selectedProduct.currentStock;
+  if (type === 'ENTRADA') balanceQty += quantity;
+  else if (type === 'SALIDA') balanceQty = Math.max(0, balanceQty - quantity);
+  else balanceQty = quantity;
+
+  const balanceTotalBs = balanceQty * unitCostBs;
+  const balanceTotalUsd = bcvRate > 0 ? balanceTotalBs / bcvRate : 0;
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (quantity <= 0) return;
+
+    addMovement({
+      productId: selectedProduct.id,
+      productName: selectedProduct.name,
+      productCode: selectedProduct.code,
+      date,
+      type,
+      concept,
+      documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
+      quantity,
+      unitCostBs,
+      unitCostUsd: Number(unitCostUsd.toFixed(2)),
+      totalCostBs,
+      totalCostUsd: Number(totalCostUsd.toFixed(2)),
+      balanceQty,
+      balanceTotalBs,
+      balanceTotalUsd: Number(balanceTotalUsd.toFixed(2))
+    });
+
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200">
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <ArrowLeftRight className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">Registrar Movimiento en Kardex</h3>
+              <p className="text-xs text-slate-400">Control de Entradas y Salidas de Inventario</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 text-xs">
+          <div>
+            <label className="block font-semibold text-slate-700 mb-1">Producto / Artículo *</label>
+            <select
+              value={productId}
+              onChange={e => setProductId(e.target.value)}
+              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            >
+              {products.map(p => (
+                <option key={p.id} value={p.id}>
+                  {p.code} - {p.name} (Stock: {p.currentStock} {p.unit})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tipo de Movimiento</label>
+              <select
+                value={type}
+                onChange={e => {
+                  const val = e.target.value as any;
+                  setType(val);
+                  if (val === 'ENTRADA') setConcept('COMPRA');
+                  else if (val === 'SALIDA') setConcept('VENTA');
+                  else setConcept('AJUSTE');
+                }}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              >
+                <option value="ENTRADA">Entrada (Aumento Stock)</option>
+                <option value="SALIDA">Salida (Descargo / Venta)</option>
+                <option value="AJUSTE">Ajuste de Inventario Físico</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Concepto</label>
+              <select
+                value={concept}
+                onChange={e => setConcept(e.target.value as any)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              >
+                {type === 'ENTRADA' && (
+                  <>
+                    <option value="COMPRA">Compra Nacional</option>
+                    <option value="INVENTARIO_INICIAL">Inventario Inicial</option>
+                  </>
+                )}
+                {type === 'SALIDA' && (
+                  <>
+                    <option value="VENTA">Venta de Mercancía</option>
+                    <option value="MERMA">Merma / Deterioro</option>
+                  </>
+                )}
+                {type === 'AJUSTE' && (
+                  <>
+                    <option value="AJUSTE">Ajuste Físico</option>
+                  </>
+                )}
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Fecha</label>
+              <input
+                type="date"
+                required
+                value={date}
+                onChange={e => setDate(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">N° Documento Ref.</label>
+              <input
+                type="text"
+                placeholder="FAC-00012, DESP-004"
+                value={documentRef}
+                onChange={e => setDocumentRef(e.target.value)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-200">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">
+                Cantidad ({selectedProduct.unit}) *
+              </label>
+              <input
+                type="number"
+                min="1"
+                required
+                value={quantity}
+                onChange={e => setQuantity(Number(e.target.value))}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Costo Unitario (Bs.)</label>
+              <input
+                type="number"
+                step="0.01"
+                min="0"
+                required
+                value={unitCostBs || ''}
+                onChange={e => setUnitCostBs(parseFloat(e.target.value) || 0)}
+                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Movement summary pill */}
+          <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
+            <div>
+              <span className="text-[11px] text-slate-400 block">Total Movimiento:</span>
+              <span className="font-mono font-bold text-emerald-400 text-sm">
+                {formatBs(totalCostBs)}
+              </span>
+            </div>
+            <div className="text-right">
+              <span className="text-[11px] text-slate-400 block">Stock Resultante:</span>
+              <span className="font-mono font-bold text-white text-sm">
+                {balanceQty} {selectedProduct.unit}
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              Procesar Movimiento
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};

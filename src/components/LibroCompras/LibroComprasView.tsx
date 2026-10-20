@@ -1,0 +1,344 @@
+import React, { useState } from 'react';
+import { useAccounting } from '../../context/AccountingContext';
+import {
+  ShoppingCart,
+  Plus,
+  Printer,
+  Download,
+  Search,
+  Receipt,
+  Trash2,
+  FileSpreadsheet,
+  Calendar,
+  CheckCircle2
+} from 'lucide-react';
+import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
+import { NewPurchaseModal } from './NewPurchaseModal';
+import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
+import { CompanyLogoHeader } from '../CompanyLogoHeader';
+
+export const LibroComprasView: React.FC = () => {
+  const {
+    currentCompany,
+    purchases,
+    deletePurchase,
+    vatVouchers,
+    displayCurrency
+  } = useAccounting();
+
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
+
+  const filteredPurchases = purchases
+    .filter(p => {
+      if (monthFilter && !p.invoiceDate.startsWith(monthFilter)) return false;
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase();
+        return (
+          p.supplierName.toLowerCase().includes(term) ||
+          p.supplierRif.toLowerCase().includes(term) ||
+          p.invoiceNumber.toLowerCase().includes(term) ||
+          p.controlNumber.toLowerCase().includes(term) ||
+          (p.voucherNumber && p.voucherNumber.toLowerCase().includes(term))
+        );
+      }
+      return true;
+    })
+    .sort((a, b) => a.opNumber - b.opNumber);
+
+  // Totals for SENIAT Forma 30
+  const totalComprasConIvaBs = filteredPurchases.reduce((s, p) => s + p.totalAmountBs, 0);
+  const totalExentoBs = filteredPurchases.reduce((s, p) => s + (p.exemptAmountBs || 0), 0);
+  const totalBaseBs = filteredPurchases.reduce((s, p) => s + p.taxableBaseBs, 0);
+  const totalIvaCreditoBs = filteredPurchases.reduce((s, p) => s + p.vatAmountBs, 0);
+  const totalIvaRetenidoBs = filteredPurchases.reduce((s, p) => s + (p.vatWithheldBs || 0), 0);
+  const totalIslrRetenidoBs = filteredPurchases.reduce((s, p) => s + (p.islrWithheldBs || 0), 0);
+
+  const totalComprasConIvaUsd = filteredPurchases.reduce((s, p) => s + p.totalAmountUsd, 0);
+  const totalBaseUsd = filteredPurchases.reduce((s, p) => s + p.taxableBaseUsd, 0);
+  const totalIvaCreditoUsd = filteredPurchases.reduce((s, p) => s + p.vatAmountUsd, 0);
+  const totalIvaRetenidoUsd = filteredPurchases.reduce((s, p) => s + (p.vatWithheldUsd || 0), 0);
+
+  const handleDownloadTxt = () => {
+    const periodVouchers = vatVouchers.filter(v => v.companyId === currentCompany.id);
+    if (periodVouchers.length === 0) {
+      alert('No hay retenciones de IVA registradas para generar el archivo TXT.');
+      return;
+    }
+    const txtContent = generateSeniatIvaTxt(currentCompany, periodVouchers);
+    const cleanR = currentCompany.rif.replace(/[^A-Za-z0-9]/g, '');
+    const period = periodVouchers[0]?.period || `${currentCompany.fiscalYear}10`;
+    downloadFile(txtContent, `RetencionesIVA_${cleanR}_${period}.txt`);
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Official SENIAT Header with Company Logo */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
+        <CompanyLogoHeader
+          company={currentCompany}
+          reportTitle="Libro de Compras (SENIAT)"
+          subtitle="Conforme al Art. 75 del Reglamento de la Ley de Impuesto al Valor Agregado"
+          periodText={`Período Impositivo: ${monthFilter || `${currentCompany.fiscalYear}-10`}`}
+        />
+
+        {/* Action buttons (hidden on print) */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 no-print border-t border-slate-100">
+          <div className="flex items-center gap-2 text-xs text-slate-600">
+            <span>Facturas Registradas: <strong className="text-slate-900">{filteredPurchases.length}</strong></span>
+            <span>•</span>
+            <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
+          </div>
+
+          <div className="flex items-center gap-2.5">
+            <button
+              onClick={() => window.print()}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
+            >
+              <Printer className="w-3.5 h-3.5" />
+              Imprimir Libro
+            </button>
+            {currentCompany.taxpayerType === 'ESPECIAL' && (
+              <button
+                onClick={handleDownloadTxt}
+                className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition cursor-pointer border border-indigo-200 shadow-sm"
+                title="Generar archivo TXT oficial para el portal SENIAT"
+              >
+                <Download className="w-3.5 h-3.5" />
+                Descargar TXT IVA
+              </button>
+            )}
+            <button
+              onClick={() => setIsModalOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              Registrar Compra
+            </button>
+          </div>
+        </div>
+
+        {/* Toolbar (no-print) */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-4 no-print">
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+            <input
+              type="text"
+              placeholder="Buscar por RIF, proveedor, factura o comprobante..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          <div>
+            <input
+              type="month"
+              value={monthFilter}
+              onChange={e => setMonthFilter(e.target.value)}
+              className="w-full px-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              title="Filtrar por período mensual (AAAA-MM)"
+            />
+          </div>
+
+          <div className="flex items-center justify-end text-xs text-slate-500">
+            <span>Facturas Registradas: <strong className="text-slate-800">{filteredPurchases.length}</strong></span>
+          </div>
+        </div>
+      </div>
+
+      {/* Purchases Table */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold whitespace-nowrap">
+                <th className="py-2.5 px-3 text-center w-12">Op. N°</th>
+                <th className="py-2.5 px-3 w-24">Fecha</th>
+                <th className="py-2.5 px-3 w-28">RIF Proveedor</th>
+                <th className="py-2.5 px-3 min-w-[200px]">Nombre o Razón Social</th>
+                <th className="py-2.5 px-3 w-28">N° Factura</th>
+                <th className="py-2.5 px-3 w-28">N° Control</th>
+                <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
+                <th className="py-2.5 px-3 text-right w-32">Total Compra (Bs.)</th>
+                <th className="py-2.5 px-3 text-right w-28">Exento (Bs.)</th>
+                <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
+                <th className="py-2.5 px-2 text-center w-14">% Alíc.</th>
+                <th className="py-2.5 px-3 text-right w-28 text-emerald-800">IVA (Crédito)</th>
+                <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
+                <th className="py-2.5 px-3 text-right w-28 text-indigo-800">ISLR Retenido</th>
+                <th className="py-2.5 px-2 text-center w-12 no-print">Acción</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {filteredPurchases.length === 0 ? (
+                <tr>
+                  <td colSpan={15} className="py-12 text-center text-slate-400">
+                    <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-40" />
+                    No hay facturas de compras registradas en este período.
+                  </td>
+                </tr>
+              ) : (
+                filteredPurchases.map(p => (
+                  <tr key={p.id} className="hover:bg-slate-50 transition">
+                    <td className="py-2 px-3 text-center font-mono font-bold text-slate-600 bg-slate-50/50">
+                      {p.opNumber}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
+                      {formatDate(p.invoiceDate)}
+                    </td>
+                    <td className="py-2 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
+                      {p.supplierRif}
+                    </td>
+                    <td className="py-2 px-3 font-medium text-slate-900 truncate max-w-xs" title={p.supplierName}>
+                      {p.supplierName}
+                    </td>
+                    <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
+                      {p.invoiceNumber}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
+                      {p.controlNumber}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-xs text-purple-700 whitespace-nowrap font-medium">
+                      {p.voucherNumber || '-'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
+                      {formatBs(p.totalAmountBs)}
+                      {displayCurrency !== 'BS' && (
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          {formatUsd(p.totalAmountUsd)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
+                      {p.exemptAmountBs > 0 ? formatBs(p.exemptAmountBs) : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
+                      {formatBs(p.taxableBaseBs)}
+                      {displayCurrency !== 'BS' && (
+                        <div className="text-[10px] text-slate-400 font-normal">
+                          {formatUsd(p.taxableBaseUsd)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-2 text-center font-mono text-slate-600">
+                      {p.taxRate}%
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
+                      {formatBs(p.vatAmountBs)}
+                      {displayCurrency !== 'BS' && (
+                        <div className="text-[10px] text-emerald-600/70 font-normal">
+                          {formatUsd(p.vatAmountUsd)}
+                        </div>
+                      )}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
+                      {p.vatWithheldBs > 0 ? (
+                        <>
+                          {formatBs(p.vatWithheldBs)}
+                          <span className="text-[10px] block text-purple-500 font-normal">({p.retentionRate}%)</span>
+                        </>
+                      ) : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-medium text-indigo-700 whitespace-nowrap">
+                      {p.islrWithheldBs && p.islrWithheldBs > 0 ? (
+                        <>
+                          {formatBs(p.islrWithheldBs)}
+                          <span className="text-[10px] block text-indigo-400">({p.islrRate}%)</span>
+                        </>
+                      ) : '-'}
+                    </td>
+                    <td className="py-2 px-2 text-center no-print">
+                      <button
+                        onClick={() => {
+                          if (confirm(`¿Eliminar factura de compra N° ${p.invoiceNumber}?`)) {
+                            deletePurchase(p.id);
+                          }
+                        }}
+                        className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
+                        title="Eliminar registro"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+            <tfoot>
+              <tr className="bg-slate-900 text-white font-bold border-t border-slate-800 whitespace-nowrap">
+                <td colSpan={7} className="py-3 px-3 text-right text-slate-300">
+                  TOTALES LIBRO DE COMPRAS (SENIAT):
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-emerald-400">
+                  {formatBs(totalComprasConIvaBs)}
+                  {displayCurrency !== 'BS' && (
+                    <div className="text-[10px] text-slate-400">{formatUsd(totalComprasConIvaUsd)}</div>
+                  )}
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-slate-300">
+                  {formatBs(totalExentoBs)}
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-emerald-400">
+                  {formatBs(totalBaseBs)}
+                  {displayCurrency !== 'BS' && (
+                    <div className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</div>
+                  )}
+                </td>
+                <td></td>
+                <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-850">
+                  {formatBs(totalIvaCreditoBs)}
+                  {displayCurrency !== 'BS' && (
+                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaCreditoUsd)}</div>
+                  )}
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
+                  {formatBs(totalIvaRetenidoBs)}
+                  {displayCurrency !== 'BS' && (
+                    <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
+                  )}
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-indigo-300">
+                  {formatBs(totalIslrRetenidoBs)}
+                </td>
+                <td className="no-print"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </div>
+
+      {/* Forma 30 SENIAT Summary Card */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
+        <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
+          <CheckCircle2 className="w-4 h-4" />
+          Resumen para la Declaración Mensual del IVA (Forma 30 SENIAT)
+        </h4>
+        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs font-mono-nums">
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Total Compras Internas Gravadas:</span>
+            <span className="text-base font-bold text-white mt-1 block">{formatBs(totalBaseBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Crédito Fiscal Total (16%):</span>
+            <span className="text-base font-bold text-emerald-400 mt-1 block">{formatBs(totalIvaCreditoBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaCreditoUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Retenciones de IVA Enteradas:</span>
+            <span className="text-base font-bold text-purple-300 mt-1 block">{formatBs(totalIvaRetenidoBs)}</span>
+            <span className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">Compras Exentas y No Sujetas:</span>
+            <span className="text-base font-bold text-slate-300 mt-1 block">{formatBs(totalExentoBs)}</span>
+          </div>
+        </div>
+      </div>
+
+      <NewPurchaseModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+    </div>
+  );
+};
