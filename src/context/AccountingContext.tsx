@@ -380,6 +380,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
+    // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
+    const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
+    const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const diff = Math.abs(totalDebitBs - totalCreditBs);
+
+    if (diff >= 0.01 || totalDebitBs <= 0) {
+      throw new Error(
+        `Verificación de Asiento fallida: El asiento contable está descuadrado. Total Débito: Bs. ${totalDebitBs.toFixed(2)} | Total Crédito: Bs. ${totalCreditBs.toFixed(2)}. Diferencia: Bs. ${diff.toFixed(2)}.`
+      );
+    }
+
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const newEntry: JournalEntry = {
