@@ -27,8 +27,18 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
+      - name: Type-check the application
+        run: npm run check:types
       - name: Build full edition (without sample data)
         run: npm run build
+      - name: Verify full bundle excludes demo sample records
+        shell: pwsh
+        run: |
+          $bundles = Get-ChildItem -Path dist/assets -Filter '*.js' -File
+          if (-not $bundles) { throw 'No se generaron bundles JavaScript para SICOVEN completo.' }
+          if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'DISTRIBUIDORA LOS ANDES, C.A.' -Quiet) {
+            throw 'El bundle completo contiene datos de ejemplo; no se publicará este instalador.'
+          }
       - name: Package full Windows installer
         run: npm run dist
       - name: Verify full installer
@@ -42,6 +52,14 @@ jobs:
         run: |
           $env:VITE_SICOVEN_DEMO = 'true'
           npm run build
+          $bundles = Get-ChildItem -Path dist/assets -Filter '*.js' -File
+          if (-not $bundles) { throw 'No se generaron bundles JavaScript para SICOVEN DEMO.' }
+          if (-not (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'DISTRIBUIDORA LOS ANDES, C.A.' -Quiet)) {
+            throw 'La edición DEMO no contiene los datos de ejemplo esperados.'
+          }
+          if (-not (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'Máximo 10 acciones por módulo' -Quiet)) {
+            throw 'No se encontró el cintillo de límites comerciales en la edición DEMO.'
+          }
       - name: Package separate demo installer
         run: npx electron-builder --win nsis --config electron-builder-demo.json
       - name: Verify both installers
