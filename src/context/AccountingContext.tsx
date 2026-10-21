@@ -311,20 +311,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
     // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
     try {
-      localStorage.setItem(\`\${STORAGE_KEY}_companies\`, JSON.stringify(companies));
-      localStorage.setItem(\`\${STORAGE_KEY}_currentCompanyId\`, currentCompanyId);
-      localStorage.setItem(\`\${STORAGE_KEY}_accounts\`, JSON.stringify(accounts));
-      localStorage.setItem(\`\${STORAGE_KEY}_journal\`, JSON.stringify(journalEntries));
-      localStorage.setItem(\`\${STORAGE_KEY}_purchases\`, JSON.stringify(purchases));
-      localStorage.setItem(\`\${STORAGE_KEY}_sales\`, JSON.stringify(sales));
-      localStorage.setItem(\`\${STORAGE_KEY}_products\`, JSON.stringify(products));
-      localStorage.setItem(\`\${STORAGE_KEY}_movements\`, JSON.stringify(movements));
-      localStorage.setItem(\`\${STORAGE_KEY}_vatVouchers\`, JSON.stringify(vatVouchers));
-      localStorage.setItem(\`\${STORAGE_KEY}_islrVouchers\`, JSON.stringify(islrVouchers));
-      localStorage.setItem(\`\${STORAGE_KEY}_bankAccounts\`, JSON.stringify(bankAccounts));
-      localStorage.setItem(\`\${STORAGE_KEY}_statementMovements\`, JSON.stringify(bankStatementMovements));
-      localStorage.setItem(\`\${STORAGE_KEY}_autoSyncBcv\`, JSON.stringify(autoSyncBcv));
-      if (bcvSyncResult) localStorage.setItem(\`\${STORAGE_KEY}_bcvSyncResult\`, JSON.stringify(bcvSyncResult));
+      localStorage.setItem(`${STORAGE_KEY}_companies`, JSON.stringify(companies));
+      localStorage.setItem(`${STORAGE_KEY}_currentCompanyId`, currentCompanyId);
+      localStorage.setItem(`${STORAGE_KEY}_accounts`, JSON.stringify(accounts));
+      localStorage.setItem(`${STORAGE_KEY}_journal`, JSON.stringify(journalEntries));
+      localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases));
+      localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales));
+      localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
+      localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
+      localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
+      localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
+      localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
+      localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
+      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+      if (bcvSyncResult) localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
     } catch (error) {
       console.error('Error guardando datos locales de desarrollo:', error);
     }
