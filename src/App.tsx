@@ -20,11 +20,11 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
-  const { currentCompany, companies } = useAccounting();
+  const { currentCompany, companies, isStorageReady } = useAccounting();
 
   useEffect(() => {
-    if (companies.length === 0) setIsCompanyModalOpen(true);
-  }, [companies.length]);
+    if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
+  }, [isStorageReady, companies.length]);
 
   const renderActiveTab = () => {
     switch (activeTab) {
