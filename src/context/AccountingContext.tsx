@@ -215,54 +215,81 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
 
-  // Guardar en localStorage
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_companies`, JSON.stringify(companies));
-  }, [companies]);
+  // SQLite local es la persistencia operativa en la versión de escritorio.
+  const [storageReady, setStorageReady] = useState(false);
+  const stateSnapshot = {
+    companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult
+  };
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_currentCompanyId`, currentCompanyId);
-  }, [currentCompanyId]);
+    let cancelled = false;
+    const hydrate = async () => {
+      try {
+        if (window.sicovenStore) {
+          const saved = await window.sicovenStore.load();
+          if (cancelled) return;
+          if (saved && typeof saved === 'object') {
+            if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
+            if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
+            if (Array.isArray(saved.accounts)) setAccounts(saved.accounts as Account[]);
+            if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
+            if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
+            if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
+            if (Array.isArray(saved.products)) setProducts(saved.products as InventoryProduct[]);
+            if (Array.isArray(saved.movements)) setMovements(saved.movements as InventoryMovement[]);
+            if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
+            if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
+            if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
+            if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
+            if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
+            if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
+            if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
+          } else {
+            // Migración de primera ejecución: conserva los datos existentes del navegador en SQLite.
+            await window.sicovenStore.save(stateSnapshot);
+          }
+        }
+      } catch (error) {
+        console.error('No se pudo inicializar la persistencia SQLite de SICOVEN:', error);
+      } finally {
+        if (!cancelled) setStorageReady(true);
+      }
+    };
+    void hydrate();
+    return () => { cancelled = true; };
+  // La hidratación se ejecuta una sola vez; stateSnapshot representa el legado disponible al inicio.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_accounts`, JSON.stringify(accounts));
-  }, [accounts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_journal`, JSON.stringify(journalEntries));
-  }, [journalEntries]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases));
-  }, [purchases]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales));
-  }, [sales]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
-  }, [movements]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
-  }, [vatVouchers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
-  }, [islrVouchers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
-  }, [bankAccounts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
-  }, [bankStatementMovements]);
+    if (!storageReady) return;
+    if (window.sicovenStore) {
+      window.sicovenStore.save(stateSnapshot).catch(error => {
+        console.error('Error guardando los datos contables en SQLite:', error);
+      });
+      return;
+    }
+    // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
+    try {
+      localStorage.setItem(\`\${STORAGE_KEY}_companies\`, JSON.stringify(companies));
+      localStorage.setItem(\`\${STORAGE_KEY}_currentCompanyId\`, currentCompanyId);
+      localStorage.setItem(\`\${STORAGE_KEY}_accounts\`, JSON.stringify(accounts));
+      localStorage.setItem(\`\${STORAGE_KEY}_journal\`, JSON.stringify(journalEntries));
+      localStorage.setItem(\`\${STORAGE_KEY}_purchases\`, JSON.stringify(purchases));
+      localStorage.setItem(\`\${STORAGE_KEY}_sales\`, JSON.stringify(sales));
+      localStorage.setItem(\`\${STORAGE_KEY}_products\`, JSON.stringify(products));
+      localStorage.setItem(\`\${STORAGE_KEY}_movements\`, JSON.stringify(movements));
+      localStorage.setItem(\`\${STORAGE_KEY}_vatVouchers\`, JSON.stringify(vatVouchers));
+      localStorage.setItem(\`\${STORAGE_KEY}_islrVouchers\`, JSON.stringify(islrVouchers));
+      localStorage.setItem(\`\${STORAGE_KEY}_bankAccounts\`, JSON.stringify(bankAccounts));
+      localStorage.setItem(\`\${STORAGE_KEY}_statementMovements\`, JSON.stringify(bankStatementMovements));
+      localStorage.setItem(\`\${STORAGE_KEY}_autoSyncBcv\`, JSON.stringify(autoSyncBcv));
+      if (bcvSyncResult) localStorage.setItem(\`\${STORAGE_KEY}_bcvSyncResult\`, JSON.stringify(bcvSyncResult));
+    } catch (error) {
+      console.error('Error guardando datos locales de desarrollo:', error);
+    }
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult]);
 
   const currentCompany = companies.find(c => c.id === currentCompanyId) || companies[0] || INITIAL_COMPANIES[0];
 
@@ -383,11 +410,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const totalDebitUsd = entry.items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
+    const totalCreditUsd = entry.items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
     const diff = Math.abs(totalDebitBs - totalCreditBs);
+    const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
+    const invalidLines = entry.items.some(item =>
+      !item.accountCode?.trim() ||
+      [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+      (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+      (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
+    );
 
-    if (diff >= 0.01 || totalDebitBs <= 0) {
+    if (entry.items.length < 2 || invalidLines || diff >= 0.01 || diffUsd >= 0.01 || totalDebitBs <= 0 || totalDebitUsd <= 0) {
       throw new Error(
-        `Verificación de Asiento fallida: El asiento contable está descuadrado. Total Débito: Bs. ${totalDebitBs.toFixed(2)} | Total Crédito: Bs. ${totalCreditBs.toFixed(2)}. Diferencia: Bs. ${diff.toFixed(2)}.`
+        `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
     }
 
