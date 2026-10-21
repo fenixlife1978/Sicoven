@@ -43,7 +43,7 @@ jobs:
           $env:VITE_SICOVEN_DEMO = 'true'
           npm run build
       - name: Package separate demo installer
-        run: npx electron-builder --win nsis --config.directories.output=release-demo --config.appId=ve.sicoven.demo --config.productName='SICOVEN DEMO' --config.win.artifactName='SICOVEN-DEMO-Setup-${version}-${arch}.${ext}'
+        run: npx electron-builder --win nsis --config electron-builder-demo.json
       - name: Verify both installers
         shell: pwsh
         run: |
