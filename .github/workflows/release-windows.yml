@@ -1,0 +1,53 @@
+name: SICOVEN Windows Release
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: sicoven-release-\${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  build-release:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm install
+      - name: TypeScript and production build
+        run: npm run build
+      - name: Package Windows installer with local SQLite
+        run: npm run dist
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
+          if (-not $installer) { throw 'No se generó el instalador .exe de SICOVEN.' }
+          Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
+      - name: Publish GitHub Release
+        env:
+          GH_TOKEN: \${{ github.token }}
+        shell: pwsh
+        run: |
+          $files = Get-ChildItem -Path release -Filter '*.exe' -File
+          if ('\${{ github.ref_type }}' -eq 'tag') {
+            gh release create '\${{ github.ref_name }}' $files.FullName --title 'SICOVEN \${{ github.ref_name }}' --generate-notes
+          } else {
+            Write-Host 'workflow_dispatch builds the installer; release publication requires a v* tag.'
+          }
+      - name: Upload installer as workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-Windows-Installer
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
