@@ -1,0 +1,34 @@
+{
+  "appId": "ve.sicoven.demo",
+  "productName": "SICOVEN DEMO",
+  "directories": {
+    "output": "release-demo"
+  },
+  "files": [
+    "dist/**/*",
+    "electron/**/*",
+    "package.json"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "node_modules/better-sqlite3/**/*"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "SICOVEN-DEMO-Setup-${version}-${arch}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "SICOVEN DEMO",
+    "deleteAppDataOnUninstall": false
+  }
+}
