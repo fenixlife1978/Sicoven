@@ -24,7 +24,7 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: TypeScript and production build
+      - name: Vite production build
         run: npm run build
       - name: Package Windows installer with local SQLite
         run: npm run dist
