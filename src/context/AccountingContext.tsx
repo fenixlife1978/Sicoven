@@ -238,6 +238,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateCompany = (updated: Company) => {
+    consumeDemoAction('empresa');
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
@@ -416,6 +417,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateBcvRate = (newRate: number, effectiveDate?: string) => {
+    consumeDemoAction('configuracion');
     if (!currentCompany || newRate <= 0) return;
     const today = effectiveDate || new Date().toISOString().split('T')[0];
     updateCompany({
@@ -426,6 +428,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addAccount = (account: Account) => {
+    consumeDemoAction('catalogo');
     consumeDemoAction('catalogo');
     setAccounts(prev => {
       if (prev.some(a => a.code === account.code)) {
@@ -471,6 +474,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteJournalEntry = (id: string) => {
+    consumeDemoAction('diario');
     setJournalEntries(prev => prev.filter(e => e.id !== id));
   };
 
@@ -656,6 +660,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deletePurchase = (id: string) => {
+    consumeDemoAction('compras');
     const purchase = purchases.find(p => p.id === id);
     if (!purchase || purchase.companyId !== currentCompany.id) return;
     setPurchases(prev => prev.filter(p => p.id !== id));
@@ -756,6 +761,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteSale = (id: string) => {
+    consumeDemoAction('ventas');
     const sale = sales.find(item => item.id === id);
     if (!sale || sale.companyId !== currentCompany.id) return;
     setSales(prev => prev.filter(item => item.id !== id));
@@ -777,6 +783,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateProduct = (updated: InventoryProduct) => {
+    consumeDemoAction('inventario');
     setProducts(prev => prev.map(p => (p.id === updated.id ? updated : p)));
   };
 
@@ -852,10 +859,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteVatVoucher = (id: string) => {
+    consumeDemoAction('retenciones');
     setVatVouchers(prev => prev.filter(v => v.id !== id));
   };
 
   const deleteIslrVoucher = (id: string) => {
+    consumeDemoAction('retenciones');
     setIslrVouchers(prev => prev.filter(v => v.id !== id));
   };
 
@@ -883,6 +892,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteBankStatementMovement = (id: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev => prev.filter(m => m.id !== id));
   };
 
@@ -904,6 +914,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const unreconcileMovement = (statementMovementId: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
