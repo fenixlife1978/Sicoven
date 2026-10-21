@@ -378,7 +378,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (autoSyncBcv && companies.length > 0) {
       syncBcvRate();
     }
-  }, [companies.length]);
+  }, [companies.length, autoSyncBcv]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
