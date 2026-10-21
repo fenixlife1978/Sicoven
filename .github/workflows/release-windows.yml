@@ -1,6 +1,8 @@
 name: SICOVEN Windows Release
 on:
   push:
+    branches:
+      - 'sqlite-desktop-release'
     tags:
       - 'v*'
   workflow_dispatch:
@@ -34,16 +36,13 @@ jobs:
           if (-not $installer) { throw 'No se generó el instalador .exe de SICOVEN.' }
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
       - name: Publish GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
           $files = Get-ChildItem -Path release -Filter '*.exe' -File
-          if ('${{ github.ref_type }}' -eq 'tag') {
-            gh release create '${{ github.ref_name }}' $files.FullName --title 'SICOVEN ${{ github.ref_name }}' --generate-notes
-          } else {
-            Write-Host 'workflow_dispatch builds the installer; release publication requires a v* tag.'
-          }
+          gh release create '${{ github.ref_name }}' $files.FullName --title 'SICOVEN ${{ github.ref_name }}' --generate-notes
       - name: Upload installer as workflow artifact
         uses: actions/upload-artifact@v4
         with:
