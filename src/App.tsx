@@ -20,7 +20,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
-  const { currentCompany, companies, isStorageReady } = useAccounting();
+  const { currentCompany, companies, isStorageReady, isDemoMode, demoUsage } = useAccounting();
 
   useEffect(() => {
     if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
@@ -57,6 +57,14 @@ const AppContent: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
+      {isDemoMode && (
+        <div role="status" aria-live="polite" className="sticky top-0 z-[100] w-full bg-amber-300 text-slate-950 border-b-2 border-amber-500 shadow-md no-print">
+          <div className="mx-auto max-w-7xl px-3 py-2 text-center text-xs sm:text-sm font-bold leading-relaxed">
+            DEMO SICOVEN · Máximo 10 acciones por módulo. {Object.values(demoUsage).reduce((sum, count) => sum + count, 0)} acciones de demostración utilizadas. · Adquiere SICOVEN completo por €250 al cambio de la tasa BCV, o aprovecha la promoción por solo $200 USD en efectivo físico. · Compra la versión completa para trabajar sin límites.
+          </div>
+        </div>
+      )}
+
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
