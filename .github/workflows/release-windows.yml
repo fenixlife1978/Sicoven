@@ -1,5 +1,8 @@
 name: SICOVEN Windows and Demo Releases
 on:
+  pull_request:
+    branches:
+      - 'main'
   push:
     branches:
       - 'sqlite-desktop-release'
