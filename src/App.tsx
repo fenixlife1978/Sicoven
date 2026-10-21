@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { AccountingProvider, useAccounting } from './context/AccountingContext';
 import { Navbar } from './components/Navbar';
 import { CompanyModal } from './components/CompanyModal';
@@ -20,7 +20,11 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
-  const { currentCompany } = useAccounting();
+  const { currentCompany, companies } = useAccounting();
+
+  useEffect(() => {
+    if (companies.length === 0) setIsCompanyModalOpen(true);
+  }, [companies.length]);
 
   const renderActiveTab = () => {
     switch (activeTab) {
