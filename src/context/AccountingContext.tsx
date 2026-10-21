@@ -215,6 +215,45 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
 
+  const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
+    id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
+    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 0, fiscalYear: new Date().getFullYear(), bcvRate: 0
+  };
+
+  const updateCompany = (updated: Company) => {
+    setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+  };
+
+  const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_autoSyncBcv`);
+      return saved !== null ? JSON.parse(saved) : true;
+    } catch {
+      return true;
+    }
+  });
+
+  const [isSyncingBcv, setIsSyncingBcv] = useState<boolean>(false);
+  const [bcvSyncStatus, setBcvSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
+  const [bcvSyncResult, setBcvSyncResult] = useState<BcvSyncResult | null>(() => {
+    try {
+      const saved = localStorage.getItem(`${STORAGE_KEY}_bcvSyncResult`);
+      return saved ? JSON.parse(saved) : null;
+    } catch {
+      return null;
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+  }, [autoSyncBcv]);
+
+  useEffect(() => {
+    if (bcvSyncResult) {
+      localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
+    }
+  }, [bcvSyncResult]);
+
   // SQLite local es la persistencia operativa en la versión de escritorio.
   const [storageReady, setStorageReady] = useState(false);
   const stateSnapshot = {
@@ -290,45 +329,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       console.error('Error guardando datos locales de desarrollo:', error);
     }
   }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult]);
-
-  const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
-    id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
-    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 0, fiscalYear: new Date().getFullYear(), bcvRate: 0
-  };
-
-  const updateCompany = (updated: Company) => {
-    setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
-  };
-
-  const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_autoSyncBcv`);
-      return saved !== null ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
-
-  const [isSyncingBcv, setIsSyncingBcv] = useState<boolean>(false);
-  const [bcvSyncStatus, setBcvSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
-  const [bcvSyncResult, setBcvSyncResult] = useState<BcvSyncResult | null>(() => {
-    try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_bcvSyncResult`);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
-  }, [autoSyncBcv]);
-
-  useEffect(() => {
-    if (bcvSyncResult) {
-      localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
-    }
-  }, [bcvSyncResult]);
 
   const syncBcvRate = async (): Promise<BcvSyncResult> => {
     setIsSyncingBcv(true);
