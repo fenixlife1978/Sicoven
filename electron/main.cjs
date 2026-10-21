@@ -29,6 +29,29 @@ function openDatabase() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
+
+  // Migrar el contador de versiones previas sin permitir que una actualización
+  // reinicie las acciones ya consumidas en la edición DEMO.
+  try {
+    const saved = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
+    const legacyUsage = saved ? JSON.parse(saved.state_json).demoUsage : null;
+    if (legacyUsage && typeof legacyUsage === 'object' && !Array.isArray(legacyUsage)) {
+      const migrate = db.transaction(() => {
+        for (const [moduleKey, rawCount] of Object.entries(legacyUsage)) {
+          const count = Number(rawCount);
+          if (!/^[a-z0-9_-]{1,64}$/.test(moduleKey) || !Number.isInteger(count) || count < 0) continue;
+          db.prepare(`INSERT INTO demo_usage(module_key, action_count, updated_at) VALUES(?,?,datetime('now'))
+            ON CONFLICT(module_key) DO UPDATE SET
+              action_count = MAX(demo_usage.action_count, excluded.action_count),
+              updated_at = datetime('now')`)
+            .run(moduleKey, count);
+        }
+      });
+      migrate();
+    }
+  } catch {
+    // Una tabla de contador vacía no debe impedir abrir una base contable válida.
+  }
 }
 function createWindow() {
   const win = new BrowserWindow({
