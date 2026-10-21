@@ -73,7 +73,14 @@ const AppContent: React.FC = () => {
       {isDemoMode && (
         <div role="status" aria-live="polite" className="sticky top-0 z-[100] w-full bg-amber-300 text-slate-950 border-b-2 border-amber-500 shadow-md no-print">
           <div className="mx-auto max-w-7xl px-3 py-2 text-center text-xs sm:text-sm font-bold leading-relaxed">
-            DEMO SICOVEN · Máximo 10 acciones por módulo. Uso por módulo: Empresas {demoUsage.empresa || 0}/10 · Diario {demoUsage.diario || 0}/10 · Compras {demoUsage.compras || 0}/10 · Ventas {demoUsage.ventas || 0}/10 · Inventario {demoUsage.inventario || 0}/10 · Catálogo {demoUsage.catalogo || 0}/10 · Retenciones {demoUsage.retenciones || 0}/10 · Configuración {demoUsage.configuracion || 0}/10 · Conciliación {demoUsage.conciliacion || 0}/10. · ADQUIERE SICOVEN COMPLETO POR €250 EUR A LA TASA OFICIAL DEL DÍA SEGÚN EL BCV, O POR $200 USD EN EFECTIVO. · Compra la versión completa para trabajar sin límites.
+            <div className="flex flex-col items-center gap-2">
+              <div className="flex flex-wrap items-center justify-center gap-3">
+                <img src="/sicoven-logo-horizontal.svg" alt="Sicoven · Sistema contable" className="h-10 sm:h-12 w-auto max-w-[min(70vw,280px)] object-contain" />
+                <span className="inline-flex items-center rounded-md border border-amber-700 bg-slate-950 px-3 py-1.5 text-[11px] sm:text-xs font-extrabold tracking-wider text-amber-300">VERSIÓN DEMO</span>
+              </div>
+              <p>Máximo 10 acciones por módulo. Uso por módulo: Empresas {demoUsage.empresa || 0}/10 · Diario {demoUsage.diario || 0}/10 · Compras {demoUsage.compras || 0}/10 · Ventas {demoUsage.ventas || 0}/10 · Inventario {demoUsage.inventario || 0}/10 · Catálogo {demoUsage.catalogo || 0}/10 · Retenciones {demoUsage.retenciones || 0}/10 · Configuración {demoUsage.configuracion || 0}/10 · Conciliación {demoUsage.conciliacion || 0}/10.</p>
+              <p className="font-extrabold">ADQUIERE SICOVEN COMPLETO POR €250 EUR A LA TASA OFICIAL DEL DÍA SEGÚN EL BCV, O POR $200 USD EN EFECTIVO. · Compra la versión completa para trabajar sin límites.</p>
+            </div>
           </div>
         </div>
       )}
