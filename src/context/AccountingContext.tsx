@@ -436,7 +436,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
-    consumeDemoAction('diario');
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
@@ -457,6 +456,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       );
     }
 
+    consumeDemoAction('diario');
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const newEntry: JournalEntry = {
