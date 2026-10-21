@@ -108,16 +108,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [companies, setCompanies] = useState<Company[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_companies`);
-      return saved ? JSON.parse(saved) : INITIAL_COMPANIES;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_COMPANIES;
+      return [];
     }
   });
 
   const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_currentCompanyId`);
-      return saved && companies.some(c => c.id === saved) ? saved : companies[0]?.id || 'comp-1';
+      return saved && companies.some(c => c.id === saved) ? saved : companies[0]?.id || '';
     } catch {
       return 'comp-1';
     }
@@ -135,81 +135,81 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_journal`);
-      return saved ? JSON.parse(saved) : INITIAL_JOURNAL_ENTRIES;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_JOURNAL_ENTRIES;
+      return [];
     }
   });
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_purchases`);
-      return saved ? JSON.parse(saved) : INITIAL_PURCHASES;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_PURCHASES;
+      return [];
     }
   });
 
   const [sales, setSales] = useState<SaleRecord[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_sales`);
-      return saved ? JSON.parse(saved) : INITIAL_SALES;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_SALES;
+      return [];
     }
   });
 
   const [products, setProducts] = useState<InventoryProduct[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_products`);
-      return saved ? JSON.parse(saved) : INITIAL_INVENTORY_PRODUCTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_INVENTORY_PRODUCTS;
+      return [];
     }
   });
 
   const [movements, setMovements] = useState<InventoryMovement[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_movements`);
-      return saved ? JSON.parse(saved) : INITIAL_INVENTORY_MOVEMENTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_INVENTORY_MOVEMENTS;
+      return [];
     }
   });
 
   const [vatVouchers, setVatVouchers] = useState<VatRetentionVoucher[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_vatVouchers`);
-      return saved ? JSON.parse(saved) : INITIAL_VAT_VOUCHERS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_VAT_VOUCHERS;
+      return [];
     }
   });
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_islrVouchers`);
-      return saved ? JSON.parse(saved) : INITIAL_ISLR_VOUCHERS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_ISLR_VOUCHERS;
+      return [];
     }
   });
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_bankAccounts`);
-      return saved ? JSON.parse(saved) : INITIAL_BANK_ACCOUNTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_BANK_ACCOUNTS;
+      return [];
     }
   });
 
   const [bankStatementMovements, setBankStatementMovements] = useState<BankStatementMovement[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_statementMovements`);
-      return saved ? JSON.parse(saved) : INITIAL_STATEMENT_MOVEMENTS;
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_STATEMENT_MOVEMENTS;
+      return [];
     }
   });
 
@@ -291,7 +291,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult]);
 
-  const currentCompany = companies.find(c => c.id === currentCompanyId) || companies[0] || INITIAL_COMPANIES[0];
+  const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
+    id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
+    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 0, fiscalYear: new Date().getFullYear(), bcvRate: 0
+  };
 
   const updateCompany = (updated: Company) => {
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
@@ -372,10 +375,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Sincronización automática de tasa BCV al inicio
   useEffect(() => {
-    if (autoSyncBcv) {
+    if (autoSyncBcv && companies.length > 0) {
       syncBcvRate();
     }
-  }, []);
+  }, [companies.length]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
