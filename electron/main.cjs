@@ -78,9 +78,10 @@ app.whenReady().then(() => {
       event.returnValue = {};
     }
   });
-  ipcMain.on('sicoven:demo-consume-action', (event, moduleKey, limit) => {
+  ipcMain.on('sicoven:demo-consume-action', (event, moduleKey) => {
     try {
-      event.returnValue = consumeDemoAction(db, moduleKey, limit);
+      // El límite comercial se fija en el proceso principal; el renderer no puede elevarlo.
+      event.returnValue = consumeDemoAction(db, moduleKey, 10);
     } catch {
       event.returnValue = { ok: false, error: 'No se pudo registrar la acción demo en SQLite' };
     }
