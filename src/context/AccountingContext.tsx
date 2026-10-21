@@ -1109,7 +1109,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const resetToSampleData = () => {
     if (!IS_DEMO) { setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]); setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]); setDemoUsage({}); return; }
-    setDemoUsage({});
     setCompanies(INITIAL_COMPANIES);
     setCurrentCompanyId(INITIAL_COMPANIES[0].id);
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
