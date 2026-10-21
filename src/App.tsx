@@ -20,7 +20,7 @@ const AppContent: React.FC = () => {
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
-  const { currentCompany, companies, isStorageReady, isDemoMode, demoUsage } = useAccounting();
+  const { currentCompany, companies, isStorageReady, storageError, isDemoMode, demoUsage } = useAccounting();
 
   useEffect(() => {
     if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
@@ -60,9 +60,9 @@ const AppContent: React.FC = () => {
       <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
         <div role="status" aria-live="polite" className="max-w-md rounded-xl bg-white p-8 text-center shadow-lg">
           <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
-          <h1 className="text-lg font-bold text-slate-900">Iniciando SICOVEN</h1>
-          <p className="mt-2 text-sm text-slate-600">Verificando y cargando los datos locales antes de habilitar las operaciones contables.</p>
-          <p className="mt-3 text-xs text-slate-500">Si esta pantalla no desaparece, cierre el programa y compruebe los permisos de escritura de la carpeta de datos.</p>
+          <h1 className="text-lg font-bold text-slate-900">{storageError ? 'No se pudo abrir la base de datos local' : 'Iniciando SICOVEN'}</h1>
+          <p className="mt-2 text-sm text-slate-600">{storageError || 'Verificando y cargando los datos locales antes de habilitar las operaciones contables.'}</p>
+          <p className="mt-3 text-xs text-slate-500">{storageError ? 'Las operaciones permanecen bloqueadas para proteger sus datos. Cierre SICOVEN y compruebe los permisos de escritura de la carpeta de datos antes de volver a abrirlo.' : 'Si esta pantalla no desaparece, cierre el programa y compruebe los permisos de escritura de la carpeta de datos.'}</p>
         </div>
       </div>
     );
