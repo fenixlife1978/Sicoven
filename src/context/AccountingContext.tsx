@@ -107,7 +107,7 @@ const AccountingContext = createContext<AccountingContextType | undefined>(undef
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
 const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
 const DEMO_LIMIT = 10;
-const DEMO_LABELS: Record<string, string> = { empresa: 'Empresas', diario: 'Libro Diario', compras: 'Compras', ventas: 'Ventas', inventario: 'Inventario', conciliacion: 'Conciliación Bancaria' };
+const DEMO_LABELS: Record<string, string> = { empresa: 'Empresas', diario: 'Libro Diario', compras: 'Compras', ventas: 'Ventas', inventario: 'Inventario', conciliacion: 'Conciliación Bancaria', retenciones: 'Retenciones' };
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Cargar estado inicial desde localStorage o valores por defecto
@@ -477,6 +477,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
     consumeDemoAction('compras');
+    if ((purchaseData.vatWithheldBs || 0) > 0 || (purchaseData.islrWithheldBs || 0) > 0) consumeDemoAction('retenciones');
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const nextOp = companyPurchases.length + 1;
     const purchaseId = `pur-${Date.now()}`;
