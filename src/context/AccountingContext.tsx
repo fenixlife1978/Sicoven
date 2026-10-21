@@ -32,6 +32,7 @@ import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 interface AccountingContextType {
   companies: Company[];
   isStorageReady: boolean;
+  storageError: string | null;
   isDemoMode: boolean;
   demoUsage: Record<string, number>;
   currentCompany: Company;
@@ -326,6 +327,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // SQLite local es la persistencia operativa en la versión de escritorio.
   const [storageReady, setStorageReady] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
     vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
@@ -375,6 +377,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         initialized = true;
       } catch (error) {
         console.error('No se pudo inicializar la persistencia SQLite de SICOVEN:', error);
+        setStorageError(error instanceof Error ? error.message : 'Error desconocido al abrir la base de datos local.');
       } finally {
         // Fail closed: si SQLite no se pudo leer/escribir, no habilitar
         // operaciones que puedan sobrescribir datos contables existentes.
@@ -1267,6 +1270,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       value={{
         companies,
         isStorageReady: storageReady,
+        storageError,
         isDemoMode: IS_DEMO,
         demoUsage,
         currentCompany,
