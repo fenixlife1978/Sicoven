@@ -624,7 +624,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deletePurchase = (id: string) => {
+    const purchase = purchases.find(p => p.id === id);
+    if (!purchase || purchase.companyId !== currentCompany.id) return;
     setPurchases(prev => prev.filter(p => p.id !== id));
+    if (purchase.journalEntryId) {
+      setJournalEntries(prev => prev.filter(entry => entry.id !== purchase.journalEntryId));
+    }
+    setVatVouchers(prev => prev.filter(voucher => voucher.purchaseRecordId !== id));
   };
 
   // Registrar venta y generar asiento contable
@@ -717,7 +723,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteSale = (id: string) => {
-    setSales(prev => prev.filter(s => s.id !== id));
+    const sale = sales.find(item => item.id === id);
+    if (!sale || sale.companyId !== currentCompany.id) return;
+    setSales(prev => prev.filter(item => item.id !== id));
+    if (sale.journalEntryId) {
+      setJournalEntries(prev => prev.filter(entry => entry.id !== sale.journalEntryId));
+    }
   };
 
   // Inventario
@@ -987,7 +998,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = companyEntries.length + 1;
-    const rate = currentCompany.bcvRate || 68.50;
+    const rate = currentCompany.bcvRate;
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
+    }
     const amountBs = statementMovement.amountBs;
     const amountUsd = statementMovement.amountUsd || (amountBs / rate);
 
@@ -1091,18 +1105,38 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const importBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
-      if (data.companies && Array.isArray(data.companies)) setCompanies(data.companies);
-      if (data.accounts && Array.isArray(data.accounts)) setAccounts(data.accounts);
-      if (data.journalEntries && Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
-      if (data.purchases && Array.isArray(data.purchases)) setPurchases(data.purchases);
-      if (data.sales && Array.isArray(data.sales)) setSales(data.sales);
-      if (data.products && Array.isArray(data.products)) setProducts(data.products);
-      if (data.movements && Array.isArray(data.movements)) setMovements(data.movements);
-      if (data.vatVouchers && Array.isArray(data.vatVouchers)) setVatVouchers(data.vatVouchers);
-      if (data.islrVouchers && Array.isArray(data.islrVouchers)) setIslrVouchers(data.islrVouchers);
-      if (data.bankAccounts && Array.isArray(data.bankAccounts)) setBankAccounts(data.bankAccounts);
-      if (data.bankStatementMovements && Array.isArray(data.bankStatementMovements)) setBankStatementMovements(data.bankStatementMovements);
-      if (data.companies?.length > 0) setCurrentCompanyId(data.companies[0].id);
+      const requiredCollections = [
+        'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
+        'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
+      ] as const;
+      if (!data || typeof data !== 'object' || requiredCollections.some(key => !Array.isArray(data[key]))) {
+        throw new Error('El respaldo está incompleto o no contiene todas las colecciones requeridas.');
+      }
+      if (data.companies.length === 0 || data.companies.some((c: any) =>
+        !c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string'
+      )) throw new Error('El respaldo contiene empresas inválidas.');
+      const companyIds = new Set(data.companies.map((c: Company) => c.id));
+      if (data.journalEntries.some((entry: any) => !entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items))) {
+        throw new Error('Hay asientos asociados a empresas inexistentes o con líneas inválidas.');
+      }
+      for (const key of requiredCollections) {
+        const rows = data[key] as any[];
+        if (rows.some(row => !row || typeof row !== 'object' || (row.companyId && !companyIds.has(row.companyId)))) {
+          throw new Error(`La colección ${key} contiene registros inválidos o vinculados a empresas inexistentes.`);
+        }
+      }
+      setCompanies(data.companies);
+      setAccounts(data.accounts);
+      setJournalEntries(data.journalEntries);
+      setPurchases(data.purchases);
+      setSales(data.sales);
+      setProducts(data.products);
+      setMovements(data.movements);
+      setVatVouchers(data.vatVouchers);
+      setIslrVouchers(data.islrVouchers);
+      setBankAccounts(data.bankAccounts);
+      setBankStatementMovements(data.bankStatementMovements);
+      setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
       console.error('Error importing backup:', e);
