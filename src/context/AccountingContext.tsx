@@ -31,6 +31,7 @@ import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 
 interface AccountingContextType {
   companies: Company[];
+  isStorageReady: boolean;
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
   addCompany: (comp: Omit<Company, 'id'>) => Company;
@@ -1151,6 +1152,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <AccountingContext.Provider
       value={{
         companies,
+        isStorageReady: storageReady,
         currentCompany,
         setCurrentCompanyId,
         addCompany,
