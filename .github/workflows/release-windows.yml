@@ -1,4 +1,4 @@
-name: SICOVEN Windows Release
+name: SICOVEN Windows and Demo Releases
 on:
   push:
     branches:
@@ -14,7 +14,7 @@ concurrency:
 jobs:
   build-release:
     runs-on: windows-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
@@ -24,28 +24,46 @@ jobs:
           node-version: 22
       - name: Install dependencies
         run: npm install
-      - name: Vite production build
+      - name: Build full edition (without sample data)
         run: npm run build
-      - name: Package Windows installer with local SQLite
+      - name: Package full Windows installer
         run: npm run dist
-      - name: Verify installer exists
+      - name: Verify full installer
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
-          if (-not $installer) { throw 'No se generó el instalador .exe de SICOVEN.' }
+          if (-not $installer) { throw 'No se generó el instalador completo .exe de SICOVEN.' }
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
+      - name: Build demo edition with sample data and limits
+        shell: pwsh
+        run: |
+          $env:VITE_SICOVEN_DEMO = 'true'
+          npm run build
+      - name: Package separate demo installer
+        run: npx electron-builder --win nsis --config.directories.output=release-demo --config.appId=ve.sicoven.demo --config.productName="SICOVEN DEMO" --config.win.artifactName="SICOVEN-DEMO-Setup-${version}-${arch}.${ext}"
+      - name: Verify both installers
+        shell: pwsh
+        run: |
+          $full = Get-ChildItem -Path release -Filter '*.exe' -File
+          $demo = Get-ChildItem -Path release-demo -Filter '*.exe' -File
+          if (-not $full) { throw 'Falta el instalador completo de SICOVEN.' }
+          if (-not $demo) { throw 'Falta el instalador DEMO de SICOVEN.' }
+          Get-FileHash $full.FullName -Algorithm SHA256 | Format-List
+          Get-FileHash $demo.FullName -Algorithm SHA256 | Format-List
       - name: Publish GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
         shell: pwsh
         run: |
-          $files = Get-ChildItem -Path release -Filter '*.exe' -File
-          gh release create '${{ github.ref_name }}' $files.FullName --title 'SICOVEN ${{ github.ref_name }}' --generate-notes
-      - name: Upload installer as workflow artifact
+          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File).FullName)
+          gh release create '${{ github.ref_name }}' $files --title 'SICOVEN ${{ github.ref_name }}' --generate-notes
+      - name: Upload full and demo installers
         uses: actions/upload-artifact@v4
         with:
-          name: SICOVEN-Windows-Installer
-          path: release/*.exe
+          name: SICOVEN-Windows-Installers
+          path: |
+            release/*.exe
+            release-demo/*.exe
           if-no-files-found: error
           retention-days: 30
