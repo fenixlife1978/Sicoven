@@ -19,7 +19,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
-  const [bcvRate, setBcvRate] = useState<number>(68.50);
+  const [bcvRate, setBcvRate] = useState<number>(0);
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
 
   if (!isOpen) return null;
@@ -38,7 +38,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       fiscalYear,
-      bcvRate: Number(bcvRate) || 68.50,
+      bcvRate: Number(bcvRate),
       lastRateUpdate: new Date().toISOString().split('T')[0]
     });
 
