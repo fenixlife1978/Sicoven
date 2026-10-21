@@ -32,7 +32,7 @@ export const LibroVentasPrintPreviewModal: React.FC<LibroVentasPrintPreviewModal
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm p-2 sm:p-4 no-print animate-in fade-in duration-150">
       <div className="bg-slate-900 rounded-2xl shadow-2xl max-w-6xl w-full max-h-[96vh] flex flex-col overflow-hidden border border-slate-700">
         {/* Header Toolbar */}
-        <div className="flex flex-wrap items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-850 text-white border-b border-slate-700 gap-3 flex-shrink-0">
+        <div className="flex flex-wrap items-center justify-between px-4 sm:px-6 py-3.5 bg-slate-900 text-white border-b border-slate-700 gap-3 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               <FileText className="w-4 h-4" />

@@ -69,7 +69,11 @@ const AppContent: React.FC = () => {
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 text-xs no-print mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2">
-            <Scale className="w-4 h-4 text-emerald-400" />
+            <img
+              src="/assets/aistudio/sicoven-icono-512_6b33c42d.png"
+              alt="SICOVEN"
+              className="w-5 h-5 rounded object-contain shadow-xs"
+            />
             <span className="font-bold text-slate-200">SICOVEN</span>
             <span className="text-slate-600">•</span>
             <span>Sistema Contable Multi-Empresa VEN-NIF & SENIAT</span>

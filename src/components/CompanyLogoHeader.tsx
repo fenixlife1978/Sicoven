@@ -1,6 +1,6 @@
 import React from 'react';
 import { Company } from '../types/accounting';
-import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
+import { getCompanyLogo } from '../data/defaultLogos';
 
 interface CompanyLogoHeaderProps {
   company: Company;
@@ -15,7 +15,7 @@ export const CompanyLogoHeader: React.FC<CompanyLogoHeaderProps> = ({
   subtitle,
   periodText
 }) => {
-  const logo = company.logoUrl || DEFAULT_LOGO_LOS_ANDES;
+  const logo = getCompanyLogo(company);
 
   return (
     <div className="w-full pb-4 border-b-2 border-slate-900 mb-4 overflow-hidden">

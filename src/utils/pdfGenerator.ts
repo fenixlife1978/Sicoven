@@ -2,13 +2,13 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { Company, JournalEntry, PurchaseRecord, SaleRecord } from '../types/accounting';
 import { formatBs, formatUsd, formatDate, formatNumberVe } from './formatters';
-import { DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
+import { getCompanyLogo } from '../data/defaultLogos';
 
 /**
  * Helper to convert any image or SVG data-uri into PNG data URL for jsPDF
  */
-async function getRasterizedLogo(imageSrc?: string): Promise<string | null> {
-  const src = imageSrc || DEFAULT_LOGO_LOS_ANDES;
+async function getRasterizedLogo(imageSrc?: string, company?: Company): Promise<string | null> {
+  const src = imageSrc || getCompanyLogo(company);
   if (src.startsWith('data:image/png') || src.startsWith('data:image/jpeg')) {
     return src;
   }
@@ -53,7 +53,7 @@ async function addPdfHeader(
 
   // Render Company Logo
   try {
-    const logoData = await getRasterizedLogo(company.logoUrl);
+    const logoData = await getRasterizedLogo(company.logoUrl, company);
     if (logoData) {
       doc.addImage(logoData, 'PNG', 14, currentY, 48, 15);
     }

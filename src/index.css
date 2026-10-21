@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+@theme {
+  --color-slate-750: #243044;
+  --color-slate-850: #111827;
+}
+
 @layer base {
   html, body {
     overflow-x: hidden;

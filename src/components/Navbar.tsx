@@ -71,24 +71,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Top Header Bar */}
       <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
-            <div className="bg-gradient-to-tr from-emerald-600 to-teal-400 p-2 sm:p-2.5 rounded-lg sm:rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center flex-shrink-0">
-              <Scale className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-bold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-                  SICOVEN
-                </span>
-                <span className="hidden sm:inline-block text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase px-1.5 sm:px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  VEN-NIF
-                </span>
-              </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-normal truncate">
-                Sistema Contable Integral Multi-Empresa
-              </p>
-            </div>
+          {/* Logo & Brand (New Official Identity) */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
+            <img
+              src="/assets/aistudio/sicoven-logo-horizontal-nav.svg"
+              alt="SICOVEN · Sistema Contable Integral Multiempresas"
+              className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
+            />
+            <span className="hidden lg:inline-block text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              VEN-NIF
+            </span>
           </div>
 
           {/* Company Switcher, Currency View & Mobile Menu Button */}
@@ -97,7 +89,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             <div className="relative">
               <button
                 onClick={() => setCompanyDropdownOpen(!companyDropdownOpen)}
-                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-750 border border-slate-700 hover:border-slate-600 transition text-left cursor-pointer"
+                className="flex items-center gap-1.5 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 border border-slate-700 hover:border-slate-600 transition text-left cursor-pointer"
                 title={`Empresa activa: ${currentCompany.name} (${currentCompany.rif})`}
               >
                 <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 flex-shrink-0" />
@@ -124,58 +116,75 @@ export const Navbar: React.FC<NavbarProps> = ({
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 flex-shrink-0 ml-0.5" />
               </button>
 
-              {/* Company Dropdown Menu */}
+              {/* Company Dropdown Menu with solid background & backdrop dismiss */}
               {companyDropdownOpen && (
-                <div
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-850 rounded-xl shadow-2xl border border-slate-700 py-2 z-50 divide-y divide-slate-800"
-                  onClick={() => setCompanyDropdownOpen(false)}
-                >
-                  <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
-                    Empresas Disponibles ({companies.length})
-                  </div>
-                  <div className="max-h-64 overflow-y-auto py-1">
-                    {companies.map(comp => (
+                <>
+                  {/* Backdrop to prevent click-through and close on tap outside */}
+                  <div
+                    className="fixed inset-0 z-40 bg-black/40 backdrop-blur-[1px]"
+                    onClick={() => setCompanyDropdownOpen(false)}
+                  />
+
+                  {/* Dropdown Card */}
+                  <div
+                    className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-900 rounded-xl shadow-2xl border border-slate-700 py-2 z-50 divide-y divide-slate-800 ring-1 ring-black/50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="px-3.5 py-2 text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center justify-between bg-slate-950/60">
+                      <span>Empresas Registradas ({companies.length})</span>
+                      <span className="text-[10px] text-emerald-400 font-mono font-semibold">RIF: {currentCompany.rif}</span>
+                    </div>
+                    <div className="max-h-64 overflow-y-auto py-1 divide-y divide-slate-800/50 bg-slate-900">
+                      {companies.map(comp => (
+                        <button
+                          key={comp.id}
+                          onClick={() => {
+                            setCurrentCompanyId(comp.id);
+                            setCompanyDropdownOpen(false);
+                          }}
+                          className={`w-full px-3.5 py-2.5 text-left flex items-start gap-2.5 transition hover:bg-slate-800 cursor-pointer ${
+                            comp.id === currentCompany.id
+                              ? 'bg-emerald-950/70 border-l-4 border-emerald-400'
+                              : 'bg-slate-900'
+                          }`}
+                        >
+                          <Building2 className={`w-4 h-4 mt-0.5 flex-shrink-0 ${comp.id === currentCompany.id ? 'text-emerald-400' : 'text-slate-400'}`} />
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs font-semibold text-slate-100 truncate">
+                              {comp.name}
+                            </div>
+                            <div className="text-[11px] text-slate-400 flex items-center gap-2 mt-0.5">
+                              <span className="font-mono text-slate-300 font-medium">{comp.rif}</span>
+                              <span className={`text-[10px] px-1.5 py-0.5 rounded font-bold ${
+                                comp.taxpayerType === 'ESPECIAL'
+                                  ? 'bg-purple-900/80 text-purple-200 border border-purple-700/60'
+                                  : 'bg-sky-900/80 text-sky-200 border border-sky-700/60'
+                              }`}>
+                                {comp.taxpayerType === 'ESPECIAL' ? 'Especial' : 'Ordinario'}
+                              </span>
+                            </div>
+                          </div>
+                          {comp.id === currentCompany.id && (
+                            <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="p-2.5 bg-slate-900">
                       <button
-                        key={comp.id}
-                        onClick={() => setCurrentCompanyId(comp.id)}
-                        className={`w-full px-3 py-2 text-left flex items-start gap-2.5 transition hover:bg-slate-800 ${
-                          comp.id === currentCompany.id ? 'bg-emerald-950/40 border-l-2 border-emerald-400' : ''
-                        }`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCompanyDropdownOpen(false);
+                          onOpenCompanyModal();
+                        }}
+                        className="w-full flex items-center justify-center gap-1.5 py-2 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-bold text-white transition shadow-sm cursor-pointer"
                       >
-                        <Building2 className={`w-4 h-4 mt-0.5 ${comp.id === currentCompany.id ? 'text-emerald-400' : 'text-slate-400'}`} />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-xs font-medium text-slate-200 truncate">
-                            {comp.name}
-                          </div>
-                          <div className="text-[11px] text-slate-400 flex items-center gap-2">
-                            <span>{comp.rif}</span>
-                            <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold ${
-                              comp.taxpayerType === 'ESPECIAL' ? 'bg-purple-900/60 text-purple-300' : 'bg-sky-900/60 text-sky-300'
-                            }`}>
-                              {comp.taxpayerType === 'ESPECIAL' ? 'Especial' : 'Ordinario'}
-                            </span>
-                          </div>
-                        </div>
-                        {comp.id === currentCompany.id && (
-                          <CheckCircle2 className="w-4 h-4 text-emerald-400 flex-shrink-0 mt-0.5" />
-                        )}
+                        <Plus className="w-3.5 h-3.5" />
+                        Crear Nueva Empresa
                       </button>
-                    ))}
+                    </div>
                   </div>
-                  <div className="p-2">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setCompanyDropdownOpen(false);
-                        onOpenCompanyModal();
-                      }}
-                      className="w-full flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-xs font-semibold text-white transition cursor-pointer"
-                    >
-                      <Plus className="w-3.5 h-3.5" />
-                      Crear Nueva Empresa
-                    </button>
-                  </div>
-                </div>
+                </>
               )}
             </div>
 
@@ -246,7 +255,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   className={`flex items-center gap-2 p-2 rounded-lg text-xs font-medium text-left transition cursor-pointer ${
                     isActive
                       ? 'bg-emerald-600 text-white font-semibold shadow-sm'
-                      : 'bg-slate-900 text-slate-300 hover:bg-slate-850 hover:text-white border border-slate-800'
+                      : 'bg-slate-900 text-slate-300 hover:bg-slate-800 hover:text-white border border-slate-800'
                   }`}
                 >
                   <Icon className={`w-4 h-4 flex-shrink-0 ${isActive ? 'text-white' : 'text-emerald-400'}`} />

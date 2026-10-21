@@ -24,6 +24,7 @@ import {
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewBankMovementModal } from './NewBankMovementModal';
 import { NewBankAccountModal } from './NewBankAccountModal';
+import { UploadBankStatementModal } from './UploadBankStatementModal';
 import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
@@ -50,7 +51,17 @@ export const ConciliacionBancariaView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewMovementModalOpen, setIsNewMovementModalOpen] = useState(false);
   const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
+  const [isUploadModalOpen, setIsUploadModalOpen] = useState(false);
   const [autoReconcileFeedback, setAutoReconcileFeedback] = useState<string | null>(null);
+
+  const handleUploadSuccess = (importedCount: number, reconciledCount: number) => {
+    setAutoReconcileFeedback(
+      `¡Importación exitosa! Se cargaron ${importedCount} movimientos bancarios desde el archivo Excel${
+        reconciledCount > 0 ? ` y se conciliaron automáticamente ${reconciledCount} partidas contra los asientos del sistema.` : '.'
+      }`
+    );
+    setTimeout(() => setAutoReconcileFeedback(null), 6000);
+  };
 
   // Manual pair selection state
   const [selectedBookEntryId, setSelectedBookEntryId] = useState<string | null>(null);
@@ -255,35 +266,44 @@ export const ConciliacionBancariaView: React.FC = () => {
 
           <div className="flex flex-wrap items-center gap-2.5">
             <button
+              onClick={() => setIsUploadModalOpen(true)}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow shadow-emerald-700/20 cursor-pointer"
+              title="Subir archivo Excel .XLS o .XLSX con el estado de cuenta bancario para conciliar automáticamente"
+            >
+              <FileSpreadsheet className="w-4 h-4 text-emerald-100" />
+              Subir Estado de Cuenta (.XLS)
+            </button>
+            <button
+              onClick={handleRunAuto}
+              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition cursor-pointer"
+              title="Comparar automáticamente por referencia y montos exactos"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-emerald-600" />
+              Conciliación Automática
+            </button>
+            <button
               onClick={handleExportPdf}
               disabled={isExportingPdf}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300 shadow-sm"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300 shadow-sm"
               title="Descargar cédula de conciliación oficial en PDF con logo"
             >
               <Download className="w-3.5 h-3.5 text-emerald-600" />
-              {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF Cédula'}
+              {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF'}
             </button>
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
             >
               <Printer className="w-3.5 h-3.5" />
-              Imprimir Cédula
+              Imprimir
             </button>
             <button
               onClick={() => setIsNewMovementModalOpen(true)}
-              className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 rounded-xl transition cursor-pointer border border-emerald-200"
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
+              title="Agregar un movimiento manual al extracto bancario"
             >
               <Plus className="w-3.5 h-3.5" />
-              Nuevo Movimiento Extracto
-            </button>
-            <button
-              onClick={handleRunAuto}
-              className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 rounded-xl transition shadow shadow-emerald-700/20 cursor-pointer"
-              title="Comparar automáticamente por referencia y montos exactos"
-            >
-              <Sparkles className="w-4 h-4 text-emerald-200" />
-              Conciliación Automática
+              Manual
             </button>
           </div>
         </div>
@@ -884,6 +904,12 @@ export const ConciliacionBancariaView: React.FC = () => {
       )}
 
       {/* Modals */}
+      <UploadBankStatementModal
+        isOpen={isUploadModalOpen}
+        onClose={() => setIsUploadModalOpen(false)}
+        activeBankAccount={activeBank}
+        onSuccess={handleUploadSuccess}
+      />
       <NewBankMovementModal
         isOpen={isNewMovementModalOpen}
         onClose={() => setIsNewMovementModalOpen(false)}

@@ -28,6 +28,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
+import { getCompanyLogo, DEFAULT_LOGO_CARIBE, DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 
 interface AccountingContextType {
   companies: Company[];
@@ -82,7 +83,9 @@ interface AccountingContextType {
   bankStatementMovements: BankStatementMovement[];
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId'>) => BankAccount;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
+  addBankStatementMovementsBulk: (movements: Omit<BankStatementMovement, 'id' | 'companyId'>[]) => BankStatementMovement[];
   deleteBankStatementMovement: (id: string) => void;
+  clearBankStatementMovements: (bankAccountId: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId?: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
   runAutoReconciliation: (bankAccountId: string) => { matchedCount: number; matchedRefs: string[] };
@@ -108,7 +111,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [companies, setCompanies] = useState<Company[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_companies`);
-      return saved ? JSON.parse(saved) : INITIAL_COMPANIES;
+      if (saved) {
+        const parsed: Company[] = JSON.parse(saved);
+        // Garantizar que cada empresa conserve su logo institucional correspondiente
+        return parsed.map(c => {
+          if (c.id === 'comp-2' && (!c.logoUrl || c.logoUrl === DEFAULT_LOGO_LOS_ANDES)) {
+            return { ...c, logoUrl: DEFAULT_LOGO_CARIBE };
+          }
+          if (c.id === 'comp-1' && !c.logoUrl) {
+            return { ...c, logoUrl: DEFAULT_LOGO_LOS_ANDES };
+          }
+          if (!c.logoUrl || (c.logoUrl === DEFAULT_LOGO_LOS_ANDES && c.id !== 'comp-1')) {
+            return { ...c, logoUrl: getCompanyLogo(c) };
+          }
+          return c;
+        });
+      }
+      return INITIAL_COMPANIES;
     } catch {
       return INITIAL_COMPANIES;
     }
@@ -135,7 +154,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
     try {
       const saved = localStorage.getItem(`${STORAGE_KEY}_journal`);
-      return saved ? JSON.parse(saved) : INITIAL_JOURNAL_ENTRIES;
+      if (saved) {
+        const parsed: JournalEntry[] = JSON.parse(saved);
+        // Si el localStorage guardado no contenía los asientos de demostración de comp-2, fusionarlos
+        const hasComp2 = parsed.some(e => e.companyId === 'comp-2');
+        if (!hasComp2) {
+          const comp2Initials = INITIAL_JOURNAL_ENTRIES.filter(e => e.companyId === 'comp-2');
+          return [...parsed, ...comp2Initials];
+        }
+        return parsed;
+      }
+      return INITIAL_JOURNAL_ENTRIES;
     } catch {
       return INITIAL_JOURNAL_ENTRIES;
     }
@@ -267,7 +296,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const currentCompany = companies.find(c => c.id === currentCompanyId) || companies[0] || INITIAL_COMPANIES[0];
 
   const updateCompany = (updated: Company) => {
-    setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+    setCompanies(prev => prev.map(c => (c.id === updated.id ? { ...updated, logoUrl: updated.logoUrl || getCompanyLogo(updated) } : c)));
   };
 
   const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
@@ -353,7 +382,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
       ...comp,
-      id: `comp-${Date.now()}`
+      id: `comp-${Date.now()}`,
+      logoUrl: comp.logoUrl || getCompanyLogo(comp)
     };
     setCompanies(prev => [...prev, newComp]);
     setCurrentCompanyId(newComp.id);
@@ -798,8 +828,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return newMov;
   };
 
+  const addBankStatementMovementsBulk = (
+    movsData: Omit<BankStatementMovement, 'id' | 'companyId'>[]
+  ): BankStatementMovement[] => {
+    const timestamp = Date.now();
+    const newMovements: BankStatementMovement[] = movsData.map((mov, idx) => ({
+      ...mov,
+      id: `stmt-${timestamp}-${idx}-${Math.floor(Math.random() * 1000)}`,
+      companyId: currentCompany.id
+    }));
+    setBankStatementMovements(prev => [...prev, ...newMovements]);
+    return newMovements;
+  };
+
   const deleteBankStatementMovement = (id: string) => {
     setBankStatementMovements(prev => prev.filter(m => m.id !== id));
+  };
+
+  const clearBankStatementMovements = (bankAccountId: string) => {
+    setBankStatementMovements(prev =>
+      prev.filter(m => !(m.companyId === currentCompany.id && m.bankAccountId === bankAccountId))
+    );
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
@@ -1113,7 +1162,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),
         addBankAccount,
         addBankStatementMovement,
+        addBankStatementMovementsBulk,
         deleteBankStatementMovement,
+        clearBankStatementMovements,
         reconcileMovementManual,
         unreconcileMovement,
         runAutoReconciliation,

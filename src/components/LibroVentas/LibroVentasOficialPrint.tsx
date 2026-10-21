@@ -1,7 +1,7 @@
 import React from 'react';
 import { Company, SaleRecord } from '../../types/accounting';
 import { formatBs, formatDate } from '../../utils/formatters';
-import { DEFAULT_LOGO_LOS_ANDES } from '../../data/defaultLogos';
+import { DEFAULT_LOGO_LOS_ANDES, getCompanyLogo } from '../../data/defaultLogos';
 
 interface LibroVentasOficialPrintProps {
   company: Company;
@@ -14,7 +14,7 @@ export const LibroVentasOficialPrint: React.FC<LibroVentasOficialPrintProps> = (
   sales,
   monthFilter
 }) => {
-  const logo = company.logoUrl || DEFAULT_LOGO_LOS_ANDES;
+  const logo = getCompanyLogo(company);
 
   // Totales oficiales SENIAT
   const totalVentasConIva = sales.reduce((s, x) => s + x.totalAmountBs, 0);
