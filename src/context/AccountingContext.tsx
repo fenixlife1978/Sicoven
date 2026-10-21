@@ -107,13 +107,30 @@ const AccountingContext = createContext<AccountingContextType | undefined>(undef
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
 const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
 const DEMO_LIMIT = 10;
-const DEMO_LABELS: Record<string, string> = { empresa: 'Empresas', diario: 'Libro Diario', compras: 'Compras', ventas: 'Ventas', inventario: 'Inventario', conciliacion: 'Conciliación Bancaria', retenciones: 'Retenciones' };
+const DEMO_LABELS: Record<string, string> = {
+  empresa: 'Empresas',
+  diario: 'Libro Diario',
+  compras: 'Compras',
+  ventas: 'Ventas',
+  inventario: 'Inventario',
+  catalogo: 'Catálogo y plan de cuentas',
+  retenciones: 'Retenciones',
+  configuracion: 'Configuración',
+  conciliacion: 'Conciliación bancaria'
+};
+
+// En escritorio, SQLite es la única fuente operativa; localStorage se reserva
+// para la vista web de desarrollo y nunca inicializa datos del instalador.
+const readBrowserStorage = (key: string): string | null => {
+  if (typeof window !== 'undefined' && window.sicovenStore) return null;
+  try { return localStorage.getItem(key); } catch { return null; }
+};
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Cargar estado inicial desde localStorage o valores por defecto
   const [companies, setCompanies] = useState<Company[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_companies`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_companies`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -122,7 +139,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_currentCompanyId`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_currentCompanyId`);
       return saved && companies.some(c => c.id === saved) ? saved : companies[0]?.id || '';
     } catch {
       return 'comp-1';
@@ -131,7 +148,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [accounts, setAccounts] = useState<Account[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_accounts`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_accounts`);
       return saved ? JSON.parse(saved) : DEFAULT_CHART_OF_ACCOUNTS;
     } catch {
       return DEFAULT_CHART_OF_ACCOUNTS;
@@ -140,7 +157,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_journal`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_journal`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -149,7 +166,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_purchases`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_purchases`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -158,7 +175,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [sales, setSales] = useState<SaleRecord[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_sales`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_sales`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -167,7 +184,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [products, setProducts] = useState<InventoryProduct[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_products`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_products`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -176,7 +193,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [movements, setMovements] = useState<InventoryMovement[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_movements`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_movements`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -185,7 +202,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [vatVouchers, setVatVouchers] = useState<VatRetentionVoucher[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_vatVouchers`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_vatVouchers`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -194,7 +211,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_islrVouchers`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_islrVouchers`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -203,7 +220,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_bankAccounts`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_bankAccounts`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -212,7 +229,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [bankStatementMovements, setBankStatementMovements] = useState<BankStatementMovement[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_statementMovements`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_statementMovements`);
       return saved ? JSON.parse(saved) : [];
     } catch {
       return [];
@@ -224,13 +241,43 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const demoUsageRef = useRef<Record<string, number>>({});
   const consumeDemoAction = (moduleKey: string) => {
     if (!IS_DEMO) return;
-    const used = demoUsageRef.current[moduleKey] || 0;
+    const label = DEMO_LABELS[moduleKey] || moduleKey;
+    if (window.sicovenStore) {
+      const result = window.sicovenStore.consumeDemoAction(moduleKey, DEMO_LIMIT);
+      if (result?.usage && typeof result.usage === 'object') {
+        demoUsageRef.current = result.usage;
+        setDemoUsage(result.usage);
+      }
+      if (!result?.ok) {
+        const message = result?.used !== undefined
+          ? `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`
+          : 'No se pudo registrar la acción demo en SQLite. La operación fue bloqueada para proteger el límite.';
+        window.alert(message);
+        throw new Error(message);
+      }
+      return;
+    }
+
+    // Respaldo para la vista web de desarrollo: el contador se escribe antes
+    // de permitir la mutación y sobrevive a una recarga del navegador.
+    let storedUsage: Record<string, number> = {};
+    try {
+      storedUsage = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_demoUsage`) || '{}');
+    } catch {
+      storedUsage = {};
+    }
+    const used = Number(storedUsage[moduleKey] ?? demoUsageRef.current[moduleKey] ?? 0);
     if (used >= DEMO_LIMIT) {
-      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${DEMO_LABELS[moduleKey] || moduleKey}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
+      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
       window.alert(message);
       throw new Error(message);
     }
-    const nextUsage = { ...demoUsageRef.current, [moduleKey]: used + 1 };
+    const nextUsage = { ...storedUsage, [moduleKey]: used + 1 };
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_demoUsage`, JSON.stringify(nextUsage));
+    } catch {
+      throw new Error('No se pudo guardar el contador de la demo; la operación fue bloqueada.');
+    }
     demoUsageRef.current = nextUsage;
     setDemoUsage(nextUsage);
   };
@@ -247,7 +294,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_autoSyncBcv`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_autoSyncBcv`);
       return saved !== null ? JSON.parse(saved) : true;
     } catch {
       return true;
@@ -258,7 +305,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [bcvSyncStatus, setBcvSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [bcvSyncResult, setBcvSyncResult] = useState<BcvSyncResult | null>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_bcvSyncResult`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_bcvSyncResult`);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -266,11 +313,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   });
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+    if (!window.sicovenStore) {
+      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+    }
   }, [autoSyncBcv]);
 
   useEffect(() => {
-    if (bcvSyncResult) {
+    if (!window.sicovenStore && bcvSyncResult) {
       localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
     }
   }, [bcvSyncResult]);
@@ -284,6 +333,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   useEffect(() => {
     let cancelled = false;
+    let initialized = false;
     const hydrate = async () => {
       try {
         if (window.sicovenStore) {
@@ -316,11 +366,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           } else {
             await window.sicovenStore.save(stateSnapshot);
           }
+          if (IS_DEMO) {
+            const usage = window.sicovenStore.getDemoUsage();
+            demoUsageRef.current = usage;
+            setDemoUsage(usage);
+          }
         }
+        initialized = true;
       } catch (error) {
         console.error('No se pudo inicializar la persistencia SQLite de SICOVEN:', error);
       } finally {
-        if (!cancelled) setStorageReady(true);
+        // Fail closed: si SQLite no se pudo leer/escribir, no habilitar
+        // operaciones que puedan sobrescribir datos contables existentes.
+        if (!cancelled && initialized) setStorageReady(true);
       }
     };
     void hydrate();
@@ -356,7 +414,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error) {
       console.error('Error guardando datos locales de desarrollo:', error);
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage]);
 
   const syncBcvRate = async (): Promise<BcvSyncResult> => {
     setIsSyncingBcv(true);
@@ -431,7 +489,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addAccount = (account: Account) => {
-    consumeDemoAction('catalogo');
     consumeDemoAction('catalogo');
     setAccounts(prev => {
       if (prev.some(a => a.code === account.code)) {
