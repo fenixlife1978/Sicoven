@@ -101,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title={`Empresa activa: ${currentCompany.name} (${currentCompany.rif})`}
               >
                 <Building2 className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-emerald-400 flex-shrink-0" />
-                <div className="max-w-[85px] xs:max-w-[120px] sm:max-w-[190px] md:max-w-[240px] truncate">
+                <div className="max-w-[70px] min-[390px]:max-w-[110px] min-[480px]:max-w-[160px] sm:max-w-[190px] md:max-w-[240px] truncate">
                   <div className="text-[11px] sm:text-xs font-semibold text-slate-100 truncate">
                     {currentCompany.name}
                   </div>
@@ -212,8 +212,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 }`}
                 title="Mostrar en simultáneo: Bolívares (Bs.) y Dólares ($)"
               >
-                <span className="hidden xs:inline">Bs. / $</span>
-                <span className="xs:hidden">Dual</span>
+                <span className="hidden sm:inline">Bs. / $</span>
+                <span className="sm:hidden">Dual</span>
               </button>
             </div>
 

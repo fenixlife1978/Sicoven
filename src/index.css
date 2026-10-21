@@ -32,43 +32,65 @@
 
 @media print {
   @page {
-    size: letter;
-    margin: 12mm 10mm 14mm 10mm;
+    size: letter landscape;
+    margin: 8mm 6mm 10mm 6mm;
   }
 
-  body {
+  html, body {
     background-color: #ffffff !important;
     color: #000000 !important;
-    font-size: 11pt !important;
+    font-size: 9pt !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+    overflow: visible !important;
+    width: 100% !important;
+    max-width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
   }
-  .no-print {
+
+  main {
+    max-width: 100% !important;
+    width: 100% !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+  }
+
+  .no-print, header, footer, nav, .system-ui {
     display: none !important;
   }
+
   .print-only {
     display: block !important;
   }
+
   .print-break-inside-avoid {
     break-inside: avoid !important;
     page-break-inside: avoid !important;
   }
+
   .print-page-break {
     page-break-after: always !important;
   }
+
   .shadow-sm, .shadow, .shadow-md, .shadow-lg, .shadow-xl {
     box-shadow: none !important;
   }
+
   .border-slate-200, .border-gray-200 {
-    border-color: #000000 !important;
+    border-color: #334155 !important;
   }
+
   table {
     border-collapse: collapse !important;
     width: 100% !important;
   }
+
   thead {
     display: table-header-group !important;
   }
+
   tr {
     page-break-inside: avoid !important;
   }

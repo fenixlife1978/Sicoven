@@ -331,8 +331,8 @@ export const LibroComprasView: React.FC = () => {
         </div>
       </div>
 
-      {/* Forma 30 SENIAT Summary Card */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
+      {/* Forma 30 SENIAT Summary Card (no-print) */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800 no-print">
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           Resumen para la Declaración Mensual del IVA (Forma 30 SENIAT)

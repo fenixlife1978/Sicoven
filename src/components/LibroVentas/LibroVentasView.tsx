@@ -15,6 +15,8 @@ import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewSaleModal } from './NewSaleModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportVentasPdf } from '../../utils/pdfGenerator';
+import { LibroVentasOficialPrint } from './LibroVentasOficialPrint';
+import { LibroVentasPrintPreviewModal } from './LibroVentasPrintPreviewModal';
 
 export const LibroVentasView: React.FC = () => {
   const {
@@ -28,6 +30,7 @@ export const LibroVentasView: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false);
 
   const handleExportPdf = async () => {
     try {
@@ -70,7 +73,9 @@ export const LibroVentasView: React.FC = () => {
   const totalIvaRetenidoUsd = filteredSales.reduce((s, x) => s + (x.vatWithheldUsd || 0), 0);
 
   return (
-    <div className="space-y-6">
+    <>
+      {/* VISTA EN PANTALLA (INTERACTIVA, OCULTA AL IMPRIMIR) */}
+      <div className="space-y-6 print:hidden">
       {/* Official SENIAT Header with Company Logo */}
       <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 print:border-none print:shadow-none print:p-0">
         <CompanyLogoHeader
@@ -99,10 +104,11 @@ export const LibroVentasView: React.FC = () => {
               {isExportingPdf ? 'Generando PDF...' : 'Descargar PDF Oficial'}
             </button>
             <button
-              onClick={() => window.print()}
+              onClick={() => setIsPrintPreviewOpen(true)}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
+              title="Abrir vista de impresión oficial del Libro de Ventas de la empresa"
             >
-              <Printer className="w-3.5 h-3.5" />
+              <Printer className="w-3.5 h-3.5 text-slate-700" />
               Imprimir Libro
             </button>
             <button
@@ -319,23 +325,29 @@ export const LibroVentasView: React.FC = () => {
         </div>
       </div>
 
-      {/* Official Signatures block (print-only) */}
-      <div className="hidden print:grid grid-cols-2 gap-12 pt-12 pb-6 text-xs print-break-inside-avoid">
-        <div className="text-center space-y-1">
-          <div className="border-t border-slate-900 w-48 mx-auto pt-2 font-bold text-slate-900">
-            CONTADOR PÚBLICO COLEGIADO
-          </div>
-          <div className="text-[11px] text-slate-500">C.P.C. N° ___________</div>
-        </div>
-        <div className="text-center space-y-1">
-          <div className="border-t border-slate-900 w-48 mx-auto pt-2 font-bold text-slate-900">
-            REPRESENTANTE LEGAL
-          </div>
-          <div className="text-[11px] text-slate-500">{currentCompany.name}</div>
-        </div>
       </div>
 
+      {/* REPORTE OFICIAL PARA IMPRESIÓN: LIBRO DE VENTAS DE LA EMPRESA (SENIAT) */}
+      <div className="hidden print:block w-full">
+        <LibroVentasOficialPrint
+          company={currentCompany}
+          sales={filteredSales}
+          monthFilter={monthFilter}
+        />
+      </div>
+
+      {/* MODAL DE VISTA PREVIA DE IMPRESIÓN DEL LIBRO DE VENTAS */}
+      <LibroVentasPrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        company={currentCompany}
+        sales={filteredSales}
+        monthFilter={monthFilter}
+        onExportPdf={handleExportPdf}
+        isExportingPdf={isExportingPdf}
+      />
+
       <NewSaleModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-    </div>
+    </>
   );
 };
