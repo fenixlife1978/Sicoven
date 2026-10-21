@@ -23,6 +23,11 @@ function openDatabase() {
       details_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE TABLE IF NOT EXISTS demo_usage (
+      module_key TEXT PRIMARY KEY,
+      action_count INTEGER NOT NULL DEFAULT 0 CHECK (action_count >= 0),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 }
 function createWindow() {
@@ -62,6 +67,42 @@ app.whenReady().then(() => {
     });
     save();
     return { ok: true, savedAt: new Date().toISOString() };
+  });
+  ipcMain.on('sicoven:demo-get-usage', (event) => {
+    try {
+      const rows = db.prepare('SELECT module_key, action_count FROM demo_usage').all();
+      event.returnValue = Object.fromEntries(rows.map(row => [row.module_key, row.action_count]));
+    } catch {
+      event.returnValue = {};
+    }
+  });
+  ipcMain.on('sicoven:demo-consume-action', (event, moduleKey, limit) => {
+    try {
+      if (typeof moduleKey !== 'string' || !/^[a-z0-9_-]{1,64}$/.test(moduleKey) ||
+          !Number.isInteger(limit) || limit < 1 || limit > 1000) {
+        event.returnValue = { ok: false, error: 'Solicitud de demo inválida' };
+        return;
+      }
+      const consume = db.transaction(() => {
+        const row = db.prepare('SELECT action_count FROM demo_usage WHERE module_key = ?').get(moduleKey);
+        const used = row ? row.action_count : 0;
+        if (used >= limit) {
+          const rows = db.prepare('SELECT module_key, action_count FROM demo_usage').all();
+          return { ok: false, used, usage: Object.fromEntries(rows.map(item => [item.module_key, item.action_count])) };
+        }
+        const next = used + 1;
+        db.prepare(`INSERT INTO demo_usage(module_key, action_count, updated_at) VALUES(?,?,datetime('now'))
+          ON CONFLICT(module_key) DO UPDATE SET action_count=excluded.action_count, updated_at=excluded.updated_at`)
+          .run(moduleKey, next);
+        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+          .run('demo_action_consumed', JSON.stringify({ moduleKey, actionCount: next, limit }));
+        const rows = db.prepare('SELECT module_key, action_count FROM demo_usage').all();
+        return { ok: true, used: next, usage: Object.fromEntries(rows.map(item => [item.module_key, item.action_count])) };
+      });
+      event.returnValue = consume();
+    } catch {
+      event.returnValue = { ok: false, error: 'No se pudo registrar la acción demo en SQLite' };
+    }
   });
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
