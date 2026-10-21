@@ -244,7 +244,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!IS_DEMO) return;
     const label = DEMO_LABELS[moduleKey] || moduleKey;
     if (window.sicovenStore) {
-      const result = window.sicovenStore.consumeDemoAction(moduleKey, DEMO_LIMIT);
+      const result = window.sicovenStore.consumeDemoAction(moduleKey);
       if (result?.usage && typeof result.usage === 'object') {
         demoUsageRef.current = result.usage;
         setDemoUsage(result.usage);
