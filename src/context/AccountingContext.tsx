@@ -32,6 +32,8 @@ import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 interface AccountingContextType {
   companies: Company[];
   isStorageReady: boolean;
+  isDemoMode: boolean;
+  demoUsage: Record<string, number>;
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
   addCompany: (comp: Omit<Company, 'id'>) => Company;
@@ -103,6 +105,9 @@ interface AccountingContextType {
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
+const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
+const DEMO_LIMIT = 10;
+const DEMO_LABELS: Record<string, string> = { empresa: 'Empresas', diario: 'Libro Diario', compras: 'Compras', ventas: 'Ventas', inventario: 'Inventario', conciliacion: 'Conciliación Bancaria' };
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Cargar estado inicial desde localStorage o valores por defecto
@@ -215,6 +220,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   });
 
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
+  const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
+  const consumeDemoAction = (moduleKey: string) => {
+    if (!IS_DEMO) return;
+    const used = demoUsage[moduleKey] || 0;
+    if (used >= DEMO_LIMIT) {
+      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${DEMO_LABELS[moduleKey] || moduleKey}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
+      window.alert(message);
+      throw new Error(message);
+    }
+    setDemoUsage(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+  };
 
   const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
     id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
@@ -259,7 +275,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [storageReady, setStorageReady] = useState(false);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
   };
 
   useEffect(() => {
@@ -285,8 +301,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
             if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
             if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
+            if (saved.demoUsage && typeof saved.demoUsage === 'object') setDemoUsage(saved.demoUsage as Record<string, number>);
+          } else if (IS_DEMO) {
+            setCompanies(INITIAL_COMPANIES); setCurrentCompanyId(INITIAL_COMPANIES[0]?.id || '');
+            setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries(INITIAL_JOURNAL_ENTRIES);
+            setPurchases(INITIAL_PURCHASES); setSales(INITIAL_SALES); setProducts(INITIAL_INVENTORY_PRODUCTS);
+            setMovements(INITIAL_INVENTORY_MOVEMENTS); setVatVouchers(INITIAL_VAT_VOUCHERS);
+            setIslrVouchers(INITIAL_ISLR_VOUCHERS); setBankAccounts(INITIAL_BANK_ACCOUNTS);
+            setBankStatementMovements(INITIAL_STATEMENT_MOVEMENTS);
           } else {
-            // Migración de primera ejecución: conserva los datos existentes del navegador en SQLite.
             await window.sicovenStore.save(stateSnapshot);
           }
         }
@@ -382,6 +405,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, [companies.length, autoSyncBcv]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
+    consumeDemoAction('empresa');
     const newComp: Company = {
       ...comp,
       id: `comp-${Date.now()}`
@@ -411,6 +435,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
+    consumeDemoAction('diario');
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
@@ -450,6 +475,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    consumeDemoAction('compras');
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const nextOp = companyPurchases.length + 1;
     const purchaseId = `pur-${Date.now()}`;
@@ -639,6 +665,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    consumeDemoAction('ventas');
     const companySales = sales.filter(s => s.companyId === currentCompany.id);
     const nextOp = companySales.length + 1;
     const saleId = `sale-${Date.now()}`;
@@ -737,6 +764,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Inventario
   const addProduct = (prodData: Omit<InventoryProduct, 'id' | 'companyId'>): InventoryProduct => {
+    consumeDemoAction('inventario');
     const newProd: InventoryProduct = {
       ...prodData,
       id: `prod-${Date.now()}`,
@@ -751,6 +779,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
+    consumeDemoAction('inventario');
     const rate = currentCompany.bcvRate;
     const newMov: InventoryMovement = {
       ...movData,
@@ -830,6 +859,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Conciliación Bancaria
   const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId'>): BankAccount => {
+    consumeDemoAction('conciliacion');
     const newBank: BankAccount = {
       ...bankData,
       id: `bank-acc-${Date.now()}`,
@@ -840,6 +870,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    consumeDemoAction('conciliacion');
     const newMov: BankStatementMovement = {
       ...movData,
       id: `stmt-${Date.now()}`,
@@ -1073,6 +1104,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const resetToSampleData = () => {
+    if (!IS_DEMO) { setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]); setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]); setDemoUsage({}); return; }
+    setDemoUsage({});
     setCompanies(INITIAL_COMPANIES);
     setCurrentCompanyId(INITIAL_COMPANIES[0].id);
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
@@ -1153,6 +1186,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       value={{
         companies,
         isStorageReady: storageReady,
+        isDemoMode: IS_DEMO,
+        demoUsage,
         currentCompany,
         setCurrentCompanyId,
         addCompany,
