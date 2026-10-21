@@ -55,6 +55,19 @@ const AppContent: React.FC = () => {
     }
   };
 
+  if (!isStorageReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
+        <div role="status" aria-live="polite" className="max-w-md rounded-xl bg-white p-8 text-center shadow-lg">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-slate-200 border-t-emerald-600" />
+          <h1 className="text-lg font-bold text-slate-900">Iniciando SICOVEN</h1>
+          <p className="mt-2 text-sm text-slate-600">Verificando y cargando los datos locales antes de habilitar las operaciones contables.</p>
+          <p className="mt-3 text-xs text-slate-500">Si esta pantalla no desaparece, cierre el programa y compruebe los permisos de escritura de la carpeta de datos.</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
       {isDemoMode && (
