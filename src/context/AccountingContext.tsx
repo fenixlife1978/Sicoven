@@ -1181,6 +1181,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const resetToSampleData = () => {
     if (!IS_DEMO) { setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]); setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]); setDemoUsage({}); return; }
+    // Restaurar la muestra también es una acción y nunca reinicia los contadores.
+    consumeDemoAction('configuracion');
     setCompanies(INITIAL_COMPANIES);
     setCurrentCompanyId(INITIAL_COMPANIES[0].id);
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
@@ -1215,6 +1217,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const importBackupJson = (jsonData: string): boolean => {
+    if (IS_DEMO) {
+      window.alert('La importación de respaldos está deshabilitada en SICOVEN DEMO. Adquiera la versión completa para importar sus propios datos.');
+      return false;
+    }
     try {
       const data = JSON.parse(jsonData);
       const requiredCollections = [
