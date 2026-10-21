@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Company,
   Account,
@@ -221,15 +221,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
+  const demoUsageRef = useRef<Record<string, number>>({});
   const consumeDemoAction = (moduleKey: string) => {
     if (!IS_DEMO) return;
-    const used = demoUsage[moduleKey] || 0;
+    const used = demoUsageRef.current[moduleKey] || 0;
     if (used >= DEMO_LIMIT) {
       const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${DEMO_LABELS[moduleKey] || moduleKey}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
       window.alert(message);
       throw new Error(message);
     }
-    setDemoUsage(prev => ({ ...prev, [moduleKey]: (prev[moduleKey] || 0) + 1 }));
+    const nextUsage = { ...demoUsageRef.current, [moduleKey]: used + 1 };
+    demoUsageRef.current = nextUsage;
+    setDemoUsage(nextUsage);
   };
 
   const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
@@ -302,7 +305,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
             if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
             if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
-            if (saved.demoUsage && typeof saved.demoUsage === 'object') setDemoUsage(saved.demoUsage as Record<string, number>);
+            if (saved.demoUsage && typeof saved.demoUsage === 'object') { const usage = saved.demoUsage as Record<string, number>; demoUsageRef.current = usage; setDemoUsage(usage); }
           } else if (IS_DEMO) {
             setCompanies(INITIAL_COMPANIES); setCurrentCompanyId(INITIAL_COMPANIES[0]?.id || '');
             setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries(INITIAL_JOURNAL_ENTRIES);
