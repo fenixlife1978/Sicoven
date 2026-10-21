@@ -426,6 +426,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addAccount = (account: Account) => {
+    consumeDemoAction('catalogo');
     setAccounts(prev => {
       if (prev.some(a => a.code === account.code)) {
         return prev.map(a => (a.code === account.code ? account : a));
@@ -885,6 +886,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
@@ -917,6 +919,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const unreconcileAll = (bankAccountId: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.companyId === currentCompany.id && m.bankAccountId === bankAccountId
@@ -933,6 +936,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
+    consumeDemoAction('conciliacion');
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
