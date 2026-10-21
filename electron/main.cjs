@@ -11,7 +11,7 @@ function openDatabase() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
-  db.exec(\`
+  db.exec(`
     CREATE TABLE IF NOT EXISTS app_state (
       state_key TEXT PRIMARY KEY,
       state_json TEXT NOT NULL,
@@ -23,7 +23,7 @@ function openDatabase() {
       details_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
-  \`);
+  `);
 }
 function createWindow() {
   const win = new BrowserWindow({
@@ -54,8 +54,8 @@ app.whenReady().then(() => {
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
     const save = db.transaction(() => {
-      db.prepare(\`INSERT INTO app_state(state_key,state_json,updated_at) VALUES(?,?,datetime('now'))
-        ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at\`)
+      db.prepare(`INSERT INTO app_state(state_key,state_json,updated_at) VALUES(?,?,datetime('now'))
+        ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at`)
         .run('accounting', json);
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
         .run('state_saved', JSON.stringify({ bytes: Buffer.byteLength(json) }));
