@@ -50,9 +50,26 @@ function createWindow() {
       contextIsolation: true, nodeIntegration: false, sandbox: false
     }
   });
+  const logLoadFailure = (kind, details) => {
+    try {
+      const logPath = path.join(app.getPath('userData'), 'sicoven-startup.log');
+      fs.appendFileSync(logPath, `[${new Date().toISOString()}] ${kind}: ${String(details)}\\n`, 'utf8');
+    } catch {}
+    if (!win.isVisible()) win.show();
+  };
   win.once('ready-to-show', () => win.show());
-  if (app.isPackaged) win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'));
-  else win.loadURL('http://localhost:3000');
+  win.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    if (isMainFrame) logLoadFailure('did-fail-load', `${errorCode} ${errorDescription} URL=${validatedURL}`);
+  });
+  win.webContents.on('render-process-gone', (_event, details) => logLoadFailure('render-process-gone', JSON.stringify(details)));
+  win.webContents.on('console-message', (_event, details) => {
+    if (details.level >= 2) logLoadFailure('renderer-console', `line=${details.lineNumber} ${details.message}`);
+  });
+  win.webContents.on('unresponsive', () => logLoadFailure('unresponsive', 'Renderer did not respond'));
+  const loadPromise = app.isPackaged
+    ? win.loadFile(path.join(__dirname, '..', 'dist', 'index.html'))
+    : win.loadURL('http://localhost:3000');
+  loadPromise.catch(error => logLoadFailure('load-promise-rejected', error && error.stack || error));
   win.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith('https://')) shell.openExternal(url);
     return { action: 'deny' };
