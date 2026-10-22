@@ -32,6 +32,9 @@
     "createDesktopShortcut": true,
     "createStartMenuShortcut": true,
     "shortcutName": "SICOVEN DEMO",
-    "deleteAppDataOnUninstall": false
+    "deleteAppDataOnUninstall": false,
+    "installerIcon": "build/sicoven.ico",
+    "uninstallerIcon": "build/sicoven.ico",
+    "installerHeaderIcon": "build/sicoven.ico"
   }
 }
