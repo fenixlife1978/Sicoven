@@ -67,7 +67,8 @@
           ]
         }
       ],
-      "artifactName": "SICOVEN-Setup-${version}-${arch}.${ext}"
+      "artifactName": "SICOVEN-Setup-${version}-${arch}.${ext}",
+      "icon": "build/sicoven.ico"
     },
     "nsis": {
       "oneClick": false,
