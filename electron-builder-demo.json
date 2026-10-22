@@ -17,10 +17,13 @@
     "target": [
       {
         "target": "nsis",
-        "arch": ["x64"]
+        "arch": [
+          "x64"
+        ]
       }
     ],
-    "artifactName": "SICOVEN-DEMO-Setup-${version}-${arch}.${ext}"
+    "artifactName": "SICOVEN-DEMO-Setup-${version}-${arch}.${ext}",
+    "icon": "build/sicoven.ico"
   },
   "nsis": {
     "oneClick": false,
