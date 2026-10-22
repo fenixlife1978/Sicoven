@@ -91,9 +91,18 @@ jobs:
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File).FullName)
           if ($env:REF_NAME -eq 'sqlite-desktop-release') {
             $tag = 'v1.0.0-sqlite-desktop'
-            gh release create $tag $files --target $env:GITHUB_SHA --title 'SICOVEN 1.0.0 — instaladores de escritorio' --notes 'Pre-release de la rama sqlite-desktop-release. Incluye instalador completo sin datos ficticios e instalador DEMO con datos de ejemplo.'
+            $title = 'SICOVEN 1.0.0 — instaladores de escritorio'
+            $notes = 'Pre-release de la rama sqlite-desktop-release. Incluye instalador completo sin datos ficticios e instalador DEMO con datos de ejemplo.'
           } else {
-            gh release create $env:REF_NAME $files --target $env:GITHUB_SHA --title "SICOVEN $env:REF_NAME" --generate-notes
+            $tag = $env:REF_NAME
+            $title = "SICOVEN $tag"
+            $notes = 'Instaladores de SICOVEN completo y DEMO, compilados por GitHub Actions.'
+          }
+          gh release view $tag *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release upload $tag $files --clobber
+          } else {
+            gh release create $tag $files --target $env:GITHUB_SHA --title $title --notes $notes
           }
       - name: Upload complete edition installer
         uses: actions/upload-artifact@v4
