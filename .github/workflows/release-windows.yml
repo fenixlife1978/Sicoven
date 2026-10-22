@@ -21,6 +21,13 @@ jobs:
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
+      - name: Restore Windows application icon
+        shell: pwsh
+        run: |
+          $iconPath = Join-Path $env:GITHUB_WORKSPACE 'build/sicoven.ico'
+          $iconBase64 = Get-Content -Raw 'build/sicoven.ico.base64'
+          [IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64.Trim()))
+          if ((Get-Item $iconPath).Length -lt 100) { throw 'El icono de SICOVEN no se generó correctamente.' }
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
