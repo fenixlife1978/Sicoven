@@ -81,12 +81,34 @@ jobs:
         run: |
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File).FullName)
           gh release create '${{ github.ref_name }}' $files --title 'SICOVEN ${{ github.ref_name }}' --generate-notes
-      - name: Upload full and demo installers
+      - name: Upload complete edition installer
         uses: actions/upload-artifact@v4
         with:
-          name: SICOVEN-Windows-Installers
-          path: |
-            release/*.exe
-            release-demo/*.exe
+          name: SICOVEN-COMPLETO-Windows-x64
+          path: release/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload demo edition installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-DEMO-Windows-x64
+          path: release-demo/*.exe
+          if-no-files-found: error
+          retention-days: 30
+      - name: Publish artifact checksums
+        shell: pwsh
+        run: |
+          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File)) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File))
+          if (-not $files) { throw 'No hay instaladores para publicar.' }
+          'SHA256  Archivo' | Out-File -FilePath checksums-sha256.txt -Encoding utf8
+          foreach ($file in $files) {
+            $hash = (Get-FileHash $file.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($file.Name)" | Out-File -FilePath checksums-sha256.txt -Append -Encoding utf8
+          }
+      - name: Upload installer checksums
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-SHA256-checksums
+          path: checksums-sha256.txt
           if-no-files-found: error
           retention-days: 30
