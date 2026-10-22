@@ -15,8 +15,13 @@ import { CatalogoView } from './components/Catalogo/CatalogoView';
 import { ConfiguracionView } from './components/Configuracion/ConfiguracionView';
 import { ConciliacionBancariaView } from './components/Conciliacion/ConciliacionBancariaView';
 import { Scale, ShieldCheck, Building2 } from 'lucide-react';
+import { LoginScreen, AuthUser } from './components/LoginScreen';
+import { AdminUsers } from './components/AdminUsers';
 
 const AppContent: React.FC = () => {
+  const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
+  const [showAdmins, setShowAdmins] = useState(false);
+  const logout = async () => { if(auth&&window.sicovenStore) await window.sicovenStore.logout(auth.token); setAuth(null); setShowAdmins(false); };
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
@@ -55,6 +60,8 @@ const AppContent: React.FC = () => {
     }
   };
 
+  if (window.sicovenStore && !auth) return <LoginScreen onLogin={(token,user)=>setAuth({token,user})} />;
+  if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} />;
   if (!isStorageReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
@@ -85,6 +92,7 @@ const AppContent: React.FC = () => {
         </div>
       )}
 
+      {auth && <div className="flex items-center justify-end gap-3 bg-slate-800 px-4 py-2 text-xs text-white no-print"><span>Sesión: <strong>{auth.user.username}</strong></span><button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Administradores</button><button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button></div>}
       {/* Navigation Header */}
       <Navbar
         activeTab={activeTab}
