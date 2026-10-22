@@ -57,7 +57,7 @@ try {
     'accounting',
     JSON.stringify({ demoUsage: { ventas: 6, compras: 4, diario: 2 } })
   );
-  db.prepare('UPDATE demo_usage SET action_count = 8 WHERE module_key = ?').run('ventas');
+  // Keep the persisted count at 10: migration must never lower a consumed counter.
   migrateLegacyDemoUsage(db);
   assert.equal(getDemoUsage(db).ventas, 10);
   assert.equal(getDemoUsage(db).compras, 4);
