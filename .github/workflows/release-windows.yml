@@ -63,7 +63,7 @@ jobs:
             throw 'No se encontró el cintillo de límites comerciales en la edición DEMO.'
           }
       - name: Package separate demo installer
-        run: npx electron-builder --win nsis --config electron-builder-demo.json
+        run: npx electron-builder --win nsis --config electron-builder-demo.json --publish never
       - name: Verify both installers
         shell: pwsh
         run: |
