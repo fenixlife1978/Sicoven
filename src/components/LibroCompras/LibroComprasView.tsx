@@ -212,7 +212,7 @@ export const LibroComprasView: React.FC = () => {
                       {formatDate(p.invoiceDate)}
                     </td>
                     <td className="py-2 px-3 text-xs whitespace-nowrap">
-                      <span className={`inline-flex rounded px-1.5 py-0.5 font-semibold ${p.paymentTerm === 'CREDITO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{p.paymentTerm === 'CREDITO' ? 'CRÉDITO' : 'CONTADO'}</span>
+                      <span className={`inline-flex rounded px-1.5 py-0.5 font-semibold ${p.paymentTerm === 'CREDITO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{p.paymentTerm === 'CREDITO' ? 'CRÉDITO' : p.paymentTerm === 'CONTADO' ? 'CONTADO' : 'SIN DEFINIR'}</span>
                       {p.paymentTerm === 'CREDITO' && <div className="text-slate-500 mt-1">Vence: {p.dueDate ? formatDate(p.dueDate) : 'Sin fecha'}</div>}
                       {p.paymentTerm === 'CREDITO' && <div className="text-slate-400">{p.currencyPricingMode === 'USD_FIJO' ? 'USD fijo' : p.currencyPricingMode === 'BS_AJUSTABLE' ? 'Bs. ajustable' : 'Revisión manual'}</div>}
                     </td>
