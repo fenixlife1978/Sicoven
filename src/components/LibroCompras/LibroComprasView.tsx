@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewPurchaseModal } from './NewPurchaseModal';
+import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
@@ -28,6 +29,7 @@ export const LibroComprasView: React.FC = () => {
   } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
   const [isExportingPdf, setIsExportingPdf] = useState(false);
@@ -278,6 +280,7 @@ export const LibroComprasView: React.FC = () => {
                       ) : '-'}
                     </td>
                     <td className="py-2 px-2 text-center no-print">
+                      {p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
                       <button
                         onClick={() => {
                           if (confirm(`¿Eliminar factura de compra N° ${p.invoiceNumber}?`)) {
@@ -383,6 +386,7 @@ export const LibroComprasView: React.FC = () => {
       </div>
 
       <NewPurchaseModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="PURCHASE_PAYMENT" onClose={() => setSettlementTarget(null)} />}
     </div>
   );
 };
