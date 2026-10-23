@@ -178,6 +178,7 @@ export const LibroComprasView: React.FC = () => {
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold whitespace-nowrap">
                 <th className="py-2.5 px-3 text-center w-12">Op. N°</th>
                 <th className="py-2.5 px-3 w-24">Fecha</th>
+                <th className="py-2.5 px-3 min-w-[150px]">Condición / Vencimiento</th>
                 <th className="py-2.5 px-3 w-28">RIF Proveedor</th>
                 <th className="py-2.5 px-3 min-w-[200px]">Nombre o Razón Social</th>
                 <th className="py-2.5 px-3 w-28">N° Factura</th>
@@ -196,7 +197,7 @@ export const LibroComprasView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-400">
+                  <td colSpan={16} className="py-12 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de compras registradas en este período.
                   </td>
@@ -209,6 +210,11 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(p.invoiceDate)}
+                    </td>
+                    <td className="py-2 px-3 text-xs whitespace-nowrap">
+                      <span className={`inline-flex rounded px-1.5 py-0.5 font-semibold ${p.paymentTerm === 'CREDITO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{p.paymentTerm === 'CREDITO' ? 'CRÉDITO' : 'CONTADO'}</span>
+                      {p.paymentTerm === 'CREDITO' && <div className="text-slate-500 mt-1">Vence: {p.dueDate ? formatDate(p.dueDate) : 'Sin fecha'}</div>}
+                      {p.paymentTerm === 'CREDITO' && <div className="text-slate-400">{p.currencyPricingMode === 'USD_FIJO' ? 'USD fijo' : p.currencyPricingMode === 'BS_AJUSTABLE' ? 'Bs. ajustable' : 'Revisión manual'}</div>}
                     </td>
                     <td className="py-2 px-3 font-mono font-medium text-slate-800 whitespace-nowrap">
                       {p.supplierRif}
