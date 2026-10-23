@@ -254,6 +254,10 @@ export const BalancesView: React.FC = () => {
 
   const ecuacionCuadrada = Math.abs(totalActivoBs - totalPasivoPatrimonioBs) < 0.05;
 
+  if (activeReport === "HISTORICO") {
+    return <HistoricalBalancesView onBack={() => setActiveReport("GENERAL")} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Official Header with Selected Company Logo */}
@@ -746,9 +750,7 @@ export const BalancesView: React.FC = () => {
                   {patrimonioAccounts.map(acc => {
                     const balanceBs = acc.adjustedCreditBs - acc.adjustedDebitBs;
                     const balanceUsd = acc.adjustedCreditUsd - acc.adjustedDebitUsd;
-                    if (activeReport === "HISTORICO") return <HistoricalBalancesView onBack={() => setActiveReport("COMPROBACION")} />;
-
-  return (
+                    return (
                       <div key={acc.code} className="py-2.5 flex items-center justify-between hover:bg-slate-50 px-2 rounded">
                         <div>
                           <span className="font-mono text-slate-500 mr-2">{acc.code}</span>
