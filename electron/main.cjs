@@ -170,7 +170,7 @@ function createWindow() {
     return { action: 'deny' };
   });
 }
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   openDatabase();
   ipcMain.handle('sicoven:license-status', () => licenseView());
   ipcMain.handle('sicoven:license-activate', async (_event, key) => activateLicense(key));
