@@ -34,6 +34,7 @@ jobs:
           }
           if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 100) {
             # Fallback de CI: generar un icono SICOVEN de 256x256 si falta el recurso original.
+            New-Item -ItemType Directory -Force -Path (Split-Path $iconPath) | Out-Null
             Add-Type -AssemblyName System.Drawing
             $bitmap = [System.Drawing.Bitmap]::new(256,256)
             $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
