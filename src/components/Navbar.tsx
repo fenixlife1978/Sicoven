@@ -71,24 +71,16 @@ export const Navbar: React.FC<NavbarProps> = ({
       {/* Top Header Bar */}
       <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
-          {/* Logo & Brand */}
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0 min-w-0">
-            <div className="bg-gradient-to-tr from-emerald-600 to-teal-400 p-2 sm:p-2.5 rounded-lg sm:rounded-xl shadow-lg shadow-emerald-900/30 flex items-center justify-center flex-shrink-0">
-              <Scale className="w-4 h-4 sm:w-5 sm:h-5 text-white" />
-            </div>
-            <div className="min-w-0">
-              <div className="flex items-center gap-1.5 sm:gap-2">
-                <span className="font-bold text-base sm:text-lg tracking-tight bg-gradient-to-r from-white via-slate-100 to-slate-300 bg-clip-text text-transparent">
-                  SICOVEN
-                </span>
-                <span className="hidden sm:inline-block text-[9px] sm:text-[10px] font-semibold tracking-wider uppercase px-1.5 sm:px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-                  VEN-NIF
-                </span>
-              </div>
-              <p className="hidden md:block text-[11px] text-slate-400 font-normal truncate">
-                Sistema Contable Integral Multi-Empresa
-              </p>
-            </div>
+          {/* Logo & Brand (New Official Identity) */}
+          <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
+            <img
+              src="/assets/aistudio/sicoven-logo-horizontal-nav.svg"
+              alt="SICOVEN · Sistema Contable Integral Multiempresas"
+              className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
+            />
+            <span className="hidden lg:inline-block text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+              VEN-NIF
+            </span>
           </div>
 
           {/* Company Switcher, Currency View & Mobile Menu Button */}
