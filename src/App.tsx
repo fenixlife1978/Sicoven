@@ -14,7 +14,7 @@ import { RetencionesIslrView } from './components/Retenciones/RetencionesIslrVie
 import { CatalogoView } from './components/Catalogo/CatalogoView';
 import { ConfiguracionView } from './components/Configuracion/ConfiguracionView';
 import { ConciliacionBancariaView } from './components/Conciliacion/ConciliacionBancariaView';
-import { Scale, ShieldCheck, Building2 } from 'lucide-react';
+import { ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
 
@@ -61,7 +61,7 @@ const AppContent: React.FC = () => {
   };
 
   if (!auth) return <LoginScreen onLogin={(token, user) => setAuth({ token, user })} isDemoMode={isDemoMode} />;
-  if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} />;
+  if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} onBack={() => setShowAdmins(false)} />;
   if (!isStorageReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
@@ -108,9 +108,8 @@ const AppContent: React.FC = () => {
       {/* Footer (hidden on print) */}
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 text-xs no-print mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Scale className="w-4 h-4 text-emerald-400" />
-            <span className="font-bold text-slate-200">SICOVEN</span>
+          <div className="flex items-center gap-2.5">
+            <img src="/sicoven-logo-horizontal-nav.svg" alt="SICOVEN" className="h-6 w-auto object-contain" />
             <span className="text-slate-600">•</span>
             <span>Sistema Contable Multi-Empresa VEN-NIF & SENIAT</span>
           </div>

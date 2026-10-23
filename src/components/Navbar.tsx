@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { useAccounting } from '../context/AccountingContext';
 import {
   Building2,
@@ -14,6 +14,8 @@ import {
   ListTree,
   Settings,
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   CheckCircle2,
   ShieldCheck,
   Scale,
@@ -61,6 +63,31 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'config', label: 'Configuración', icon: Settings },
   ];
 
+  const navContainerRef = useRef<HTMLDivElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(true);
+
+  const checkScroll = () => {
+    const el = navContainerRef.current;
+    if (!el) return;
+    setCanScrollLeft(el.scrollLeft > 6);
+    setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 6);
+  };
+
+  useEffect(() => {
+    checkScroll();
+    window.addEventListener('resize', checkScroll);
+    return () => window.removeEventListener('resize', checkScroll);
+  }, []);
+
+  const scrollNav = (direction: 'left' | 'right') => {
+    if (navContainerRef.current) {
+      const offset = direction === 'left' ? -220 : 220;
+      navContainerRef.current.scrollBy({ left: offset, behavior: 'smooth' });
+      setTimeout(checkScroll, 200);
+    }
+  };
+
   const handleSelectTab = (tabId: string) => {
     setActiveTab(tabId);
     setMobileMenuOpen(false);
@@ -74,7 +101,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand (New Official Identity) */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
             <img
-              src="/assets/aistudio/sicoven-logo-horizontal-nav.svg"
+              src="/sicoven-logo-horizontal-nav.svg"
               alt="SICOVEN · Sistema Contable Integral Multiempresas"
               className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
             />
@@ -250,29 +277,62 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
       )}
 
-      {/* Navigation Tabs Bar (Horizontal swipeable for all screens) */}
-      <nav className="bg-slate-950/80 border-t border-slate-800/80 overflow-x-auto no-scrollbar scroll-smooth">
-        <div className="max-w-7xl mx-auto px-2 sm:px-4 flex space-x-1 py-1 min-w-max">
-          {tabs.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex items-center gap-1.5 sm:gap-2 px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-lg text-xs font-medium transition cursor-pointer whitespace-nowrap ${
-                  isActive
-                    ? 'bg-emerald-600/20 text-emerald-300 border border-emerald-500/30'
-                    : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900'
-                }`}
-              >
-                <Icon className={`w-3.5 h-3.5 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
-                <span>{tab.label}</span>
-              </button>
-            );
-          })}
-        </div>
-      </nav>
+      {/* Navigation Tabs Bar with explicit Horizontal Scroll and Desktop Scroll Arrows */}
+      <div className="relative bg-slate-950 border-t border-slate-800 flex items-center">
+        {/* Left Scroll Button */}
+        {canScrollLeft && (
+          <button
+            type="button"
+            onClick={() => scrollNav('left')}
+            className="absolute left-0 z-20 h-full px-1.5 sm:px-2 bg-gradient-to-r from-slate-950 via-slate-950/95 to-transparent text-slate-300 hover:text-white flex items-center transition cursor-pointer"
+            aria-label="Desplazar módulos hacia la izquierda"
+            title="Desplazar módulos a la izquierda"
+          >
+            <ChevronLeft className="w-5 h-5 bg-slate-800 hover:bg-slate-700 rounded-full p-0.5 border border-slate-700 shadow-md text-emerald-400" />
+          </button>
+        )}
+
+        {/* Horizontal Scrollable Tabs */}
+        <nav
+          ref={navContainerRef}
+          onScroll={checkScroll}
+          className="w-full overflow-x-auto scroll-smooth px-3 sm:px-6 py-2 flex items-center gap-1.5 [scrollbar-width:thin] [scrollbar-color:#334155_transparent] touch-pan-x"
+        >
+          <div className="flex items-center space-x-1.5 min-w-max mx-auto">
+            {tabs.map(tab => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-1.5 sm:gap-2 px-3 py-1.5 sm:py-2 rounded-lg text-xs font-semibold transition cursor-pointer whitespace-nowrap flex-shrink-0 ${
+                    isActive
+                      ? 'bg-emerald-600/25 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                      : 'text-slate-400 hover:text-slate-100 hover:bg-slate-900 border border-transparent'
+                  }`}
+                >
+                  <Icon className={`w-3.5 h-3.5 flex-shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-400'}`} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* Right Scroll Button */}
+        {canScrollRight && (
+          <button
+            type="button"
+            onClick={() => scrollNav('right')}
+            className="absolute right-0 z-20 h-full px-1.5 sm:px-2 bg-gradient-to-l from-slate-950 via-slate-950/95 to-transparent text-slate-300 hover:text-white flex items-center transition cursor-pointer"
+            aria-label="Desplazar módulos hacia la derecha"
+            title="Desplazar módulos a la derecha"
+          >
+            <ChevronRight className="w-5 h-5 bg-slate-800 hover:bg-slate-700 rounded-full p-0.5 border border-slate-700 shadow-md text-emerald-400" />
+          </button>
+        )}
+      </div>
     </header>
   );
 };
