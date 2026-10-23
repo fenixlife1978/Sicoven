@@ -52,7 +52,7 @@ function readLicenseRow() {
 function licenseView(row = readLicenseRow()) {
   if (!row) return { authorized: false, needsActivation: true, status: 'unlicensed', message: 'Active SICOVEN con una clave de licencia.' };
   const validOffline = Boolean(row.offline_until && Date.parse(row.offline_until) > Date.now());
-  const authorized = ['active','offline'].includes(String(row.status)) && (row.status === 'active' || validOffline);
+  const authorized = ['active','offline'].includes(String(row.status)) && validOffline;
   return {
     authorized,
     needsActivation: !row.encrypted_key,
@@ -61,7 +61,7 @@ function licenseView(row = readLicenseRow()) {
     product: row.product || '',
     offlineUntil: row.offline_until || null,
     lastCheckedAt: row.last_checked_at || null,
-    message: authorized ? (row.status === 'offline' ? 'Sin conexión. Se mantiene la autorización offline hasta su vencimiento.' : 'Licencia validada.') : (row.message || (row.status === 'expired' ? 'La autorización offline venció. Conéctese a internet para revalidar.' : 'Active SICOVEN con una clave de licencia.'))
+    message: authorized ? (row.status === 'offline' ? 'Sin conexión. Se mantiene la autorización offline hasta su vencimiento.' : 'Licencia validada.') : (row.message || (['active','offline','expired'].includes(String(row.status)) ? 'La autorización offline venció. Conéctese a internet para revalidar.' : 'Active SICOVEN con una clave de licencia.'))
   };
 }
 function decryptLicenseKey(row) {
