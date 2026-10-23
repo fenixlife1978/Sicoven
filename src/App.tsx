@@ -35,13 +35,20 @@ const AppContent: React.FC = () => {
 
   useEffect(() => {
     if (!window.sicovenStore) return;
-    return window.sicovenStore.onLicenseStatusChanged((status) => {
+    const enforceStatus = (status: { authorized: boolean }) => {
       if (!status.authorized) {
         setAuth(null);
         setShowAdmins(false);
         setLicenseAllowed(false);
       }
-    });
+    };
+    const unsubscribe = window.sicovenStore.onLicenseStatusChanged(enforceStatus);
+    const onReconnect = () => { void window.sicovenStore?.revalidateLicense().then(enforceStatus); };
+    window.addEventListener('online', onReconnect);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', onReconnect);
+    };
   }, []);
 
   const renderActiveTab = () => {
