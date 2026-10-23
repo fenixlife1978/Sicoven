@@ -61,7 +61,11 @@ export function calculateCreditBalance(
     settledAmountUsd: money(settledAmountUsd),
     settledAmountBs: money(settledAmountBs),
     outstandingUsd: money(Math.max(0, originalAmountUsd - settledAmountUsd)),
-    outstandingBsAtInvoiceRate: money(Math.max(0, originalAmountBs - settledAmountBs)),
+    // Remaining principal is valued at the original invoice's implied rate, not
+    // by subtracting nominal Bs paid at a potentially different settlement rate.
+    outstandingBsAtInvoiceRate: money(originalAmountUsd > 0
+      ? Math.max(0, originalAmountUsd - settledAmountUsd) * (originalAmountBs / originalAmountUsd)
+      : Math.max(0, originalAmountBs - settledAmountBs)),
     settlementCount: relevant.length
   };
 }
