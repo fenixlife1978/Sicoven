@@ -34,16 +34,16 @@ jobs:
           }
           if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 100) {
             # Fallback de CI: ICO 1x1 válido para compilar aunque falte el recurso visual.
-  New-Item -ItemType Directory -Force -Path (Split-Path $iconPath) | Out-Null
-  [byte[]]$fallbackIcon = @(
-    0,0,1,0,1,0, 1,1,0,0,0,1,0,32,48,0,0,0,22,0,0,0,
-    40,0,0,0,1,0,0,0,2,0,0,0,1,0,32,0,0,0,0,0,4,0,0,0,
-    0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 32,128,80,255, 0,0,0,0
-  )
-  [IO.File]::WriteAllBytes($iconPath, $fallbackIcon)
-  if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 60) {
-    throw 'No se pudo generar el icono de respaldo para CI.'
-  }
+            New-Item -ItemType Directory -Force -Path (Split-Path $iconPath) | Out-Null
+            [byte[]]$fallbackIcon = @(
+            0,0,1,0,1,0, 1,1,0,0,0,1,0,32,48,0,0,0,22,0,0,0,
+            40,0,0,0,1,0,0,0,2,0,0,0,1,0,32,0,0,0,0,0,4,0,0,0,
+            0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 32,128,80,255, 0,0,0,0
+            )
+            [IO.File]::WriteAllBytes($iconPath, $fallbackIcon)
+            if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 60) {
+            throw 'No se pudo generar el icono de respaldo para CI.'
+            }
           }
           Copy-Item $iconPath (Join-Path $env:GITHUB_WORKSPACE 'build/icon.ico') -Force
       - name: Setup Node.js
