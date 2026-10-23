@@ -421,7 +421,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     } catch (error) {
       console.error('Error guardando datos locales de desarrollo:', error);
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage]);
 
   const syncBcvRate = async (): Promise<BcvSyncResult> => {
     setIsSyncingBcv(true);
@@ -1299,7 +1299,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       vatVouchers,
       islrVouchers,
       bankAccounts,
-      bankStatementMovements
+      bankStatementMovements,
+      creditSettlements
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -1342,6 +1343,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIslrVouchers(data.islrVouchers);
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
+      const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
+      if (settlements.some((s: any) => !s || typeof s.id !== 'string' || !companyIds.has(s.companyId) || !data.journalEntries.some((j: any) => j.id === s.journalEntryId && j.companyId === s.companyId))) throw new Error('El respaldo contiene liquidaciones sin empresa o asiento contable válido.');
+      setCreditSettlements(settlements);
       setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
