@@ -1,5 +1,3 @@
-import type { JournalEntry } from './accounting';
-
 export type CreditSettlementKind = 'SALE_COLLECTION' | 'PURCHASE_PAYMENT';
 export type SettlementMethod = 'CASH_BS' | 'CASH_USD' | 'BANK_TRANSFER_BS' | 'BANK_TRANSFER_USD' | 'OTHER';
 
