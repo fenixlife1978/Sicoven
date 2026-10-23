@@ -28,6 +28,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
+import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 
 interface AccountingContextType {
   companies: Company[];
@@ -237,6 +238,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     }
   });
 
+  const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
+  const settlementInFlightRef = useRef<Set<string>>(new Set());
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
   const demoUsageRef = useRef<Record<string, number>>({});
@@ -330,7 +333,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [storageError, setStorageError] = useState<string | null>(null);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
   };
 
   useEffect(() => {
@@ -354,6 +357,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
             if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
+            if (Array.isArray(saved.creditSettlements)) setCreditSettlements(saved.creditSettlements as CreditSettlement[]);
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
             if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
             if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
