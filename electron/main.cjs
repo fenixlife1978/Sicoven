@@ -176,7 +176,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:license-activate', async (_event, key) => activateLicense(key));
   ipcMain.handle('sicoven:license-revalidate', async () => {
     const status = await revalidateLicense();
-    if (!status.authorized) BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
+    if (!status.authorized) { sessions.clear(); BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status)); }
     return status;
   });
   ipcMain.handle('sicoven:auth-login', (_event, credentials) => {
@@ -239,7 +239,7 @@ app.whenReady().then(async () => {
   createWindow();
   licenseRecheckTimer = setInterval(async () => {
     const status = await revalidateLicense();
-    if (!status.authorized) BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
+    if (!status.authorized) { sessions.clear(); BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status)); }
   }, 60 * 60 * 1000);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
