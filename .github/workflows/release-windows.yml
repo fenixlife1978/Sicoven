@@ -33,16 +33,32 @@ jobs:
             }
           }
           if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 100) {
-            # Fallback de CI: ICO 1x1 válido para compilar aunque falte el recurso visual.
-            New-Item -ItemType Directory -Force -Path (Split-Path $iconPath) | Out-Null
-            [byte[]]$fallbackIcon = @(
-            0,0,1,0,1,0, 1,1,0,0,0,1,0,32,48,0,0,0,22,0,0,0,
-            40,0,0,0,1,0,0,0,2,0,0,0,1,0,32,0,0,0,0,0,4,0,0,0,
-            0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0, 32,128,80,255, 0,0,0,0
-            )
-            [IO.File]::WriteAllBytes($iconPath, $fallbackIcon)
-            if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 60) {
-            throw 'No se pudo generar el icono de respaldo para CI.'
+            # Fallback de CI: generar un icono SICOVEN de 256x256 si falta el recurso original.
+            Add-Type -AssemblyName System.Drawing
+            $bitmap = [System.Drawing.Bitmap]::new(256,256)
+            $graphics = [System.Drawing.Graphics]::FromImage($bitmap)
+            $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
+            $graphics.Clear([System.Drawing.Color]::FromArgb(11,20,40))
+            $accent = [System.Drawing.SolidBrush]::new([System.Drawing.Color]::FromArgb(16,185,129))
+            $font = [System.Drawing.Font]::new('Arial',178,[System.Drawing.FontStyle]::Bold,[System.Drawing.GraphicsUnit]::Pixel)
+            $graphics.DrawString('S',$font,$accent,42,15)
+            $graphics.Dispose()
+            $font.Dispose()
+            $accent.Dispose()
+            $pngStream = [System.IO.MemoryStream]::new()
+            $bitmap.Save($pngStream,[System.Drawing.Imaging.ImageFormat]::Png)
+            $bitmap.Dispose()
+            $png = $pngStream.ToArray()
+            $pngStream.Dispose()
+            $icon = [byte[]]::new(22 + $png.Length)
+            $icon[0]=0; $icon[1]=0; $icon[2]=1; $icon[3]=0; $icon[4]=1; $icon[5]=0
+            $icon[6]=0; $icon[7]=0; $icon[8]=0; $icon[9]=0; $icon[10]=1; $icon[11]=0; $icon[12]=32; $icon[13]=0
+            [BitConverter]::GetBytes([int]$png.Length).CopyTo($icon,14)
+            [BitConverter]::GetBytes([int]22).CopyTo($icon,18)
+            [Array]::Copy($png,0,$icon,22,$png.Length)
+            [IO.File]::WriteAllBytes($iconPath,$icon)
+            if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 100) {
+              throw 'No se pudo generar el icono de respaldo para CI.'
             }
           }
           Copy-Item $iconPath (Join-Path $env:GITHUB_WORKSPACE 'build/icon.ico') -Force
