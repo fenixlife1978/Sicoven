@@ -3,7 +3,7 @@ const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
-const LICENSE_API = 'https://crm-sicoven-generaextra-2726s-projects.vercel.app/api/activations';
+const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
 let licenseRecheckTimer = null;
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({ salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') });
 const verifyPassword = (password, salt, expected) => { try { const actual = crypto.scryptSync(password, salt, 64); const target = Buffer.from(expected, 'hex'); return actual.length === target.length && crypto.timingSafeEqual(actual, target); } catch { return false; } };
