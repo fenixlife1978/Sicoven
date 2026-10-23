@@ -17,9 +17,11 @@ import { ConciliacionBancariaView } from './components/Conciliacion/Conciliacion
 import { Scale, ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
+import { LicenseGate } from './components/LicenseGate';
 
 const AppContent: React.FC = () => {
   const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
+  const [licenseAllowed, setLicenseAllowed] = useState(false);
   const [showAdmins, setShowAdmins] = useState(false);
   const logout = async () => { if(auth&&window.sicovenStore) await window.sicovenStore.logout(auth.token); setAuth(null); setShowAdmins(false); };
   const [activeTab, setActiveTab] = useState<string>('diario');
@@ -30,6 +32,17 @@ const AppContent: React.FC = () => {
   useEffect(() => {
     if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
   }, [isStorageReady, companies.length]);
+
+  useEffect(() => {
+    if (!window.sicovenStore) return;
+    return window.sicovenStore.onLicenseStatusChanged((status) => {
+      if (!status.authorized) {
+        setAuth(null);
+        setShowAdmins(false);
+        setLicenseAllowed(false);
+      }
+    });
+  }, []);
 
   const renderActiveTab = () => {
     switch (activeTab) {
@@ -60,6 +73,7 @@ const AppContent: React.FC = () => {
     }
   };
 
+  if (window.sicovenStore && !licenseAllowed) return <LicenseGate onReady={() => setLicenseAllowed(true)} />;
   if (window.sicovenStore && !auth) return <LoginScreen onLogin={(token,user)=>setAuth({token,user})} />;
   if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} />;
   if (!isStorageReady) {
