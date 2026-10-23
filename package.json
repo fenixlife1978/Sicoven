@@ -52,6 +52,8 @@
     "files": [
       "dist/**/*",
       "electron/**/*",
+      "build/sicoven.ico",
+      "build/sicoven.png",
       "package.json"
     ],
     "asar": true,

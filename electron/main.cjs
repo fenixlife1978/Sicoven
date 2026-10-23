@@ -42,9 +42,14 @@ function openDatabase() {
   migrateLegacyDemoUsage(db);
 }
 function createWindow() {
+  const iconIco = path.join(__dirname, '..', 'build', 'sicoven.ico');
+  const iconPng = path.join(__dirname, '..', 'build', 'sicoven.png');
+  const resolvedIcon = fs.existsSync(iconIco) ? iconIco : (fs.existsSync(iconPng) ? iconPng : undefined);
+
   const win = new BrowserWindow({
     width: 1440, height: 920, minWidth: 980, minHeight: 680,
     show: false,
+    icon: resolvedIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true, nodeIntegration: false, sandbox: false

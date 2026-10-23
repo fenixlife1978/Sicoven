@@ -25,9 +25,16 @@ jobs:
         shell: pwsh
         run: |
           $iconPath = Join-Path $env:GITHUB_WORKSPACE 'build/sicoven.ico'
-          $iconBase64 = Get-Content -Raw 'build/sicoven.ico.base64'
-          [IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64.Trim()))
-          if ((Get-Item $iconPath).Length -lt 100) { throw 'El icono de SICOVEN no se generó correctamente.' }
+          if (Test-Path 'build/sicoven.ico.base64') {
+            $iconBase64 = (Get-Content -Raw 'build/sicoven.ico.base64').Trim()
+            if ($iconBase64.Length -gt 100 -and $iconBase64 -ne 'BASE64_PLACEHOLDER') {
+              [IO.File]::WriteAllBytes($iconPath, [Convert]::FromBase64String($iconBase64))
+            }
+          }
+          if (-not (Test-Path $iconPath) -or (Get-Item $iconPath).Length -lt 100) {
+            throw 'El icono de SICOVEN no se generó correctamente.'
+          }
+          Copy-Item $iconPath (Join-Path $env:GITHUB_WORKSPACE 'build/icon.ico') -Force
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -98,8 +105,14 @@ jobs:
             $title = "SICOVEN $tag"
             $notes = 'Instaladores de SICOVEN completo y DEMO, compilados por GitHub Actions.'
           }
-          gh release view $tag *> $null
-          if ($LASTEXITCODE -eq 0) {
+          $releaseExists = $false
+          try {
+            $null = gh release view $tag 2>&1
+            if ($LASTEXITCODE -eq 0) { $releaseExists = $true }
+          } catch {
+            $releaseExists = $false
+          }
+          if ($releaseExists) {
             gh release upload $tag $files --clobber
           } else {
             gh release create $tag $files --target $env:GITHUB_SHA --title $title --notes $notes
