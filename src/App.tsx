@@ -60,7 +60,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (window.sicovenStore && !auth) return <LoginScreen onLogin={(token,user)=>setAuth({token,user})} />;
+  if (!auth) return <LoginScreen onLogin={(token, user) => setAuth({ token, user })} isDemoMode={isDemoMode} />;
   if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} />;
   if (!isStorageReady) {
     return (
