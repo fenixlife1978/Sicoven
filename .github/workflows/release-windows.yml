@@ -6,6 +6,7 @@ on:
   push:
     branches:
       - 'sqlite-desktop-release'
+      - 'licencias-crm-activacion'
     tags:
       - 'v*'
   workflow_dispatch:
