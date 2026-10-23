@@ -8,7 +8,7 @@ type ReportKind = 'SITUACION' | 'RESULTADOS';
 export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
   const years = useMemo(() => Array.from(new Set(journalEntries
-    .filter(e => e.companyId === currentCompany.id && /^\\d{4}-\\d{2}-\\d{2}$/.test(e.date))
+    .filter(e => e.companyId === currentCompany.id && /^\d{4}-\d{2}-\d{2}$/.test(e.date))
     .map(e => Number(e.date.slice(0, 4)))).values()).sort((a,b) => b-a), [journalEntries, currentCompany.id]);
   const fallbackYear = Number(currentCompany.fiscalYear) || new Date().getFullYear();
   const [yearFrom, setYearFrom] = useState(String(years.includes(fallbackYear) ? fallbackYear : (years[0] ?? fallbackYear)));
