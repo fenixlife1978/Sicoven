@@ -536,6 +536,63 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return newEntry;
   };
 
+  const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
+    consumeDemoAction('diario');
+    const kind = draft.kind;
+    const document = kind === 'SALE_COLLECTION'
+      ? sales.find(item => item.id === draft.documentId && item.companyId === currentCompany.id)
+      : purchases.find(item => item.id === draft.documentId && item.companyId === currentCompany.id);
+    if (!document) throw new Error('La factura no existe en la empresa activa.');
+    if (document.paymentTerm !== 'CREDITO') throw new Error('Solo se pueden liquidar facturas identificadas como crédito.');
+    const prior = creditSettlements.filter(item => item.companyId === currentCompany.id && item.documentId === draft.documentId && item.kind === kind);
+    const balance = calculateCreditBalance(draft.documentId, document.totalAmountUsd, document.totalAmountBs, prior);
+    const error = validateCreditSettlement(draft, balance.outstandingUsd);
+    if (error) throw new Error(error);
+    if (prior.some(item => item.reference && draft.reference && item.reference.trim() === draft.reference.trim() && item.amountUsd === draft.amountUsd && item.settlementDate === draft.settlementDate)) {
+      throw new Error('Ya existe una liquidación con la misma referencia, fecha e importe.');
+    }
+    // Hasta implementar el tratamiento dual de diferencias cambiarias, no se permite
+    // crear un asiento que no pueda cuadrarse de forma idéntica en Bs y USD.
+    const amountAtRate = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
+    if (Math.abs(amountAtRate - draft.amountBs) >= 0.01) {
+      throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Registre esta operación para revisión contable; no se generó asiento.');
+    }
+    const cashCode = draft.method === 'CASH_USD' || draft.method === 'BANK_TRANSFER_USD' ? '1.1.1.02' :
+      draft.method === 'BANK_TRANSFER_BS' ? '1.1.1.03' : '1.1.1.01';
+    const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
+    const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
+    const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
+    if (!cashAccount || !controlAccount) throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
+    const amountBs = Math.round(draft.amountBs * 100) / 100;
+    const amountUsd = Math.round(draft.amountUsd * 100) / 100;
+    const entry = addJournalEntry({
+      entryNumber: 0,
+      date: draft.settlementDate,
+      description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') + ' - ' + document.invoiceNumber,
+      type: 'MANUAL',
+      bcvRate: draft.bcvRate,
+      referenceDoc: document.invoiceNumber,
+      items: kind === 'SALE_COLLECTION' ? [
+        { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cobro de factura de crédito' },
+        { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar' }
+      ] : [
+        { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar' },
+        { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Pago de factura de crédito' }
+      ]
+    });
+    const settlement: CreditSettlement = {
+      ...draft,
+      id: `settlement-${currentCompany.id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
+      companyId: currentCompany.id,
+      amountBs,
+      amountUsd,
+      journalEntryId: entry.id,
+      createdAt: new Date().toISOString()
+    };
+    setCreditSettlements(prev => [...prev, settlement]);
+    return settlement;
+  };
+
   const deleteJournalEntry = (id: string) => {
     consumeDemoAction('diario');
     setJournalEntries(prev => prev.filter(e => e.id !== id));
