@@ -99,6 +99,12 @@ export interface PurchaseRecord {
   journalEntryId?: string;
   voucherNumber?: string; // Formato SENIAT: AAAAMMDDDDDDDD (14 caracteres)
   notes?: string;
+  // Condiciones comerciales y fiscales del crédito (se preservan por documento)
+  paymentTerm?: 'CONTADO' | 'CREDITO';
+  creditDays?: number;
+  dueDate?: string; // YYYY-MM-DD
+  currencyPricingMode?: 'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL';
+  fiscalAdjustmentMode?: 'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR';
 }
 
 export interface SaleRecord {
@@ -130,6 +136,12 @@ export interface SaleRecord {
   vatWithheldUsd: number;
   journalEntryId?: string;
   notes?: string;
+  // Condiciones comerciales y fiscales del crédito (se preservan por documento)
+  paymentTerm?: 'CONTADO' | 'CREDITO';
+  creditDays?: number;
+  dueDate?: string; // YYYY-MM-DD
+  currencyPricingMode?: 'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL';
+  fiscalAdjustmentMode?: 'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR';
 }
 
 export interface InventoryProduct {
