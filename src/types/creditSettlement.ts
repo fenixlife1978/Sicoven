@@ -79,8 +79,12 @@ export function validateCreditSettlement(
   outstandingUsd: number
 ): string | null {
   if (!draft.documentId.trim()) return 'Debe seleccionar la factura de crédito.';
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.settlementDate) ||
-      Number.isNaN(Date.parse(draft.settlementDate))) return 'La fecha de liquidación no es válida.';
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draft.settlementDate)) return 'La fecha de liquidación no es válida.';
+  const [year, month, day] = draft.settlementDate.split('-').map(Number);
+  const parsedDate = new Date(Date.UTC(year, month - 1, day));
+  if (parsedDate.getUTCFullYear() !== year ||
+      parsedDate.getUTCMonth() !== month - 1 ||
+      parsedDate.getUTCDate() !== day) return 'La fecha de liquidación no es válida.';
   if (!Number.isFinite(draft.bcvRate) || draft.bcvRate <= 0) return 'La tasa BCV debe ser mayor que cero.';
   if (!Number.isFinite(draft.amountUsd) || draft.amountUsd <= 0) return 'El abono debe ser mayor que cero.';
   if (draft.amountUsd > outstandingUsd + 0.005) return 'El abono supera el saldo pendiente de la factura.';
