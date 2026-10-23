@@ -203,15 +203,13 @@ app.whenReady().then(async () => {
     if(total<2||!seed)return {ok:false,message:'El administrador semilla solo puede eliminarse después de crear otro administrador.'};db.prepare('DELETE FROM auth_users WHERE id=?').run(seed.id);db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_deleted',JSON.stringify({by:actor.username}));for(const [k,v] of sessions.entries())if(v.id===seed.id)sessions.delete(k);return {ok:true};
   });
   ipcMain.handle('sicoven:load-state', () => {
-    const licensing = licenseView();
-    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     const row = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
     if (!row) return null;
     try { return JSON.parse(row.state_json); } catch { return null; }
   });
   ipcMain.handle('sicoven:save-state', (_event, state) => {
     const licensing = licenseView();
-    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    if (!licensing.authorized && !licensing.needsActivation) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
@@ -227,7 +225,6 @@ app.whenReady().then(async () => {
   });
   ipcMain.on('sicoven:demo-get-usage', (event) => {
     try {
-      if (!licenseView().authorized) throw new Error('Licencia no autorizada.');
       event.returnValue = getDemoUsage(db);
     } catch {
       event.returnValue = {};
