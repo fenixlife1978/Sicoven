@@ -536,8 +536,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return newEntry;
   };
 
+  const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT'): CreditBalance => {
+    const document = kind === 'SALE_COLLECTION'
+      ? sales.find(item => item.id === documentId && item.companyId === currentCompany.id)
+      : purchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
+    if (!document) throw new Error('No se encontró la factura en la empresa activa.');
+    return calculateCreditBalance(
+      documentId,
+      Number(document.totalAmountUsd || 0),
+      Number(document.totalAmountBs || 0),
+      creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind)
+    );
+  };
+
   const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
-    consumeDemoAction('diario');
     const kind = draft.kind;
     const document = kind === 'SALE_COLLECTION'
       ? sales.find(item => item.id === draft.documentId && item.companyId === currentCompany.id)
