@@ -309,13 +309,13 @@ export const LibroComprasView: React.FC = () => {
                   )}
                 </td>
                 <td></td>
-                <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-900">
+                <td className="py-3 px-3 text-right font-mono text-emerald-400 bg-slate-850">
                   {formatBs(totalIvaCreditoBs)}
                   {displayCurrency !== 'BS' && (
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaCreditoUsd)}</div>
                   )}
                 </td>
-                <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-900">
+                <td className="py-3 px-3 text-right font-mono text-purple-300 bg-slate-850">
                   {formatBs(totalIvaRetenidoBs)}
                   {displayCurrency !== 'BS' && (
                     <div className="text-[10px] text-slate-400">{formatUsd(totalIvaRetenidoUsd)}</div>
@@ -331,8 +331,8 @@ export const LibroComprasView: React.FC = () => {
         </div>
       </div>
 
-      {/* Forma 30 SENIAT Summary Card (no-print) */}
-      <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white p-5 rounded-2xl shadow-md border border-slate-800 no-print">
+      {/* Forma 30 SENIAT Summary Card */}
+      <div className="bg-gradient-to-r from-slate-900 to-slate-850 text-white p-5 rounded-2xl shadow-md border border-slate-800">
         <h4 className="text-xs font-bold uppercase tracking-wider text-emerald-400 mb-3 flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" />
           Resumen para la Declaración Mensual del IVA (Forma 30 SENIAT)

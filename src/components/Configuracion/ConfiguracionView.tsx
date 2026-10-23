@@ -12,15 +12,12 @@ import {
   ShieldCheck,
   Scale,
   RefreshCw,
-  Info,
-  Image as ImageIcon,
-  Trash2
+  Info
 } from 'lucide-react';
 import { TaxpayerType } from '../../types/accounting';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
 import { formatBs } from '../../utils/formatters';
-import { getCompanyLogo, generateCompanyLogo } from '../../data/defaultLogos';
 
 export const ConfiguracionView: React.FC = () => {
   const {
@@ -50,7 +47,6 @@ export const ConfiguracionView: React.FC = () => {
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
   const [bcvRate, setBcvRate] = useState(currentCompany.bcvRate);
-  const [logoUrl, setLogoUrl] = useState(currentCompany.logoUrl || '');
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -64,36 +60,10 @@ export const ConfiguracionView: React.FC = () => {
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
     setBcvRate(currentCompany.bcvRate);
-    setLogoUrl(currentCompany.logoUrl || '');
   }, [currentCompany]);
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('El archivo no debe exceder los 2MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setLogoUrl(result);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
 
   const handleSaveCompany = (e: React.FormEvent) => {
     e.preventDefault();
-    const finalLogo = logoUrl || generateCompanyLogo({
-      name: name.trim().toUpperCase(),
-      rif: rif.trim().toUpperCase(),
-      taxpayerType
-    });
-
     updateCompany({
       ...currentCompany,
       name: name.trim().toUpperCase(),
@@ -105,8 +75,7 @@ export const ConfiguracionView: React.FC = () => {
       phone: phone.trim(),
       email: email.trim(),
       fiscalYear: Number(fiscalYear),
-      bcvRate: Number(bcvRate),
-      logoUrl: finalLogo
+      bcvRate: Number(bcvRate)
     });
     setSaveSuccess(true);
     setTimeout(() => setSaveSuccess(false), 3000);
@@ -193,11 +162,7 @@ export const ConfiguracionView: React.FC = () => {
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-2">
-                      <img
-                        src={getCompanyLogo(c)}
-                        alt={c.name}
-                        className="h-7 w-auto object-contain max-w-[95px] rounded bg-white p-0.5 border border-slate-200"
-                      />
+                      <Building2 className={`w-4 h-4 ${isActive ? 'text-emerald-600' : 'text-slate-400'}`} />
                       <span className="font-mono text-xs font-bold text-slate-700">{c.rif}</span>
                     </div>
                     {isActive && (
@@ -342,49 +307,6 @@ export const ConfiguracionView: React.FC = () => {
                 onChange={e => setEmail(e.target.value)}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
-            </div>
-          </div>
-
-          {/* Logotipo Oficial */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-emerald-600" />
-                Logotipo Oficial de la Empresa
-              </label>
-              {logoUrl && (
-                <button
-                  type="button"
-                  onClick={() => setLogoUrl('')}
-                  className="text-[11px] text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer font-medium"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Restaurar automático
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Personaliza el logo corporativo de esta empresa para el Libro Diario, Mayor, Balances VEN-NIF y Libros Fiscales SENIAT.
-            </p>
-
-            <div className="flex items-center gap-4 pt-1">
-              <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-xs flex-shrink-0">
-                <img
-                  src={logoUrl || getCompanyLogo({ name, rif, taxpayerType, id: currentCompany.id })}
-                  alt="Vista previa del logo"
-                  className="h-10 w-auto object-contain max-w-[170px]"
-                />
-              </div>
-              <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 cursor-pointer transition">
-                <Upload className="w-4 h-4 text-emerald-600" />
-                <span>{logoUrl ? 'Reemplazar imagen de logo' : 'Subir logotipo (PNG, JPG, SVG)'}</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                />
-              </label>
             </div>
           </div>
 

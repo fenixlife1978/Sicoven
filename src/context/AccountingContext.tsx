@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
 import {
   Company,
   Account,
@@ -28,10 +28,13 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
-import { getCompanyLogo, DEFAULT_LOGO_CARIBE, DEFAULT_LOGO_LOS_ANDES } from '../data/defaultLogos';
 
 interface AccountingContextType {
   companies: Company[];
+  isStorageReady: boolean;
+  storageError: string | null;
+  isDemoMode: boolean;
+  demoUsage: Record<string, number>;
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
   addCompany: (comp: Omit<Company, 'id'>) => Company;
@@ -83,9 +86,7 @@ interface AccountingContextType {
   bankStatementMovements: BankStatementMovement[];
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId'>) => BankAccount;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
-  addBankStatementMovementsBulk: (movements: Omit<BankStatementMovement, 'id' | 'companyId'>[]) => BankStatementMovement[];
   deleteBankStatementMovement: (id: string) => void;
-  clearBankStatementMovements: (bankAccountId: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId?: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
   runAutoReconciliation: (bankAccountId: string) => { matchedCount: number; matchedRefs: string[] };
@@ -105,38 +106,42 @@ interface AccountingContextType {
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
+const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
+const DEMO_LIMIT = 10;
+const DEMO_LABELS: Record<string, string> = {
+  empresa: 'Empresas',
+  diario: 'Libro Diario',
+  compras: 'Compras',
+  ventas: 'Ventas',
+  inventario: 'Inventario',
+  catalogo: 'Catálogo y plan de cuentas',
+  retenciones: 'Retenciones',
+  configuracion: 'Configuración',
+  conciliacion: 'Conciliación bancaria'
+};
+
+// En escritorio, SQLite es la única fuente operativa; localStorage se reserva
+// para la vista web de desarrollo y nunca inicializa datos del instalador.
+const readBrowserStorage = (key: string): string | null => {
+  if (typeof window !== 'undefined' && window.sicovenStore) return null;
+  try { return localStorage.getItem(key); } catch { return null; }
+};
 
 export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   // Cargar estado inicial desde localStorage o valores por defecto
   const [companies, setCompanies] = useState<Company[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_companies`);
-      if (saved) {
-        const parsed: Company[] = JSON.parse(saved);
-        // Garantizar que cada empresa conserve su logo institucional correspondiente
-        return parsed.map(c => {
-          if (c.id === 'comp-2' && (!c.logoUrl || c.logoUrl === DEFAULT_LOGO_LOS_ANDES)) {
-            return { ...c, logoUrl: DEFAULT_LOGO_CARIBE };
-          }
-          if (c.id === 'comp-1' && !c.logoUrl) {
-            return { ...c, logoUrl: DEFAULT_LOGO_LOS_ANDES };
-          }
-          if (!c.logoUrl || (c.logoUrl === DEFAULT_LOGO_LOS_ANDES && c.id !== 'comp-1')) {
-            return { ...c, logoUrl: getCompanyLogo(c) };
-          }
-          return c;
-        });
-      }
-      return INITIAL_COMPANIES;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_companies`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_COMPANIES;
+      return [];
     }
   });
 
   const [currentCompanyId, setCurrentCompanyId] = useState<string>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_currentCompanyId`);
-      return saved && companies.some(c => c.id === saved) ? saved : companies[0]?.id || 'comp-1';
+      const saved = readBrowserStorage(`${STORAGE_KEY}_currentCompanyId`);
+      return saved && companies.some(c => c.id === saved) ? saved : companies[0]?.id || '';
     } catch {
       return 'comp-1';
     }
@@ -144,7 +149,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [accounts, setAccounts] = useState<Account[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_accounts`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_accounts`);
       return saved ? JSON.parse(saved) : DEFAULT_CHART_OF_ACCOUNTS;
     } catch {
       return DEFAULT_CHART_OF_ACCOUNTS;
@@ -153,155 +158,144 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   const [journalEntries, setJournalEntries] = useState<JournalEntry[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_journal`);
-      if (saved) {
-        const parsed: JournalEntry[] = JSON.parse(saved);
-        // Si el localStorage guardado no contenía los asientos de demostración de comp-2, fusionarlos
-        const hasComp2 = parsed.some(e => e.companyId === 'comp-2');
-        if (!hasComp2) {
-          const comp2Initials = INITIAL_JOURNAL_ENTRIES.filter(e => e.companyId === 'comp-2');
-          return [...parsed, ...comp2Initials];
-        }
-        return parsed;
-      }
-      return INITIAL_JOURNAL_ENTRIES;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_journal`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_JOURNAL_ENTRIES;
+      return [];
     }
   });
 
   const [purchases, setPurchases] = useState<PurchaseRecord[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_purchases`);
-      return saved ? JSON.parse(saved) : INITIAL_PURCHASES;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_purchases`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_PURCHASES;
+      return [];
     }
   });
 
   const [sales, setSales] = useState<SaleRecord[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_sales`);
-      return saved ? JSON.parse(saved) : INITIAL_SALES;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_sales`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_SALES;
+      return [];
     }
   });
 
   const [products, setProducts] = useState<InventoryProduct[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_products`);
-      return saved ? JSON.parse(saved) : INITIAL_INVENTORY_PRODUCTS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_products`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_INVENTORY_PRODUCTS;
+      return [];
     }
   });
 
   const [movements, setMovements] = useState<InventoryMovement[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_movements`);
-      return saved ? JSON.parse(saved) : INITIAL_INVENTORY_MOVEMENTS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_movements`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_INVENTORY_MOVEMENTS;
+      return [];
     }
   });
 
   const [vatVouchers, setVatVouchers] = useState<VatRetentionVoucher[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_vatVouchers`);
-      return saved ? JSON.parse(saved) : INITIAL_VAT_VOUCHERS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_vatVouchers`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_VAT_VOUCHERS;
+      return [];
     }
   });
 
   const [islrVouchers, setIslrVouchers] = useState<IslrRetentionVoucher[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_islrVouchers`);
-      return saved ? JSON.parse(saved) : INITIAL_ISLR_VOUCHERS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_islrVouchers`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_ISLR_VOUCHERS;
+      return [];
     }
   });
 
   const [bankAccounts, setBankAccounts] = useState<BankAccount[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_bankAccounts`);
-      return saved ? JSON.parse(saved) : INITIAL_BANK_ACCOUNTS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_bankAccounts`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_BANK_ACCOUNTS;
+      return [];
     }
   });
 
   const [bankStatementMovements, setBankStatementMovements] = useState<BankStatementMovement[]>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_statementMovements`);
-      return saved ? JSON.parse(saved) : INITIAL_STATEMENT_MOVEMENTS;
+      const saved = readBrowserStorage(`${STORAGE_KEY}_statementMovements`);
+      return saved ? JSON.parse(saved) : [];
     } catch {
-      return INITIAL_STATEMENT_MOVEMENTS;
+      return [];
     }
   });
 
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
+  const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
+  const demoUsageRef = useRef<Record<string, number>>({});
+  const consumeDemoAction = (moduleKey: string) => {
+    if (!IS_DEMO) return;
+    const label = DEMO_LABELS[moduleKey] || moduleKey;
+    if (window.sicovenStore) {
+      const result = window.sicovenStore.consumeDemoAction(moduleKey);
+      if (result?.usage && typeof result.usage === 'object') {
+        demoUsageRef.current = result.usage;
+        setDemoUsage(result.usage);
+      }
+      if (!result?.ok) {
+        const message = result?.used !== undefined
+          ? `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`
+          : 'No se pudo registrar la acción demo en SQLite. La operación fue bloqueada para proteger el límite.';
+        window.alert(message);
+        throw new Error(message);
+      }
+      return;
+    }
 
-  // Guardar en localStorage
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_companies`, JSON.stringify(companies));
-  }, [companies]);
+    // Respaldo para la vista web de desarrollo: el contador se escribe antes
+    // de permitir la mutación y sobrevive a una recarga del navegador.
+    let storedUsage: Record<string, number> = {};
+    try {
+      storedUsage = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_demoUsage`) || '{}');
+    } catch {
+      storedUsage = {};
+    }
+    const used = Number(storedUsage[moduleKey] ?? demoUsageRef.current[moduleKey] ?? 0);
+    if (used >= DEMO_LIMIT) {
+      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
+      window.alert(message);
+      throw new Error(message);
+    }
+    const nextUsage = { ...storedUsage, [moduleKey]: used + 1 };
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_demoUsage`, JSON.stringify(nextUsage));
+    } catch {
+      throw new Error('No se pudo guardar el contador de la demo; la operación fue bloqueada.');
+    }
+    demoUsageRef.current = nextUsage;
+    setDemoUsage(nextUsage);
+  };
 
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_currentCompanyId`, currentCompanyId);
-  }, [currentCompanyId]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_accounts`, JSON.stringify(accounts));
-  }, [accounts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_journal`, JSON.stringify(journalEntries));
-  }, [journalEntries]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases));
-  }, [purchases]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales));
-  }, [sales]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
-  }, [products]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
-  }, [movements]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
-  }, [vatVouchers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
-  }, [islrVouchers]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
-  }, [bankAccounts]);
-
-  useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
-  }, [bankStatementMovements]);
-
-  const currentCompany = companies.find(c => c.id === currentCompanyId) || companies[0] || INITIAL_COMPANIES[0];
+  const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
+    id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
+    taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 0, fiscalYear: new Date().getFullYear(), bcvRate: 0
+  };
 
   const updateCompany = (updated: Company) => {
-    setCompanies(prev => prev.map(c => (c.id === updated.id ? { ...updated, logoUrl: updated.logoUrl || getCompanyLogo(updated) } : c)));
+    consumeDemoAction('empresa');
+    setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
   const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_autoSyncBcv`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_autoSyncBcv`);
       return saved !== null ? JSON.parse(saved) : true;
     } catch {
       return true;
@@ -312,7 +306,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [bcvSyncStatus, setBcvSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
   const [bcvSyncResult, setBcvSyncResult] = useState<BcvSyncResult | null>(() => {
     try {
-      const saved = localStorage.getItem(`${STORAGE_KEY}_bcvSyncResult`);
+      const saved = readBrowserStorage(`${STORAGE_KEY}_bcvSyncResult`);
       return saved ? JSON.parse(saved) : null;
     } catch {
       return null;
@@ -320,14 +314,110 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   });
 
   useEffect(() => {
-    localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+    if (!window.sicovenStore) {
+      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+    }
   }, [autoSyncBcv]);
 
   useEffect(() => {
-    if (bcvSyncResult) {
+    if (!window.sicovenStore && bcvSyncResult) {
       localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
     }
   }, [bcvSyncResult]);
+
+  // SQLite local es la persistencia operativa en la versión de escritorio.
+  const [storageReady, setStorageReady] = useState(false);
+  const [storageError, setStorageError] = useState<string | null>(null);
+  const stateSnapshot = {
+    companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+    let initialized = false;
+    const hydrate = async () => {
+      try {
+        if (window.sicovenStore) {
+          const saved = await window.sicovenStore.load();
+          if (cancelled) return;
+          if (saved && typeof saved === 'object') {
+            if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
+            if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
+            if (Array.isArray(saved.accounts)) setAccounts(saved.accounts as Account[]);
+            if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
+            if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
+            if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
+            if (Array.isArray(saved.products)) setProducts(saved.products as InventoryProduct[]);
+            if (Array.isArray(saved.movements)) setMovements(saved.movements as InventoryMovement[]);
+            if (Array.isArray(saved.vatVouchers)) setVatVouchers(saved.vatVouchers as VatRetentionVoucher[]);
+            if (Array.isArray(saved.islrVouchers)) setIslrVouchers(saved.islrVouchers as IslrRetentionVoucher[]);
+            if (Array.isArray(saved.bankAccounts)) setBankAccounts(saved.bankAccounts as BankAccount[]);
+            if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
+            if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
+            if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
+            if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
+            if (saved.demoUsage && typeof saved.demoUsage === 'object') { const usage = saved.demoUsage as Record<string, number>; demoUsageRef.current = usage; setDemoUsage(usage); }
+          } else if (IS_DEMO) {
+            setCompanies(INITIAL_COMPANIES); setCurrentCompanyId(INITIAL_COMPANIES[0]?.id || '');
+            setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries(INITIAL_JOURNAL_ENTRIES);
+            setPurchases(INITIAL_PURCHASES); setSales(INITIAL_SALES); setProducts(INITIAL_INVENTORY_PRODUCTS);
+            setMovements(INITIAL_INVENTORY_MOVEMENTS); setVatVouchers(INITIAL_VAT_VOUCHERS);
+            setIslrVouchers(INITIAL_ISLR_VOUCHERS); setBankAccounts(INITIAL_BANK_ACCOUNTS);
+            setBankStatementMovements(INITIAL_STATEMENT_MOVEMENTS);
+          } else {
+            await window.sicovenStore.save(stateSnapshot);
+          }
+          if (IS_DEMO) {
+            const usage = window.sicovenStore.getDemoUsage();
+            demoUsageRef.current = usage;
+            setDemoUsage(usage);
+          }
+        }
+        initialized = true;
+      } catch (error) {
+        console.error('No se pudo inicializar la persistencia SQLite de SICOVEN:', error);
+        setStorageError(error instanceof Error ? error.message : 'Error desconocido al abrir la base de datos local.');
+      } finally {
+        // Fail closed: si SQLite no se pudo leer/escribir, no habilitar
+        // operaciones que puedan sobrescribir datos contables existentes.
+        if (!cancelled && initialized) setStorageReady(true);
+      }
+    };
+    void hydrate();
+    return () => { cancelled = true; };
+  // La hidratación se ejecuta una sola vez; stateSnapshot representa el legado disponible al inicio.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    if (!storageReady) return;
+    if (window.sicovenStore) {
+      window.sicovenStore.save(stateSnapshot).catch(error => {
+        console.error('Error guardando los datos contables en SQLite:', error);
+      });
+      return;
+    }
+    // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
+    try {
+      localStorage.setItem(`${STORAGE_KEY}_companies`, JSON.stringify(companies));
+      localStorage.setItem(`${STORAGE_KEY}_currentCompanyId`, currentCompanyId);
+      localStorage.setItem(`${STORAGE_KEY}_accounts`, JSON.stringify(accounts));
+      localStorage.setItem(`${STORAGE_KEY}_journal`, JSON.stringify(journalEntries));
+      localStorage.setItem(`${STORAGE_KEY}_purchases`, JSON.stringify(purchases));
+      localStorage.setItem(`${STORAGE_KEY}_sales`, JSON.stringify(sales));
+      localStorage.setItem(`${STORAGE_KEY}_products`, JSON.stringify(products));
+      localStorage.setItem(`${STORAGE_KEY}_movements`, JSON.stringify(movements));
+      localStorage.setItem(`${STORAGE_KEY}_vatVouchers`, JSON.stringify(vatVouchers));
+      localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
+      localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
+      localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
+      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
+      if (bcvSyncResult) localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
+    } catch (error) {
+      console.error('Error guardando datos locales de desarrollo:', error);
+    }
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage]);
 
   const syncBcvRate = async (): Promise<BcvSyncResult> => {
     setIsSyncingBcv(true);
@@ -374,16 +464,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Sincronización automática de tasa BCV al inicio
   useEffect(() => {
-    if (autoSyncBcv) {
+    if (autoSyncBcv && companies.length > 0) {
       syncBcvRate();
     }
-  }, []);
+  }, [companies.length, autoSyncBcv]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
+    consumeDemoAction('empresa');
     const newComp: Company = {
       ...comp,
-      id: `comp-${Date.now()}`,
-      logoUrl: comp.logoUrl || getCompanyLogo(comp)
+      id: `comp-${Date.now()}`
     };
     setCompanies(prev => [...prev, newComp]);
     setCurrentCompanyId(newComp.id);
@@ -391,6 +481,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateBcvRate = (newRate: number, effectiveDate?: string) => {
+    consumeDemoAction('configuracion');
     if (!currentCompany || newRate <= 0) return;
     const today = effectiveDate || new Date().toISOString().split('T')[0];
     updateCompany({
@@ -401,6 +492,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addAccount = (account: Account) => {
+    consumeDemoAction('catalogo');
     setAccounts(prev => {
       if (prev.some(a => a.code === account.code)) {
         return prev.map(a => (a.code === account.code ? account : a));
@@ -413,14 +505,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const totalDebitUsd = entry.items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
+    const totalCreditUsd = entry.items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
     const diff = Math.abs(totalDebitBs - totalCreditBs);
+    const diffUsd = Math.abs(totalDebitUsd - totalCreditUsd);
+    const invalidLines = entry.items.some(item =>
+      !item.accountCode?.trim() ||
+      [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].some(value => !Number.isFinite(Number(value)) || Number(value) < 0) ||
+      (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+      (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)
+    );
 
-    if (diff >= 0.01 || totalDebitBs <= 0) {
+    if (entry.items.length < 2 || invalidLines || diff >= 0.01 || diffUsd >= 0.01 || totalDebitBs <= 0 || totalDebitUsd <= 0) {
       throw new Error(
-        `Verificación de Asiento fallida: El asiento contable está descuadrado. Total Débito: Bs. ${totalDebitBs.toFixed(2)} | Total Crédito: Bs. ${totalCreditBs.toFixed(2)}. Diferencia: Bs. ${diff.toFixed(2)}.`
+        `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
     }
 
+    consumeDemoAction('diario');
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const newEntry: JournalEntry = {
@@ -435,11 +537,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteJournalEntry = (id: string) => {
+    consumeDemoAction('diario');
     setJournalEntries(prev => prev.filter(e => e.id !== id));
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    consumeDemoAction('compras');
+    if ((purchaseData.vatWithheldBs || 0) > 0 || (purchaseData.islrWithheldBs || 0) > 0) consumeDemoAction('retenciones');
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const nextOp = companyPurchases.length + 1;
     const purchaseId = `pur-${Date.now()}`;
@@ -618,11 +723,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deletePurchase = (id: string) => {
+    consumeDemoAction('compras');
+    const purchase = purchases.find(p => p.id === id);
+    if (!purchase || purchase.companyId !== currentCompany.id) return;
     setPurchases(prev => prev.filter(p => p.id !== id));
+    if (purchase.journalEntryId) {
+      setJournalEntries(prev => prev.filter(entry => entry.id !== purchase.journalEntryId));
+    }
+    setVatVouchers(prev => prev.filter(voucher => voucher.purchaseRecordId !== id));
   };
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    consumeDemoAction('ventas');
     const companySales = sales.filter(s => s.companyId === currentCompany.id);
     const nextOp = companySales.length + 1;
     const saleId = `sale-${Date.now()}`;
@@ -711,11 +824,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteSale = (id: string) => {
-    setSales(prev => prev.filter(s => s.id !== id));
+    consumeDemoAction('ventas');
+    const sale = sales.find(item => item.id === id);
+    if (!sale || sale.companyId !== currentCompany.id) return;
+    setSales(prev => prev.filter(item => item.id !== id));
+    if (sale.journalEntryId) {
+      setJournalEntries(prev => prev.filter(entry => entry.id !== sale.journalEntryId));
+    }
   };
 
   // Inventario
   const addProduct = (prodData: Omit<InventoryProduct, 'id' | 'companyId'>): InventoryProduct => {
+    consumeDemoAction('inventario');
     const newProd: InventoryProduct = {
       ...prodData,
       id: `prod-${Date.now()}`,
@@ -726,10 +846,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const updateProduct = (updated: InventoryProduct) => {
+    consumeDemoAction('inventario');
     setProducts(prev => prev.map(p => (p.id === updated.id ? updated : p)));
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
+    consumeDemoAction('inventario');
     const rate = currentCompany.bcvRate;
     const newMov: InventoryMovement = {
       ...movData,
@@ -800,15 +922,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const deleteVatVoucher = (id: string) => {
+    consumeDemoAction('retenciones');
     setVatVouchers(prev => prev.filter(v => v.id !== id));
   };
 
   const deleteIslrVoucher = (id: string) => {
+    consumeDemoAction('retenciones');
     setIslrVouchers(prev => prev.filter(v => v.id !== id));
   };
 
   // Conciliación Bancaria
   const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId'>): BankAccount => {
+    consumeDemoAction('conciliacion');
     const newBank: BankAccount = {
       ...bankData,
       id: `bank-acc-${Date.now()}`,
@@ -819,6 +944,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    consumeDemoAction('conciliacion');
     const newMov: BankStatementMovement = {
       ...movData,
       id: `stmt-${Date.now()}`,
@@ -828,30 +954,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return newMov;
   };
 
-  const addBankStatementMovementsBulk = (
-    movsData: Omit<BankStatementMovement, 'id' | 'companyId'>[]
-  ): BankStatementMovement[] => {
-    const timestamp = Date.now();
-    const newMovements: BankStatementMovement[] = movsData.map((mov, idx) => ({
-      ...mov,
-      id: `stmt-${timestamp}-${idx}-${Math.floor(Math.random() * 1000)}`,
-      companyId: currentCompany.id
-    }));
-    setBankStatementMovements(prev => [...prev, ...newMovements]);
-    return newMovements;
-  };
-
   const deleteBankStatementMovement = (id: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev => prev.filter(m => m.id !== id));
   };
 
-  const clearBankStatementMovements = (bankAccountId: string) => {
-    setBankStatementMovements(prev =>
-      prev.filter(m => !(m.companyId === currentCompany.id && m.bankAccountId === bankAccountId))
-    );
-  };
-
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
@@ -868,6 +977,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const unreconcileMovement = (statementMovementId: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
@@ -884,6 +994,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const unreconcileAll = (bankAccountId: string) => {
+    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.companyId === currentCompany.id && m.bankAccountId === bankAccountId
@@ -900,6 +1011,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
+    consumeDemoAction('conciliacion');
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
@@ -1000,7 +1112,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = companyEntries.length + 1;
-    const rate = currentCompany.bcvRate || 68.50;
+    const rate = currentCompany.bcvRate;
+    if (!Number.isFinite(rate) || rate <= 0) {
+      throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
+    }
     const amountBs = statementMovement.amountBs;
     const amountUsd = statementMovement.amountUsd || (amountBs / rate);
 
@@ -1068,6 +1183,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const resetToSampleData = () => {
+    if (!IS_DEMO) { setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]); setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]); setDemoUsage({}); return; }
+    // Restaurar la muestra también es una acción y nunca reinicia los contadores.
+    consumeDemoAction('configuracion');
     setCompanies(INITIAL_COMPANIES);
     setCurrentCompanyId(INITIAL_COMPANIES[0].id);
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
@@ -1102,20 +1220,44 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const importBackupJson = (jsonData: string): boolean => {
+    if (IS_DEMO) {
+      window.alert('La importación de respaldos está deshabilitada en SICOVEN DEMO. Adquiera la versión completa para importar sus propios datos.');
+      return false;
+    }
     try {
       const data = JSON.parse(jsonData);
-      if (data.companies && Array.isArray(data.companies)) setCompanies(data.companies);
-      if (data.accounts && Array.isArray(data.accounts)) setAccounts(data.accounts);
-      if (data.journalEntries && Array.isArray(data.journalEntries)) setJournalEntries(data.journalEntries);
-      if (data.purchases && Array.isArray(data.purchases)) setPurchases(data.purchases);
-      if (data.sales && Array.isArray(data.sales)) setSales(data.sales);
-      if (data.products && Array.isArray(data.products)) setProducts(data.products);
-      if (data.movements && Array.isArray(data.movements)) setMovements(data.movements);
-      if (data.vatVouchers && Array.isArray(data.vatVouchers)) setVatVouchers(data.vatVouchers);
-      if (data.islrVouchers && Array.isArray(data.islrVouchers)) setIslrVouchers(data.islrVouchers);
-      if (data.bankAccounts && Array.isArray(data.bankAccounts)) setBankAccounts(data.bankAccounts);
-      if (data.bankStatementMovements && Array.isArray(data.bankStatementMovements)) setBankStatementMovements(data.bankStatementMovements);
-      if (data.companies?.length > 0) setCurrentCompanyId(data.companies[0].id);
+      const requiredCollections = [
+        'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
+        'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
+      ] as const;
+      if (!data || typeof data !== 'object' || requiredCollections.some(key => !Array.isArray(data[key]))) {
+        throw new Error('El respaldo está incompleto o no contiene todas las colecciones requeridas.');
+      }
+      if (data.companies.length === 0 || data.companies.some((c: any) =>
+        !c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string'
+      )) throw new Error('El respaldo contiene empresas inválidas.');
+      const companyIds = new Set(data.companies.map((c: Company) => c.id));
+      if (data.journalEntries.some((entry: any) => !entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items))) {
+        throw new Error('Hay asientos asociados a empresas inexistentes o con líneas inválidas.');
+      }
+      for (const key of requiredCollections) {
+        const rows = data[key] as any[];
+        if (rows.some(row => !row || typeof row !== 'object' || (row.companyId && !companyIds.has(row.companyId)))) {
+          throw new Error(`La colección ${key} contiene registros inválidos o vinculados a empresas inexistentes.`);
+        }
+      }
+      setCompanies(data.companies);
+      setAccounts(data.accounts);
+      setJournalEntries(data.journalEntries);
+      setPurchases(data.purchases);
+      setSales(data.sales);
+      setProducts(data.products);
+      setMovements(data.movements);
+      setVatVouchers(data.vatVouchers);
+      setIslrVouchers(data.islrVouchers);
+      setBankAccounts(data.bankAccounts);
+      setBankStatementMovements(data.bankStatementMovements);
+      setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
       console.error('Error importing backup:', e);
@@ -1127,6 +1269,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     <AccountingContext.Provider
       value={{
         companies,
+        isStorageReady: storageReady,
+        storageError,
+        isDemoMode: IS_DEMO,
+        demoUsage,
         currentCompany,
         setCurrentCompanyId,
         addCompany,
@@ -1162,9 +1308,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),
         addBankAccount,
         addBankStatementMovement,
-        addBankStatementMovementsBulk,
         deleteBankStatementMovement,
-        clearBankStatementMovements,
         reconcileMovementManual,
         unreconcileMovement,
         runAutoReconciliation,

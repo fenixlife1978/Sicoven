@@ -5,6 +5,10 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
+    // Electron opens dist/index.html via file://. Relative asset paths are
+    // required there; absolute /assets paths resolve to the wrong filesystem root
+    // and produce a blank window in packaged installers.
+    base: './',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {

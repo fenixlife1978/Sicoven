@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../context/AccountingContext';
-import { Building2, X, ShieldAlert, Check, Image as ImageIcon, Upload, Trash2 } from 'lucide-react';
+import { Building2, X, ShieldAlert, Check } from 'lucide-react';
 import { TaxpayerType } from '../types/accounting';
-import { generateCompanyLogo } from '../data/defaultLogos';
 
 interface CompanyModalProps {
   isOpen: boolean;
@@ -20,46 +19,14 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
-  const [bcvRate, setBcvRate] = useState<number>(68.50);
+  const [bcvRate, setBcvRate] = useState<number>(0);
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
-  const [customLogo, setCustomLogo] = useState<string>('');
 
   if (!isOpen) return null;
-
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 2 * 1024 * 1024) {
-      alert('El archivo no debe exceder los 2MB.');
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const result = event.target?.result as string;
-      if (result) {
-        setCustomLogo(result);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const currentPreviewLogo = customLogo || generateCompanyLogo({
-    name: name.trim() || 'NUEVA EMPRESA',
-    rif: rif.trim() || 'J-00000000-0',
-    taxpayerType
-  });
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!rif.trim() || !name.trim()) return;
-
-    const finalLogo = customLogo || generateCompanyLogo({
-      name: name.trim().toUpperCase(),
-      rif: rif.trim().toUpperCase(),
-      taxpayerType
-    });
 
     addCompany({
       rif: rif.trim().toUpperCase(),
@@ -71,9 +38,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       fiscalYear,
-      bcvRate: Number(bcvRate) || 68.50,
-      lastRateUpdate: new Date().toISOString().split('T')[0],
-      logoUrl: finalLogo
+      bcvRate: Number(bcvRate),
+      lastRateUpdate: new Date().toISOString().split('T')[0]
     });
 
     onClose();
@@ -256,49 +222,6 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 onChange={e => setEmail(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
-            </div>
-          </div>
-
-          {/* Logotipo Institucional */}
-          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-2">
-            <div className="flex items-center justify-between">
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
-                <ImageIcon className="w-4 h-4 text-emerald-600" />
-                Logotipo Oficial de la Empresa
-              </label>
-              {customLogo && (
-                <button
-                  type="button"
-                  onClick={() => setCustomLogo('')}
-                  className="text-[11px] text-rose-600 hover:text-rose-700 flex items-center gap-1 cursor-pointer font-medium"
-                >
-                  <Trash2 className="w-3 h-3" />
-                  Restaurar automático
-                </button>
-              )}
-            </div>
-            <p className="text-[11px] text-slate-500">
-              Sube el logo corporativo de la empresa (PNG, JPG o SVG) para los encabezados de Libros y Balances. Si no subes uno, el sistema genera automáticamente un isotipo exclusivo con sus iniciales y RIF.
-            </p>
-
-            <div className="flex items-center gap-3 pt-1">
-              <div className="p-2 bg-white rounded-lg border border-slate-200 shadow-xs flex-shrink-0">
-                <img
-                  src={currentPreviewLogo}
-                  alt="Vista previa del logo"
-                  className="h-10 w-auto object-contain max-w-[150px]"
-                />
-              </div>
-              <label className="flex-1 flex items-center justify-center gap-2 px-3 py-2.5 border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-lg text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 cursor-pointer transition">
-                <Upload className="w-4 h-4 text-emerald-600" />
-                <span>{customLogo ? 'Cambiar archivo de logo' : 'Subir imagen de logo'}</span>
-                <input
-                  type="file"
-                  accept="image/png,image/jpeg,image/svg+xml"
-                  onChange={handleLogoUpload}
-                  className="hidden"
-                />
-              </label>
             </div>
           </div>
 

@@ -1,8 +1,15 @@
 node_modules/
-build/
 dist/
+release/
+release-demo/
 coverage/
 .DS_Store
 *.log
 .env*
 !.env.example
+!build/sicoven.ico
+!build/sicoven.ico.base64
+!build/icon.ico
+!build/icon.png
+!build/sicoven.png
+

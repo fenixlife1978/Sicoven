@@ -593,7 +593,7 @@ export const BalancesView: React.FC = () => {
       {activeReport === 'GENERAL' && (
         <div className="space-y-6">
           {/* Equation Banner */}
-          <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800">
+          <div className="bg-gradient-to-r from-slate-900 via-slate-850 to-slate-900 text-white rounded-2xl p-6 shadow-md border border-slate-800">
             <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
               <div>
                 <div className="text-xs uppercase tracking-wider text-emerald-400 font-bold">
