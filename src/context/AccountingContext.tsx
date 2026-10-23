@@ -585,6 +585,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (Math.abs(amountAtRate - draft.amountBs) >= 0.01) {
       throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Registre esta operación para revisión contable; no se generó asiento.');
     }
+    const operationKey = [
+      currentCompany.id, draft.documentId, kind, draft.settlementDate,
+      Math.round(draft.amountUsd * 100), Math.round(draft.amountBs * 100),
+      Math.round(draft.bcvRate * 1000000), draft.method,
+      (draft.reference || '').trim().toLocaleLowerCase()
+    ].join('|');
+    if (settlementInFlightRef.current.has(operationKey)) {
+      throw new Error('Esta liquidación ya se está registrando o fue registrada en esta sesión. Verifique el saldo antes de reintentar.');
+    }
+    settlementInFlightRef.current.add(operationKey);
     const cashCode = draft.method === 'CASH_USD' || draft.method === 'BANK_TRANSFER_USD' ? '1.1.1.02' :
       draft.method === 'BANK_TRANSFER_BS' ? '1.1.1.03' : '1.1.1.01';
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
@@ -593,7 +603,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!cashAccount || !controlAccount) throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
     const amountBs = Math.round(draft.amountBs * 100) / 100;
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
-    const entry = addJournalEntry({
+    let entry: JournalEntry;
+    try {
+      entry = addJournalEntry({
       entryNumber: 0,
       date: draft.settlementDate,
       description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') + ' - ' + document.invoiceNumber,
@@ -607,7 +619,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar' },
         { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Pago de factura de crédito' }
       ]
-    });
+      });
+    } catch (error) {
+      settlementInFlightRef.current.delete(operationKey);
+      throw error;
+    }
     const settlement: CreditSettlement = {
       ...draft,
       id: `settlement-${currentCompany.id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
@@ -1332,6 +1348,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           throw new Error(`La colección ${key} contiene registros inválidos o vinculados a empresas inexistentes.`);
         }
       }
+      // Validar todas las liquidaciones antes de tocar cualquier estado: la importación
+      // debe ser todo-o-nada desde la perspectiva de la interfaz.
+      const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
+      const settlementIds = new Set<string>();
+      const salesById = new Map(data.sales.map((row: any) => [row.id, row]));
+      const purchasesById = new Map(data.purchases.map((row: any) => [row.id, row]));
+      if (settlements.some((s: any) => {
+        if (!s || typeof s.id !== 'string' || !s.id.trim() || settlementIds.has(s.id) ||
+            !companyIds.has(s.companyId) ||
+            !['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(s.kind) ||
+            !Number.isFinite(s.amountUsd) || s.amountUsd <= 0 ||
+            !Number.isFinite(s.amountBs) || s.amountBs <= 0 ||
+            !Number.isFinite(s.bcvRate) || s.bcvRate <= 0 ||
+            !data.journalEntries.some((j: any) => j.id === s.journalEntryId && j.companyId === s.companyId)) return true;
+        settlementIds.add(s.id);
+        const source = s.kind === 'SALE_COLLECTION' ? salesById.get(s.documentId) : purchasesById.get(s.documentId);
+        return !source || source.companyId !== s.companyId;
+      })) throw new Error('El respaldo contiene liquidaciones duplicadas, inválidas o sin factura/asiento contable válido.');
       setCompanies(data.companies);
       setAccounts(data.accounts);
       setJournalEntries(data.journalEntries);
@@ -1343,8 +1377,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setIslrVouchers(data.islrVouchers);
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
-      const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
-      if (settlements.some((s: any) => !s || typeof s.id !== 'string' || !companyIds.has(s.companyId) || !data.journalEntries.some((j: any) => j.id === s.journalEntryId && j.companyId === s.companyId))) throw new Error('El respaldo contiene liquidaciones sin empresa o asiento contable válido.');
       setCreditSettlements(settlements);
       setCurrentCompanyId(data.companies[0].id);
       return true;
