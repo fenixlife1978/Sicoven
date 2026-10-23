@@ -560,8 +560,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const balance = calculateCreditBalance(draft.documentId, document.totalAmountUsd, document.totalAmountBs, prior);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
-    if (prior.some(item => item.reference && draft.reference && item.reference.trim() === draft.reference.trim() && item.amountUsd === draft.amountUsd && item.settlementDate === draft.settlementDate)) {
-      throw new Error('Ya existe una liquidación con la misma referencia, fecha e importe.');
+    const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
+    const duplicate = prior.some(item => {
+      const sameDate = item.settlementDate === draft.settlementDate;
+      const sameAmount = Math.round(item.amountUsd * 100) === Math.round(draft.amountUsd * 100);
+      const sameMethod = item.method === draft.method;
+      const sameRate = Math.round(item.bcvRate * 1000000) === Math.round(draft.bcvRate * 1000000);
+      const sameReference = Boolean(normalizedReference && item.reference?.trim().toLocaleLowerCase() === normalizedReference);
+      // A repeated reference is always a duplicate; without reference, use a
+      // stable transaction signature to protect against double submission.
+      return (sameReference && sameDate && sameAmount) ||
+        (!normalizedReference && !item.reference?.trim() && sameDate && sameAmount && sameMethod && sameRate);
+    });
+    if (duplicate) {
+      throw new Error('Posible liquidación duplicada: revise la referencia, fecha, importe, medio y tasa antes de registrar nuevamente.');
     }
     // Hasta implementar el tratamiento dual de diferencias cambiarias, no se permite
     // crear un asiento que no pueda cuadrarse de forma idéntica en Bs y USD.
