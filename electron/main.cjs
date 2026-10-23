@@ -94,9 +94,27 @@ app.whenReady().then(() => {
   ipcMain.handle('sicoven:auth-logout', (_event, token) => { sessions.delete(String(token||'')); return {ok:true}; });
   ipcMain.handle('sicoven:auth-list-admins', (_event, token) => { if(!sessions.has(String(token||''))) return {ok:false,message:'Sesión no válida.'}; return {ok:true,admins:db.prepare('SELECT id,username,is_seed AS isSeed,created_at AS createdAt FROM auth_users ORDER BY id').all().map(u=>({...u,isSeed:Boolean(u.isSeed)}))}; });
   ipcMain.handle('sicoven:auth-create-admin', (_event, token, input) => {
-    if(!sessions.has(String(token||''))) return {ok:false,message:'Sesión no válida.'}; const username=String(input?.username||'').trim(); const password=String(input?.password||'');
-    if(!/^[A-Za-z0-9._-]{3,32}$/.test(username)) return {ok:false,message:'El usuario debe tener 3–32 caracteres: letras, números, punto, guion o guion bajo.'}; if(password.length<10||password.length>256) return {ok:false,message:'La contraseña debe tener al menos 10 caracteres.'};
-    try {const c=hashPassword(password);db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)').run(username,c.hash,c.salt,'admin');db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('admin_created',JSON.stringify({username}));return {ok:true};}catch{return {ok:false,message:'No se pudo crear el administrador. Verifique que el usuario no exista.'};}
+    const actor=sessions.get(String(token||''));
+    if(!actor) return {ok:false,message:'Sesión no válida. Cierre sesión e ingrese nuevamente.'};
+    const username=String(input?.username||'').trim();
+    const password=String(input?.password||'');
+    if(!/^[A-Za-z0-9._-]{3,32}$/.test(username)) return {ok:false,message:'El usuario debe tener entre 3 y 32 caracteres y usar solo letras sin acentos, números, punto, guion o guion bajo.'};
+    if(password.length<10||password.length>256) return {ok:false,message:'La contraseña debe tener entre 10 y 256 caracteres.'};
+    try {
+      const credential=hashPassword(password);
+      const createAdmin=db.transaction(() => {
+        const result=db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)').run(username,credential.hash,credential.salt,'admin');
+        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('admin_created',JSON.stringify({username,by:actor.username,userId:Number(result.lastInsertRowid)}));
+      });
+      createAdmin();
+      return {ok:true};
+    } catch(error) {
+      const code=String(error?.code||'');
+      const detail=String(error?.message||'');
+      if(code==='SQLITE_CONSTRAINT_UNIQUE'||/UNIQUE constraint failed/i.test(detail)) return {ok:false,message:'Ese nombre de usuario ya existe. Elige uno diferente.'};
+      console.error('[SICOVEN] No se pudo crear administrador:',code,detail);
+      return {ok:false,message:'SQLite no pudo crear el administrador. No se guardaron cambios. Revise el archivo sicoven-startup.log y contacte soporte si persiste.'};
+    }
   });
   ipcMain.handle('sicoven:auth-delete-seed', (_event, token) => {
     const actor=sessions.get(String(token||''));if(!actor)return {ok:false,message:'Sesión no válida.'};const total=db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;const seed=db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
