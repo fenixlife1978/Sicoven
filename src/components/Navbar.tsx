@@ -74,9 +74,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand (New Official Identity) */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
             <img
-              src="/assets/aistudio/sicoven-logo-horizontal-nav.svg"
+              src="./assets/aistudio/sicoven-logo-horizontal-nav.svg"
               alt="SICOVEN · Sistema Contable Integral Multiempresas"
-              className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
+              className="h-9 sm:h-11 w-auto max-w-[190px] sm:max-w-[250px] object-contain object-left flex-shrink-0"
             />
             <span className="hidden lg:inline-block text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               VEN-NIF
@@ -119,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Company Dropdown Menu */}
               {companyDropdownOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-850 rounded-xl shadow-2xl border border-slate-700 py-2 z-50 divide-y divide-slate-800"
+                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-600 py-2 z-[60] divide-y divide-slate-700 ring-1 ring-black/30"
                   onClick={() => setCompanyDropdownOpen(false)}
                 >
                   <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
@@ -251,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       )}
 
       {/* Navigation Tabs Bar (Horizontal swipeable for all screens) */}
-      <nav className="bg-slate-950/80 border-t border-slate-800/80 overflow-x-auto no-scrollbar scroll-smooth">
+      <nav aria-label="Módulos del sistema; desliza horizontalmente para ver todos" className="modules-horizontal-scroll bg-slate-950/95 border-t border-slate-800/80 overflow-x-auto scroll-smooth" tabIndex={0}>
         <div className="max-w-7xl mx-auto px-2 sm:px-4 flex space-x-1 py-1 min-w-max">
           {tabs.map(tab => {
             const Icon = tab.icon;

@@ -30,6 +30,36 @@
   scrollbar-width: none;
 }
 
+/* Barra horizontal visible para navegar por todos los módulos, con ratón o tacto. */
+.modules-horizontal-scroll {
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: thin;
+  scrollbar-color: #64748b #0f172a;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x;
+}
+.modules-horizontal-scroll::-webkit-scrollbar {
+  height: 9px;
+}
+.modules-horizontal-scroll::-webkit-scrollbar-track {
+  background: #0f172a;
+  border-top: 1px solid #334155;
+}
+.modules-horizontal-scroll::-webkit-scrollbar-thumb {
+  background: #64748b;
+  border: 2px solid #0f172a;
+  border-radius: 999px;
+}
+.modules-horizontal-scroll::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+.modules-horizontal-scroll:focus-visible {
+  outline: 2px solid #34d399;
+  outline-offset: -2px;
+}
+
 @media print {
   @page {
     size: letter;

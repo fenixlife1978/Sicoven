@@ -1,8 +1,10 @@
-const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
+const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
+let licenseRecheckTimer = null;
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({ salt, hash: crypto.scryptSync(password, salt, 64).toString('hex') });
 const verifyPassword = (password, salt, expected) => { try { const actual = crypto.scryptSync(password, salt, 64); const target = Buffer.from(expected, 'hex'); return actual.length === target.length && crypto.timingSafeEqual(actual, target); } catch { return false; } };
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
@@ -36,11 +38,100 @@ function openDatabase() {
     );
   `);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+  db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, offline_token TEXT, offline_until TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
+  if (!db.prepare('SELECT id FROM license_state WHERE id=1').get()) db.prepare('INSERT INTO license_state(id,installation_id,status) VALUES(1,?,?)').run(crypto.randomUUID(),'unlicensed');
   const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
   if (count === 0) { const credential = hashPassword('Admin123'); db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)').run('admin',credential.hash,credential.salt,'admin'); db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_created',JSON.stringify({username:'admin'})); }
   ensureDemoUsageSchema(db);
   migrateLegacyDemoUsage(db);
 }
+
+function readLicenseRow() {
+  return db.prepare('SELECT * FROM license_state WHERE id=1').get();
+}
+function licenseView(row = readLicenseRow()) {
+  if (!row) return { authorized: false, needsActivation: true, status: 'unlicensed', message: 'Active SICOVEN con una clave de licencia.' };
+  const validOffline = Boolean(row.offline_until && Date.parse(row.offline_until) > Date.now());
+  const authorized = ['active','offline'].includes(String(row.status)) && validOffline;
+  return {
+    authorized,
+    needsActivation: !row.encrypted_key,
+    status: authorized ? (row.status === 'offline' ? 'offline' : 'active') : String(row.status || 'unlicensed'),
+    customer: row.customer || '',
+    product: row.product || '',
+    offlineUntil: row.offline_until || null,
+    lastCheckedAt: row.last_checked_at || null,
+    message: authorized ? (row.status === 'offline' ? 'Sin conexión. Se mantiene la autorización offline hasta su vencimiento.' : 'Licencia validada.') : (row.message || (['active','offline','expired'].includes(String(row.status)) ? 'La autorización offline venció. Conéctese a internet para revalidar.' : 'Active SICOVEN con una clave de licencia.'))
+  };
+}
+function decryptLicenseKey(row) {
+  if (!row?.encrypted_key) return '';
+  if (!safeStorage.isEncryptionAvailable()) throw new Error('El almacenamiento seguro de Windows no está disponible.');
+  return safeStorage.decryptString(Buffer.from(row.encrypted_key, 'base64'));
+}
+async function callLicenseServer(key, installationId) {
+  const response = await fetch(LICENSE_API, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'accept': 'application/json' },
+    body: JSON.stringify({ licenseKey: key, installationId, deviceLabel: (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Equipo SICOVEN').slice(0,120) }),
+    signal: AbortSignal.timeout(8000)
+  });
+  const result = await response.json().catch(() => ({}));
+  return { response, result };
+}
+async function activateLicense(keyInput) {
+  const key = String(keyInput || '').trim();
+  if (!key || key.length > 120 || !/^[A-Za-z0-9-]+$/.test(key)) return { ok: false, message: 'Introduce una clave de licencia válida.' };
+  if (!safeStorage.isEncryptionAvailable()) return { ok: false, message: 'Windows no permite almacenar la clave de forma segura. No se guardó la licencia.' };
+  const row = readLicenseRow();
+  try {
+    const { response, result } = await callLicenseServer(key, row.installation_id);
+    if (!response.ok || !result.ok || !result.license?.offlineToken) return { ok: false, message: result.error || 'El CRM no autorizó esta licencia.' };
+    const days = Math.max(1, Math.min(30, Number(result.license.offlineValidDays || 7)));
+    const offlineUntil = new Date(Date.now() + days * 86400000).toISOString();
+    const encryptedKey = safeStorage.encryptString(key).toString('base64');
+    db.prepare("UPDATE license_state SET encrypted_key=?,offline_token=?,offline_until=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
+      .run(encryptedKey, result.license.offlineToken, offlineUntil, String(result.license.id || ''), String(result.license.customer || ''), String(result.license.product || ''), new Date().toISOString());
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_activated', JSON.stringify({ licenseId: result.license.id, installationId: row.installation_id, offlineUntil }));
+    return { ok: true, license: licenseView() };
+  } catch (error) {
+    return { ok: false, message: 'No se pudo conectar al CRM. La activación inicial requiere internet.' };
+  }
+}
+async function revalidateLicense() {
+  const row = readLicenseRow();
+  if (!row?.encrypted_key) return licenseView(row);
+  let key;
+  try {
+    key = decryptLicenseKey(row);
+    const { response, result } = await callLicenseServer(key, row.installation_id);
+    const checkedAt = new Date().toISOString();
+    if (response.ok && result.ok && result.license?.offlineToken) {
+      const days = Math.max(1, Math.min(30, Number(result.license.offlineValidDays || 7)));
+      const offlineUntil = new Date(Date.now() + days * 86400000).toISOString();
+      db.prepare("UPDATE license_state SET offline_token=?,offline_until=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
+        .run(result.license.offlineToken, offlineUntil, String(result.license.id || row.license_id || ''), String(result.license.customer || row.customer || ''), String(result.license.product || row.product || ''), checkedAt);
+      return licenseView();
+    }
+    if (response.status === 403 || response.status === 409 || response.status === 400) {
+      const message = String(result.error || 'El CRM rechazó la licencia. Contacte al proveedor.');
+      db.prepare("UPDATE license_state SET status='revoked',last_checked_at=?,message=? WHERE id=1").run(checkedAt, message);
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_server_rejected', JSON.stringify({ status: response.status, message }));
+      return licenseView();
+    }
+    throw new Error('El CRM no está disponible para revalidar.');
+  } catch {
+    const current = readLicenseRow();
+    if (current.status === 'revoked') return licenseView(current);
+    if (current.offline_until && Date.parse(current.offline_until) > Date.now() && current.status !== 'revoked') {
+      db.prepare("UPDATE license_state SET status='offline',message=?,last_checked_at=? WHERE id=1").run('Sin conexión: autorización offline temporal.', new Date().toISOString());
+      return licenseView();
+    }
+    db.prepare("UPDATE license_state SET status='expired',message=?,last_checked_at=? WHERE id=1").run('No se pudo revalidar y venció el plazo offline. Conéctese a internet.', new Date().toISOString());
+    return licenseView();
+  }
+}
+
 function createWindow() {
   const iconIco = path.join(__dirname, '..', 'build', 'sicoven.ico');
   const iconPng = path.join(__dirname, '..', 'build', 'sicoven.png');
@@ -80,9 +171,18 @@ function createWindow() {
     return { action: 'deny' };
   });
 }
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   openDatabase();
+  ipcMain.handle('sicoven:license-status', () => licenseView());
+  ipcMain.handle('sicoven:license-activate', async (_event, key) => activateLicense(key));
+  ipcMain.handle('sicoven:license-revalidate', async () => {
+    const status = await revalidateLicense();
+    if (!status.authorized) { sessions.clear(); BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status)); }
+    return status;
+  });
   ipcMain.handle('sicoven:auth-login', (_event, credentials) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) return {ok:false,message:licensing.message || 'Licencia no autorizada.'};
     const username = normalizeUsername(credentials?.username); const password = String(credentials?.password || '');
     if (!username || !password || username.length > 128 || password.length > 256) return {ok:false,message:'Usuario o contraseña incorrectos.'};
     const user = db.prepare('SELECT id,username,password_hash,password_salt,role,is_seed FROM auth_users WHERE username=?').get(username);
@@ -108,6 +208,8 @@ app.whenReady().then(() => {
     try { return JSON.parse(row.state_json); } catch { return null; }
   });
   ipcMain.handle('sicoven:save-state', (_event, state) => {
+    const licensing = licenseView();
+    if (!licensing.authorized && !licensing.needsActivation) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
@@ -130,14 +232,20 @@ app.whenReady().then(() => {
   });
   ipcMain.on('sicoven:demo-consume-action', (event, moduleKey) => {
     try {
+      if (!licenseView().authorized) throw new Error('Licencia no autorizada.');
       // El límite comercial se fija en el proceso principal; el renderer no puede elevarlo.
       event.returnValue = consumeDemoAction(db, moduleKey, 10);
     } catch {
       event.returnValue = { ok: false, error: 'No se pudo registrar la acción demo en SQLite' };
     }
   });
+  await revalidateLicense();
   createWindow();
+  licenseRecheckTimer = setInterval(async () => {
+    const status = await revalidateLicense();
+    if (!status.authorized) { sessions.clear(); BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status)); }
+  }, 60 * 60 * 1000);
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
-app.on('before-quit', () => { if (db) { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); db = null; } });
+app.on('before-quit', () => { if (licenseRecheckTimer) clearInterval(licenseRecheckTimer); if (db) { db.pragma('wal_checkpoint(TRUNCATE)'); db.close(); db = null; } });

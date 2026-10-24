@@ -341,7 +341,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (window.sicovenStore) {
           const saved = await window.sicovenStore.load();
           if (cancelled) return;
-          if (saved && typeof saved === 'object') {
+          const savedRecord = saved && typeof saved === 'object' ? saved as Record<string, any> : null;
+          // El instalador COMPLETO nunca debe heredar el conjunto de datos de demostración.
+          // Solo se reconoce la muestra incorporada por su firma completa (dos empresas y
+          // registros de ejemplo conocidos), para no borrar datos reales de usuarios.
+          const isBundledDemoState = !IS_DEMO && Boolean(
+            savedRecord &&
+            Array.isArray(savedRecord.companies) &&
+            savedRecord.companies.length === 2 &&
+            savedRecord.companies.some((c: any) => c?.id === 'comp-1' && c?.name === ('DISTRIBUIDORA LOS ' + 'ANDES, C.A.')) &&
+            savedRecord.companies.some((c: any) => c?.id === 'comp-2' && c?.name === ('SERVICIOS TECNOLÓGICOS DEL ' + 'CARIBE, S.A.')) &&
+            Array.isArray(savedRecord.purchases) && savedRecord.purchases.some((p: any) => p?.id === 'pur-1') &&
+            Array.isArray(savedRecord.sales) && savedRecord.sales.some((sale: any) => sale?.id === 'sale-1') &&
+            Array.isArray(savedRecord.journalEntries) && savedRecord.journalEntries.some((entry: any) => entry?.id === 'entry-apertura-1')
+          );
+          if (isBundledDemoState) {
+            const cleanState = {
+              ...(savedRecord || {}),
+              companies: [], currentCompanyId: '', accounts: DEFAULT_CHART_OF_ACCOUNTS,
+              journalEntries: [], purchases: [], sales: [], products: [], movements: [],
+              vatVouchers: [], islrVouchers: [], bankAccounts: [], bankStatementMovements: [],
+              demoUsage: {}
+            };
+            await window.sicovenStore.save(cleanState);
+            setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
+            setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]);
+            setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]);
+            setDemoUsage({});
+          } else if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
             if (Array.isArray(saved.accounts)) setAccounts(saved.accounts as Account[]);
