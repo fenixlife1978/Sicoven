@@ -251,7 +251,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       )}
 
       {/* Navigation Tabs Bar (Horizontal swipeable for all screens) */}
-      <nav className="bg-slate-950/80 border-t border-slate-800/80 overflow-x-auto no-scrollbar scroll-smooth">
+      <nav aria-label="Módulos del sistema; desliza horizontalmente para ver todos" className="modules-horizontal-scroll bg-slate-950/95 border-t border-slate-800/80 overflow-x-auto scroll-smooth" tabIndex={0}>
         <div className="max-w-7xl mx-auto px-2 sm:px-4 flex space-x-1 py-1 min-w-max">
           {tabs.map(tab => {
             const Icon = tab.icon;
