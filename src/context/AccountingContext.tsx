@@ -631,7 +631,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         totalAmountUsd: Number(document.totalAmountUsd || 0),
         taxableBaseUsd: Number(document.taxableBaseUsd || 0),
         vatAmountUsd: Number(document.vatAmountUsd || 0),
-        exemptAmountUsd: Number(document.exemptAmountBs || 0) / invoiceRate,
+        exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0)),
         invoiceRate,
         settlementRate: draft.bcvRate,
         settledAmountUsd: Math.round(draft.amountUsd * 100) / 100,
