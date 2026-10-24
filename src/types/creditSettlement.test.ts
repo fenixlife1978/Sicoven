@@ -47,6 +47,16 @@ describe('credit settlement balances and validation', () => {
     assert.match(validateCreditSettlement({ ...draft, amountUsd: 101 }, 100) || '', /supera el saldo/);
   });
 
+  it('fails closed when outstanding balance is invalid', () => {
+    assert.match(validateCreditSettlement(draft, Number.NaN) || '', /saldo pendiente.*no es válido/i);
+    assert.match(validateCreditSettlement(draft, -0.01) || '', /saldo pendiente.*no es válido/i);
+  });
+
+  it('allows a final partial payment within rounding tolerance but never a material overpayment', () => {
+    assert.equal(validateCreditSettlement({ ...draft, amountUsd: 75 }, 75), null);
+    assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02 }, 75) || '', /supera el saldo/);
+  });
+
   it('rejects invalid rate, date and non-positive amounts', () => {
     assert.ok(validateCreditSettlement({ ...draft, bcvRate: 0 }, 100));
     assert.ok(validateCreditSettlement({ ...draft, settlementDate: '2026-99-99' }, 100));
