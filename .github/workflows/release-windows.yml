@@ -53,7 +53,10 @@ jobs:
         run: |
           $bundles = Get-ChildItem -Path dist/assets -Filter '*.js' -File
           if (-not $bundles) { throw 'No se generaron bundles JavaScript para SICOVEN completo.' }
-          if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'DISTRIBUIDORA LOS ANDES, C.A.' -Quiet) {
+          # El nombre de la empresa aparece ahora en el código de limpieza de datos heredados.
+          # Comprobar un dato exclusivo del registro semilla evita falsos positivos sin relajar
+          # la validación de que la edición completa no incluya los datos de muestra.
+          if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'administracion@losandesdist.com.ve' -Quiet) {
             throw 'El bundle completo contiene datos de ejemplo; no se publicará este instalador.'
           }
       - name: Package full Windows installer
