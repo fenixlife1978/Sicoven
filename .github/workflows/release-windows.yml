@@ -5,8 +5,8 @@ on:
       - 'main'
   push:
     branches:
+      - 'main'
       - 'sqlite-desktop-release'
-      - 'licencias-crm-activacion'
     tags:
       - 'v*'
   workflow_dispatch:
