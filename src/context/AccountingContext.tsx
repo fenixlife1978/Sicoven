@@ -622,6 +622,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.');
     }
     const fxDifferenceBs = Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100;
+    const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+    // La propuesta fiscal es informativa: nunca debe impedir ni dejar a medias
+    // el registro contable válido de una liquidación histórica.
+    let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
+    try {
+      fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+        totalAmountUsd: Number(document.totalAmountUsd || 0),
+        taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+        vatAmountUsd: Number(document.vatAmountUsd || 0),
+        exemptAmountUsd: Number(document.exemptAmountBs || 0) / invoiceRate,
+        invoiceRate,
+        settlementRate: draft.bcvRate,
+        settledAmountUsd: amountUsd,
+        mode: fiscalMode
+      });
+    } catch {
+      fxFiscalAdjustmentProposal = {
+        direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
+        deltaExemptBs: 0, deltaTotalBs: 0,
+        explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
+      };
+    }
     const operationKey = [
       currentCompany.id, draft.documentId, kind, draft.settlementDate,
       Math.round(draft.amountUsd * 100), Math.round(draft.amountBs * 100),
@@ -683,17 +705,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       settlementInFlightRef.current.delete(operationKey);
       throw error;
     }
-    const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
-    const fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
-      totalAmountUsd: Number(document.totalAmountUsd || 0),
-      taxableBaseUsd: Number(document.taxableBaseUsd || 0),
-      vatAmountUsd: Number(document.vatAmountUsd || 0),
-      exemptAmountUsd: Number(document.exemptAmountBs || 0) / invoiceRate,
-      invoiceRate,
-      settlementRate: draft.bcvRate,
-      settledAmountUsd: amountUsd,
-      mode: fiscalMode
-    });
     const settlement: CreditSettlement = {
       ...draft,
       id: `settlement-${currentCompany.id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
