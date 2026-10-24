@@ -1,0 +1,26 @@
+import React, { useMemo, useState } from 'react';
+import { useAccounting } from '../../context/AccountingContext';
+import { CreditSettlementModal } from '../shared/CreditSettlementModal';
+
+const money=(n:number,currency='Bs.')=>`${currency} ${Number(n||0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
+const today=()=>new Date().toISOString().slice(0,10);
+
+export const CuentasPorCobrarView: React.FC = () => {
+ const { sales, getCreditBalance, currentCompany }=useAccounting();
+ const [query,setQuery]=useState('');
+ const [selected,setSelected]=useState<(typeof sales)[number]|null>(null);
+ const rows=useMemo(()=>sales.filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
+  const q=query.trim().toLowerCase();
+  return !q || [p.customerName,p.customerRif,p.invoiceNumber,p.controlNumber].some(v=>String(v||'').toLowerCase().includes(q));
+ }).map(p=>({p,b:getCreditBalance(p.id,'SALE_COLLECTION')})).sort((a,b)=>String(a.p.dueDate||'9999').localeCompare(String(b.p.dueDate||'9999'))),[sales,query,getCreditBalance]);
+ const open=rows.filter(r=>r.b.outstandingUsd>0.005);
+ const overdue=open.filter(r=>r.p.dueDate && r.p.dueDate<today());
+ const total=open.reduce((s,r)=>s+r.b.outstandingUsd,0);
+ return <section className="space-y-5">
+  <header className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between"><div><p className="text-xs font-bold uppercase tracking-widest text-sky-700">Tesorería · Clientes</p><h1 className="text-2xl font-bold text-slate-900">Cuentas por cobrar (CxC)</h1><p className="text-sm text-slate-500">Facturas de venta a crédito; registra cobros parciales o totales sin alterar el documento original.</p></div><input aria-label="Buscar cliente o factura" value={query} onChange={e=>setQuery(e.target.value)} placeholder="Buscar cliente, RIF o factura…" className="w-full sm:max-w-xs rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"/></header>
+  <div className="grid grid-cols-1 gap-3 sm:grid-cols-3"><article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Saldo pendiente USD</p><p className="text-2xl font-bold">{money(total,'USD')}</p></article><article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Facturas pendientes</p><p className="text-2xl font-bold">{open.length}</p></article><article className="rounded-xl border bg-white p-4"><p className="text-xs text-slate-500">Vencidas</p><p className="text-2xl font-bold text-rose-700">{overdue.length}</p></article></div>
+  <div className="overflow-x-auto rounded-xl border bg-white"><table className="w-full min-w-[820px] text-left text-sm"><thead className="bg-slate-50 text-xs uppercase text-slate-500"><tr><th className="p-3">Vencimiento</th><th className="p-3">Cliente</th><th className="p-3">Factura</th><th className="p-3">Original USD</th><th className="p-3">Cobrado USD</th><th className="p-3">Saldo USD</th><th className="p-3">Acción</th></tr></thead><tbody>{rows.map(({p,b})=><tr key={p.id} className="border-t"><td className="p-3">{p.dueDate||'—'}{p.dueDate&&p.dueDate<today()&&b.outstandingUsd>0.005?<span className="ml-2 rounded bg-rose-100 px-2 py-1 text-xs text-rose-700">Vencida</span>:null}</td><td className="p-3"><div className="font-semibold">{p.customerName}</div><div className="text-xs text-slate-500">{p.customerRif}</div></td><td className="p-3">{p.invoiceNumber||'—'}</td><td className="p-3">{money(p.totalAmountUsd,'USD')}</td><td className="p-3">{money(b.settledAmountUsd,'USD')}</td><td className="p-3 font-bold">{money(b.outstandingUsd,'USD')}</td><td className="p-3">{b.outstandingUsd>0.005?<button onClick={()=>setSelected(p)} className="rounded-lg bg-sky-700 px-3 py-2 font-semibold text-white hover:bg-sky-800">Registrar cobro</button>:<span className="text-xs text-emerald-700">Cobrada</span>}</td></tr>)}</tbody></table>{rows.length===0&&<p className="p-8 text-center text-sm text-slate-500">No hay facturas a crédito que coincidan. Registra la condición de pago como Crédito en el documento de venta.</p>}</div>
+  <p className="text-xs text-slate-500">Empresa activa: {currentCompany.name}. El saldo se calcula en USD y su equivalente en Bs se valora a la tasa original de la factura. La diferencia cambiaria se propone para revisión contable; no emite notas fiscales automáticamente.</p>
+  {selected&&<CreditSettlementModal documentId={selected.id} documentNumber={selected.invoiceNumber} partyName={selected.customerName} kind="SALE_COLLECTION" onClose={()=>setSelected(null)}/>}
+ </section>;
+};
