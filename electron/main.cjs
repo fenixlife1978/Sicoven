@@ -294,6 +294,8 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('sicoven:load-state', () => {
+    // No exponer datos contables si la instalación no tiene licencia autorizada.
+    if (!licenseView().authorized) return null;
     const row = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
     if (!row) return null;
     try { return JSON.parse(row.state_json); } catch { return null; }
@@ -301,7 +303,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:save-state', (_event, state) => {
     const licensing = licenseView();
-    if (!licensing.authorized && !licensing.needsActivation) throw new Error(licensing.message || 'Licencia no autorizada.');
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
