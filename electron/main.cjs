@@ -154,8 +154,14 @@ async function revalidateLicense() {
     }
     if ([400, 403, 409].includes(response.status)) {
       const message = String(result.error || 'El CRM no autorizó esta licencia.');
-      db.prepare("UPDATE license_state SET status='revoked',last_checked_at=?,message=? WHERE id=1").run(checkedAt, message);
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_server_rejected', JSON.stringify({ status: response.status, message }));
+      // La clave almacenada es la licencia anterior. Si el CRM confirma que
+      // ya no está autorizada, conservarla como credencial activa bloquea la
+      // recuperación con una nueva clave emitida para el mismo equipo.
+      // Se elimina solo el secreto local de licencia; nunca los datos SQLite.
+      db.prepare("UPDATE license_state SET encrypted_key=NULL,license_id=NULL,status='unlicensed',last_checked_at=?,message=? WHERE id=1")
+        .run(checkedAt, `La licencia anterior fue revocada. Introduce la nueva clave para activar este equipo. Detalle del CRM: ${message}`);
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('license_server_rejected', JSON.stringify({ status: response.status, message, installationId: row.installation_id, recovery: 'new-license-required' }));
       return licenseView();
     }
     throw new Error('El CRM no está disponible para revalidar.');
