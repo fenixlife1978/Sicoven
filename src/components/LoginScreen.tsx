@@ -79,7 +79,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
           height: 100vh;
           height: 100dvh;
           overflow: hidden;
-          background-image: url("/sicoven-login-reference.png");
+          background-image: url("./sicoven-login-reference.png");
           background-repeat: no-repeat;
           background-position: center center;
           background-size: 100% 100%;
