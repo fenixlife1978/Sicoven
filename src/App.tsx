@@ -103,7 +103,7 @@ const AppContent: React.FC = () => {
           <div className="mx-auto max-w-7xl px-3 py-2 text-center text-xs sm:text-sm font-bold leading-relaxed">
             <div className="flex flex-col items-center gap-2">
               <div className="flex flex-wrap items-center justify-center gap-3">
-                <img src="/sicoven-logo-horizontal.svg" alt="Sicoven · Sistema contable" className="h-10 sm:h-12 w-auto max-w-[min(70vw,280px)] object-contain" />
+                <img src="./sicoven-logo-horizontal.svg" alt="Sicoven · Sistema contable" className="h-10 sm:h-12 w-auto max-w-[min(70vw,280px)] object-contain" />
                 <span className="inline-flex items-center rounded-md border border-amber-700 bg-slate-950 px-3 py-1.5 text-[11px] sm:text-xs font-extrabold tracking-wider text-amber-300">VERSIÓN DEMO</span>
               </div>
               <p>Máximo 10 acciones por módulo. Uso por módulo: Empresas {demoUsage.empresa || 0}/10 · Diario {demoUsage.diario || 0}/10 · Compras {demoUsage.compras || 0}/10 · Ventas {demoUsage.ventas || 0}/10 · Inventario {demoUsage.inventario || 0}/10 · Catálogo {demoUsage.catalogo || 0}/10 · Retenciones {demoUsage.retenciones || 0}/10 · Configuración {demoUsage.configuracion || 0}/10 · Conciliación {demoUsage.conciliacion || 0}/10.</p>
