@@ -14,6 +14,7 @@ type LicenseStatus = {
 export function LicenseGate({ onReady }: { onReady: () => void }) {
   const [key, setKey] = useState('');
   const [status, setStatus] = useState<LicenseStatus | null>(null);
+  const [checking, setChecking] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
@@ -25,10 +26,14 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
       .then((result) => {
         if (!mounted) return;
         setStatus(result);
+        setChecking(false);
         if (result.authorized) onReady();
       })
       .catch(() => {
-        if (mounted) setError('No se pudo consultar la licencia local. Cierre y vuelva a abrir SICOVEN.');
+        if (mounted) {
+          setError('No se pudo consultar la licencia local. Cierre y vuelva a abrir SICOVEN.');
+          setChecking(false);
+        }
       });
     return () => {
       mounted = false;
@@ -77,13 +82,24 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
     }
   };
 
+  if (checking && !status) {
+    return (
+      <main className="min-h-screen bg-[#071e3b] flex items-center justify-center p-4">
+        <section role="status" aria-live="polite" className="flex items-center gap-3 rounded-2xl bg-white px-6 py-5 text-slate-700 shadow-xl">
+          <RefreshCw className="h-5 w-5 animate-spin text-emerald-600" />
+          <span>Comprobando licencia de SICOVEN…</span>
+        </section>
+      </main>
+    );
+  }
+
   return (
     <main className="min-h-screen bg-[#071e3b] flex items-center justify-center p-4 sm:p-8">
       <section className="w-full max-w-xl rounded-3xl bg-white p-7 shadow-2xl sm:p-10">
         {/* Brand Header */}
         <div className="mb-6 flex items-center justify-between gap-3 border-b border-slate-100 pb-5">
           <img
-            src="/sicoven-logo-horizontal.svg"
+            src="./sicoven-logo-horizontal.svg"
             alt="SICOVEN"
             className="h-10 w-auto max-w-[200px] object-contain"
           />
