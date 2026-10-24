@@ -19,6 +19,14 @@ const today = () => {
 export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNumber, partyName, kind, onClose }) => {
   const { currentCompany, getCreditBalance, addCreditSettlement, purchases, sales } = useAccounting();
   const document = kind === 'SALE_COLLECTION' ? sales.find(item => item.id === documentId) : purchases.find(item => item.id === documentId);
+  const balance = getCreditBalance(documentId, kind);
+  const [date, setDate] = useState(today());
+  const [rate, setRate] = useState(String(currentCompany.bcvRate || ''));
+  const [usd, setUsd] = useState(balance.outstandingUsd.toFixed(2));
+  const [method, setMethod] = useState<SettlementMethod>('BANK_TRANSFER_BS');
+  const [reference, setReference] = useState('');
+  const [notes, setNotes] = useState('');
+  const [error, setError] = useState('');
   const fiscalMode = document?.fiscalAdjustmentMode || 'REVISION_CONTADOR';
   const fxProposal = useMemo(() => {
     if (!document) return null;
@@ -33,14 +41,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
       });
     } catch { return null; }
   }, [document, rate, usd, fiscalMode]);
-  const balance = getCreditBalance(documentId, kind);
-  const [date, setDate] = useState(today());
-  const [rate, setRate] = useState(String(currentCompany.bcvRate || ''));
-  const [usd, setUsd] = useState(balance.outstandingUsd.toFixed(2));
-  const [method, setMethod] = useState<SettlementMethod>('BANK_TRANSFER_BS');
-  const [reference, setReference] = useState('');
-  const [notes, setNotes] = useState('');
-  const [error, setError] = useState('');
+
   const [saving, setSaving] = useState(false);
   const bs = useMemo(() => Math.round((Number(usd) * Number(rate) + Number.EPSILON) * 100) / 100, [usd, rate]);
   const isSale = kind === 'SALE_COLLECTION';
