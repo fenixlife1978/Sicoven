@@ -14,6 +14,8 @@ import { RetencionesIslrView } from './components/Retenciones/RetencionesIslrVie
 import { CatalogoView } from './components/Catalogo/CatalogoView';
 import { ConfiguracionView } from './components/Configuracion/ConfiguracionView';
 import { ConciliacionBancariaView } from './components/Conciliacion/ConciliacionBancariaView';
+import { CuentasPorPagarView } from './components/CuentasPorPagar/CuentasPorPagarView';
+import { CuentasPorCobrarView } from './components/CuentasPorCobrar/CuentasPorCobrarView';
 import { ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
@@ -63,6 +65,10 @@ const AppContent: React.FC = () => {
         return <ConciliacionBancariaView />;
       case 'compras':
         return <LibroComprasView />;
+      case 'cxp':
+        return <CuentasPorPagarView />;
+      case 'cxc':
+        return <CuentasPorCobrarView />;
       case 'ventas':
         return <LibroVentasView />;
       case 'inventario':
