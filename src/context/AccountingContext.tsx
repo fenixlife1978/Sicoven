@@ -347,8 +347,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const hydrate = async () => {
       try {
         if (window.sicovenStore) {
-          const saved = await window.sicovenStore.load();
+          let saved = await window.sicovenStore.load();
           if (cancelled) return;
+          // Instalaciones que ya guardaron la firma completa de los datos de demostración
+          // en la edición completa se limpian una sola vez. No se toca información real:
+          // deben coincidir las dos empresas de muestra y los registros semilla conocidos.
+          const bundledDemoSignature = !IS_DEMO && saved && typeof saved === 'object'
+            && Array.isArray(saved.companies)
+            && saved.companies.length === 2
+            && saved.companies.some((company: Company) => company.id === 'comp-1' && company.name === 'DISTRIBUIDORA LOS ANDES, C.A.')
+            && saved.companies.some((company: Company) => company.id === 'comp-2' && company.name === 'SERVICIOS TECNOLÓGICOS DEL CARIBE, S.A.')
+            && Array.isArray(saved.purchases) && saved.purchases.some((item: PurchaseRecord) => item.id === 'pur-1' && item.companyId === 'comp-1')
+            && Array.isArray(saved.sales) && saved.sales.some((item: SaleRecord) => item.id === 'sale-1' && item.companyId === 'comp-1')
+            && Array.isArray(saved.journalEntries) && saved.journalEntries.some((item: JournalEntry) => item.id === 'entry-apertura-1');
+          if (bundledDemoSignature) {
+            saved = {
+              companies: [], currentCompanyId: '', accounts: DEFAULT_CHART_OF_ACCOUNTS,
+              journalEntries: [], purchases: [], sales: [], products: [], movements: [],
+              vatVouchers: [], islrVouchers: [], bankAccounts: [], bankStatementMovements: [],
+              creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true,
+              bcvSyncResult: null, demoUsage: {}
+            };
+            await window.sicovenStore.save(saved);
+          }
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
