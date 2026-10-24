@@ -51,17 +51,18 @@ function readLicenseRow() {
 }
 function licenseView(row = readLicenseRow()) {
   if (!row) return { authorized: false, needsActivation: true, status: 'unlicensed', message: 'Active SICOVEN con una clave de licencia.' };
-  const validOffline = Boolean(row.offline_until && Date.parse(row.offline_until) > Date.now());
-  const authorized = ['active','offline'].includes(String(row.status)) && validOffline;
+  const hasKey = Boolean(row.encrypted_key);
+  const authorized = hasKey && String(row.status) === 'active';
   return {
     authorized,
-    needsActivation: !row.encrypted_key,
-    status: authorized ? (row.status === 'offline' ? 'offline' : 'active') : String(row.status || 'unlicensed'),
+    needsActivation: !hasKey,
+    status: String(row.status || 'unlicensed'),
     customer: row.customer || '',
     product: row.product || '',
-    offlineUntil: row.offline_until || null,
     lastCheckedAt: row.last_checked_at || null,
-    message: authorized ? (row.status === 'offline' ? 'Sin conexión. Se mantiene la autorización offline hasta su vencimiento.' : 'Licencia validada.') : (row.message || (['active','offline','expired'].includes(String(row.status)) ? 'La autorización offline venció. Conéctese a internet para revalidar.' : 'Active SICOVEN con una clave de licencia.'))
+    message: authorized
+      ? (row.message || 'Licencia activada. SICOVEN puede trabajar con sus datos locales.')
+      : (row.message || 'Active SICOVEN con una clave de licencia.')
   };
 }
 function decryptLicenseKey(row) {
@@ -86,15 +87,15 @@ async function activateLicense(keyInput) {
   const row = readLicenseRow();
   try {
     const { response, result } = await callLicenseServer(key, row.installation_id);
-    if (!response.ok || !result.ok || !result.license?.offlineToken) return { ok: false, message: result.error || 'El CRM no autorizó esta licencia.' };
-    const days = Math.max(1, Math.min(30, Number(result.license.offlineValidDays || 7)));
-    const offlineUntil = new Date(Date.now() + days * 86400000).toISOString();
+    if (!response.ok || !result.ok || !result.license?.id || result.license?.status !== 'active') {
+      return { ok: false, message: result.error || 'El CRM no autorizó esta licencia.' };
+    }
     const encryptedKey = safeStorage.encryptString(key).toString('base64');
-    db.prepare("UPDATE license_state SET encrypted_key=?,offline_token=?,offline_until=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
-      .run(encryptedKey, result.license.offlineToken, offlineUntil, String(result.license.id || ''), String(result.license.customer || ''), String(result.license.product || ''), new Date().toISOString());
-    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_activated', JSON.stringify({ licenseId: result.license.id, installationId: row.installation_id, offlineUntil }));
+    db.prepare("UPDATE license_state SET encrypted_key=?,offline_token=NULL,offline_until=NULL,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
+      .run(encryptedKey, String(result.license.id), String(result.license.customer || ''), String(result.license.product || ''), new Date().toISOString());
+    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_activated', JSON.stringify({ licenseId: result.license.id, installationId: row.installation_id }));
     return { ok: true, license: licenseView() };
-  } catch (error) {
+  } catch {
     return { ok: false, message: 'No se pudo conectar al CRM. La activación inicial requiere internet.' };
   }
 }
@@ -106,15 +107,13 @@ async function revalidateLicense() {
     key = decryptLicenseKey(row);
     const { response, result } = await callLicenseServer(key, row.installation_id);
     const checkedAt = new Date().toISOString();
-    if (response.ok && result.ok && result.license?.offlineToken) {
-      const days = Math.max(1, Math.min(30, Number(result.license.offlineValidDays || 7)));
-      const offlineUntil = new Date(Date.now() + days * 86400000).toISOString();
-      db.prepare("UPDATE license_state SET offline_token=?,offline_until=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
-        .run(result.license.offlineToken, offlineUntil, String(result.license.id || row.license_id || ''), String(result.license.customer || row.customer || ''), String(result.license.product || row.product || ''), checkedAt);
+    if (response.ok && result.ok && result.license?.id && result.license?.status === 'active') {
+      db.prepare("UPDATE license_state SET license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
+        .run(String(result.license.id || row.license_id || ''), String(result.license.customer || row.customer || ''), String(result.license.product || row.product || ''), checkedAt);
       return licenseView();
     }
-    if (response.status === 403 || response.status === 409 || response.status === 400) {
-      const message = String(result.error || 'El CRM rechazó la licencia. Contacte al proveedor.');
+    if ([400, 403, 409].includes(response.status)) {
+      const message = String(result.error || 'El CRM no autorizó esta licencia.');
       db.prepare("UPDATE license_state SET status='revoked',last_checked_at=?,message=? WHERE id=1").run(checkedAt, message);
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_server_rejected', JSON.stringify({ status: response.status, message }));
       return licenseView();
@@ -122,13 +121,14 @@ async function revalidateLicense() {
     throw new Error('El CRM no está disponible para revalidar.');
   } catch {
     const current = readLicenseRow();
-    if (current.status === 'revoked') return licenseView(current);
-    if (current.offline_until && Date.parse(current.offline_until) > Date.now() && current.status !== 'revoked') {
-      db.prepare("UPDATE license_state SET status='offline',message=?,last_checked_at=? WHERE id=1").run('Sin conexión: autorización offline temporal.', new Date().toISOString());
+    // Una caída de internet nunca impone límites de uso a una licencia ya activada.
+    if (current.encrypted_key && current.status === 'active') {
+      db.prepare("UPDATE license_state SET message=?,last_checked_at=? WHERE id=1")
+        .run('Licencia activada. Se verificará con el CRM cuando haya conexión.', new Date().toISOString());
       return licenseView();
     }
-    db.prepare("UPDATE license_state SET status='expired',message=?,last_checked_at=? WHERE id=1").run('No se pudo revalidar y venció el plazo offline. Conéctese a internet.', new Date().toISOString());
-    return licenseView();
+    if (current.status === 'revoked') return licenseView(current);
+    return licenseView(current);
   }
 }
 
