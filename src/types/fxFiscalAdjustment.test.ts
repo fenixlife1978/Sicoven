@@ -19,3 +19,13 @@ test('no decide por sí solo cuando requiere revisión del contador',()=>{
  assert.equal(r.direction,'REVIEW_REQUIRED'); assert.equal(r.requiresFiscalDocument,false);
 });
 test('rechaza tasa inválida',()=>assert.throws(()=>calculateFxFiscalAdjustment({totalAmountUsd:116,taxableBaseUsd:100,vatAmountUsd:16,exemptAmountUsd:0,invoiceRate:0,settlementRate:920,settledAmountUsd:116,mode:'AJUSTE_BASE_IVA'})));
+
+test('conserva el IVA original y requiere revisión en vez de sugerir nota fiscal automática',()=>{
+ const r=calculateFxFiscalAdjustment({totalAmountUsd:116,taxableBaseUsd:100,vatAmountUsd:16,exemptAmountUsd:0,invoiceRate:880,settlementRate:920,settledAmountUsd:116,mode:'IVA_ORIGINAL_DIF_CAMBIARIA'});
+ assert.equal(r.deltaBaseBs,4000); assert.equal(r.deltaVatBs,0); assert.equal(r.deltaTotalBs,4000);
+ assert.equal(r.direction,'REVIEW_REQUIRED'); assert.equal(r.requiresFiscalDocument,false);
+});
+test('sin diferencial no requiere revisión ni documento fiscal en modo IVA original',()=>{
+ const r=calculateFxFiscalAdjustment({totalAmountUsd:116,taxableBaseUsd:100,vatAmountUsd:16,exemptAmountUsd:0,invoiceRate:880,settlementRate:880,settledAmountUsd:116,mode:'IVA_ORIGINAL_DIF_CAMBIARIA'});
+ assert.equal(r.deltaVatBs,0); assert.equal(r.deltaTotalBs,0); assert.equal(r.direction,'NONE');
+});
