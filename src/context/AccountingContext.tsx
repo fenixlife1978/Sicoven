@@ -578,7 +578,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       ? Number((document as SaleRecord).vatWithheldUsd || 0)
       : Number((document as PurchaseRecord).vatWithheldUsd || 0) + Number((document as PurchaseRecord).islrWithheldUsd || 0);
     const originalAmountBs = Math.max(0, Number(document.totalAmountBs || 0) - withheldBs);
-    const originalAmountUsd = Math.max(0, Number(document.totalAmountUsd || 0) - withheldUsd);
+    const invoiceRate = Number(document.bcvRate) > 0
+      ? Number(document.bcvRate)
+      : (Number(document.totalAmountUsd) > 0 ? Number(document.totalAmountBs) / Number(document.totalAmountUsd) : 0);
+    const originalAmountUsd = withheldUsd > 0
+      ? Math.max(0, Number(document.totalAmountUsd || 0) - withheldUsd)
+      : (withheldBs > 0 && invoiceRate > 0
+        ? Math.round((originalAmountBs / invoiceRate + Number.EPSILON) * 100) / 100
+        : Math.max(0, Number(document.totalAmountUsd || 0)));
     return { originalAmountUsd, originalAmountBs };
   };
 
