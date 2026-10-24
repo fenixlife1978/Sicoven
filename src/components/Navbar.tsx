@@ -119,7 +119,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               {/* Company Dropdown Menu */}
               {companyDropdownOpen && (
                 <div
-                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-850 rounded-xl shadow-2xl border border-slate-700 py-2 z-50 divide-y divide-slate-800"
+                  className="absolute right-0 mt-2 w-72 sm:w-80 bg-slate-900 text-white rounded-xl shadow-2xl border border-slate-600 py-2 z-[60] divide-y divide-slate-700 ring-1 ring-black/30"
                   onClick={() => setCompanyDropdownOpen(false)}
                 >
                   <div className="px-3 py-2 text-[11px] font-semibold text-slate-400 uppercase tracking-wider">
