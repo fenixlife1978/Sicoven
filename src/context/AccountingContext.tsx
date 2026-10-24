@@ -659,7 +659,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
     const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
     const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
-    if (!cashAccount || !controlAccount) throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
+    if (!cashAccount || !controlAccount) {
+      settlementInFlightRef.current.delete(operationKey);
+      throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
+    }
     const amountBs = actualAmountBs;
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
     const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
