@@ -90,6 +90,7 @@ export function validateCreditSettlement(
       parsedDate.getUTCMonth() !== month - 1 ||
       parsedDate.getUTCDate() !== day) return 'La fecha de liquidación no es válida.';
   if (!Number.isFinite(draft.bcvRate) || draft.bcvRate <= 0) return 'La tasa BCV debe ser mayor que cero.';
+  if (!Number.isFinite(outstandingUsd) || outstandingUsd < 0) return 'El saldo pendiente de la factura no es válido; actualice los datos antes de liquidar.';
   if (!Number.isFinite(draft.amountUsd) || draft.amountUsd <= 0) return 'El abono debe ser mayor que cero.';
   if (draft.amountUsd > outstandingUsd + 0.005) return 'El abono supera el saldo pendiente de la factura.';
   if (!Number.isFinite(draft.amountBs) || draft.amountBs <= 0) return 'El importe efectivamente pagado/cobrado en Bs debe ser mayor que cero.';
