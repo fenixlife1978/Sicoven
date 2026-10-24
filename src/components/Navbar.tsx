@@ -8,6 +8,8 @@ import {
   FileSpreadsheet,
   ShoppingCart,
   TrendingUp,
+  Wallet,
+  HandCoins,
   Package,
   Receipt,
   FileText,
@@ -55,7 +57,9 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'balances', label: 'Balances VEN-NIF', icon: Scale },
     { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
     { id: 'compras', label: 'Libro de Compras', icon: ShoppingCart },
+    { id: 'cxp', label: 'Cuentas por pagar', icon: Wallet },
     { id: 'ventas', label: 'Libro de Ventas', icon: TrendingUp },
+    { id: 'cxc', label: 'Cuentas por cobrar', icon: HandCoins },
     { id: 'inventario', label: 'Inventario', icon: Package },
     { id: 'ret-iva', label: 'Retenciones IVA & TXT', icon: Receipt },
     { id: 'ret-islr', label: 'Retenciones ISLR & XML', icon: FileText },
@@ -101,7 +105,7 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand (New Official Identity) */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
             <img
-              src="/sicoven-logo-horizontal-nav.svg"
+              src="./sicoven-logo-horizontal.svg"
               alt="SICOVEN · Sistema Contable Integral Multiempresas"
               className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
             />
