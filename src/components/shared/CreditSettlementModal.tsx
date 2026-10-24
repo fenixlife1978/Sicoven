@@ -35,7 +35,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
         totalAmountUsd: Number(document.totalAmountUsd || 0),
         taxableBaseUsd: Number(document.taxableBaseUsd || 0),
         vatAmountUsd: Number(document.vatAmountUsd || 0),
-        exemptAmountUsd: Number(document.exemptAmountBs || 0) / (Number(document.bcvRate) || 1),
+        exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0)),
         invoiceRate: Number(document.bcvRate || 0), settlementRate: Number(rate || 0),
         settledAmountUsd: Number(usd || 0), mode: fiscalMode
       });
