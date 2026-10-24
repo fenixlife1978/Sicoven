@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, ShieldCheck, Wifi, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { KeyRound, Wifi, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
 
 type LicenseStatus = {
   authorized: boolean;
@@ -7,7 +7,6 @@ type LicenseStatus = {
   status: string;
   customer?: string;
   product?: string;
-  offlineUntil?: string | null;
   lastCheckedAt?: string | null;
   message?: string;
 };
@@ -61,7 +60,6 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
     } finally { setBusy(false); }
   };
 
-  const offlineUntil = status?.offlineUntil ? new Date(status.offlineUntil).toLocaleString() : '';
 
   return <main className="min-h-screen bg-[#0b1428] flex items-center justify-center p-4 sm:p-8">
     <section className="w-full max-w-xl rounded-3xl bg-white p-7 shadow-2xl sm:p-10">
@@ -70,13 +68,12 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
         <div><h1 className="text-2xl font-bold text-slate-900">Activación de SICOVEN</h1><p className="text-sm text-slate-500">Licencia vinculada a este equipo</p></div>
       </div>
       {status?.authorized ? <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
-        <p className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5" /> Licencia autorizada {status.status === 'offline' ? '(modo offline)' : ''}</p>
+        <p className="flex items-center gap-2 font-bold"><CheckCircle2 className="h-5 w-5" /> Licencia autorizada</p>
         {status.product && <p className="mt-1">Producto: {status.product}</p>}
         {status.customer && <p>Cliente: {status.customer}</p>}
-        {offlineUntil && <p className="mt-1 text-xs">Revalidar antes de: {offlineUntil}</p>}
       </div> : <div className="mb-5 rounded-xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
         <p className="flex items-center gap-2 font-semibold text-slate-800"><Wifi className="h-4 w-4" /> Se requiere internet para la activación inicial</p>
-        <p className="mt-1">Después de activar, SICOVEN puede seguir trabajando localmente dentro del plazo offline autorizado. Al reconectarse, comprobará el estado de la licencia.</p>
+        <p className="mt-1">Después de activar, SICOVEN trabaja con su base SQLite local sin límites por falta de conexión. Cuando internet esté disponible, comprobará el estado de la licencia.</p>
       </div>}
       {status?.message && !status.authorized && <p className="mb-4 rounded-xl bg-amber-50 p-3 text-sm text-amber-800">{status.message}</p>}
       <form onSubmit={activate} className="space-y-4">
