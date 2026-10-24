@@ -38,7 +38,7 @@ function openDatabase() {
     );
   `);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
-  db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, offline_token TEXT, offline_until TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
+  db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
   if (!db.prepare('SELECT id FROM license_state WHERE id=1').get()) db.prepare('INSERT INTO license_state(id,installation_id,status) VALUES(1,?,?)').run(crypto.randomUUID(),'unlicensed');
   const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
   if (count === 0) { const credential = hashPassword('Admin123'); db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)').run('admin',credential.hash,credential.salt,'admin'); db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_created',JSON.stringify({username:'admin'})); }
@@ -91,7 +91,7 @@ async function activateLicense(keyInput) {
       return { ok: false, message: result.error || 'El CRM no autorizó esta licencia.' };
     }
     const encryptedKey = safeStorage.encryptString(key).toString('base64');
-    db.prepare("UPDATE license_state SET encrypted_key=?,offline_token=NULL,offline_until=NULL,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
+    db.prepare("UPDATE license_state SET encrypted_key=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
       .run(encryptedKey, String(result.license.id), String(result.license.customer || ''), String(result.license.product || ''), new Date().toISOString());
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('license_activated', JSON.stringify({ licenseId: result.license.id, installationId: row.installation_id }));
     return { ok: true, license: licenseView() };
