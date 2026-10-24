@@ -79,7 +79,7 @@ export function validateCreditSettlement(
   outstandingUsd: number
 ): string | null {
   if (!draft.documentId.trim()) return 'Debe seleccionar la factura de crédito.';
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draft.settlementDate)) return 'La fecha de liquidación no es válida.';
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.settlementDate)) return 'La fecha de liquidación no es válida.';
   const [year, month, day] = draft.settlementDate.split('-').map(Number);
   const parsedDate = new Date(Date.UTC(year, month - 1, day));
   if (parsedDate.getUTCFullYear() !== year ||

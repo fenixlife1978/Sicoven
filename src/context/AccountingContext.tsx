@@ -59,6 +59,11 @@ interface AccountingContextType {
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
 
+  // Liquidaciones de crédito
+  creditSettlements: CreditSettlement[];
+  getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => CreditBalance;
+  addCreditSettlement: (draft: CreditSettlementDraft) => CreditSettlement;
+
   // Compras
   purchases: PurchaseRecord[];
   addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
@@ -1352,8 +1357,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // debe ser todo-o-nada desde la perspectiva de la interfaz.
       const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
       const settlementIds = new Set<string>();
-      const salesById = new Map(data.sales.map((row: any) => [row.id, row]));
-      const purchasesById = new Map(data.purchases.map((row: any) => [row.id, row]));
+      const salesById = new Map<string, any>(data.sales.map((row: any) => [row.id, row]));
+      const purchasesById = new Map<string, any>(data.purchases.map((row: any) => [row.id, row]));
       if (settlements.some((s: any) => {
         if (!s || typeof s.id !== 'string' || !s.id.trim() || settlementIds.has(s.id) ||
             !companyIds.has(s.companyId) ||

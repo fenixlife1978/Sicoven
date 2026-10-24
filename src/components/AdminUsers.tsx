@@ -21,10 +21,36 @@ interface AdminUsersProps {
   onBack: () => void;
 }
 
+interface AdminUserRecord {
+  id: number;
+  username: string;
+  isSeed: boolean;
+  createdAt: string;
+}
+
+const WEB_ADMINS_STORAGE_KEY = 'sicoven_web_admin_users';
+
+function getWebAdminsFromStorage(): AdminUserRecord[] {
+  try {
+    const raw = localStorage.getItem(WEB_ADMINS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  const defaults: AdminUserRecord[] = [
+    { id: 1, username: 'admin', isSeed: true, createdAt: new Date().toISOString() },
+  ];
+  try {
+    localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(defaults));
+  } catch {}
+  return defaults;
+}
+
 export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
-  const [admins, setAdmins] = useState<
-    Array<{ id: number; username: string; isSeed: boolean; createdAt: string }>
-  >([]);
+  const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
@@ -32,11 +58,16 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
 
   const refresh = async () => {
     try {
-      const r = await window.sicovenStore?.listAdmins(token);
-      if (r?.ok) {
-        setAdmins(r.admins || []);
+      if (window.sicovenStore?.listAdmins) {
+        const r = await window.sicovenStore.listAdmins(token);
+        if (r?.ok) {
+          setAdmins(r.admins || []);
+        } else {
+          setMessage({ text: r?.message || 'No se pudo consultar usuarios administradores.', type: 'error' });
+        }
       } else {
-        setMessage({ text: r?.message || 'No se pudo consultar usuarios administradores.', type: 'error' });
+        // Fallback for Web preview mode
+        setAdmins(getWebAdminsFromStorage());
       }
     } catch {
       setMessage({ text: 'Error al consultar la lista de administradores.', type: 'error' });
@@ -52,11 +83,53 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
     setBusy(true);
     setMessage(null);
 
+    const rawUser = username.trim();
+    const cleanUser = rawUser.replace(/\s+/g, '_');
+
+    if (!cleanUser || cleanUser.length < 3 || cleanUser.length > 32) {
+      setMessage({
+        text: 'El nombre de usuario debe tener entre 3 y 32 caracteres.',
+        type: 'error',
+      });
+      setBusy(false);
+      return;
+    }
+
+    if (!password || password.length < 6) {
+      setMessage({
+        text: 'La contraseña debe tener al menos 6 caracteres.',
+        type: 'error',
+      });
+      setBusy(false);
+      return;
+    }
+
     try {
-      const r = await window.sicovenStore?.createAdmin(token, { username, password });
-      if (!r?.ok) {
-        throw new Error(r?.message || 'No se pudo crear el administrador.');
+      if (window.sicovenStore?.createAdmin) {
+        // Desktop SQLite Authentication
+        const r = await window.sicovenStore.createAdmin(token, {
+          username: cleanUser,
+          password,
+        });
+        if (!r?.ok) {
+          throw new Error(r?.message || 'No se pudo crear el administrador.');
+        }
+      } else {
+        // Web preview mode fallback with localStorage
+        const currentList = getWebAdminsFromStorage();
+        if (currentList.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
+          throw new Error('Ese nombre de usuario ya existe. Elige uno diferente.');
+        }
+        const newRecord: AdminUserRecord = {
+          id: Date.now(),
+          username: cleanUser,
+          isSeed: false,
+          createdAt: new Date().toISOString(),
+        };
+        const updatedList = [...currentList, newRecord];
+        localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(updatedList));
       }
+
       setUsername('');
       setPassword('');
       setMessage({ text: 'Administrador creado correctamente.', type: 'success' });
@@ -76,11 +149,19 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
       return;
     }
     try {
-      const r = await window.sicovenStore?.deleteSeedAdmin(token);
-      if (r?.ok) {
-        setMessage({ text: 'Administrador semilla eliminado con éxito.', type: 'success' });
+      if (window.sicovenStore?.deleteSeedAdmin) {
+        const r = await window.sicovenStore.deleteSeedAdmin(token);
+        if (r?.ok) {
+          setMessage({ text: 'Administrador semilla eliminado con éxito.', type: 'success' });
+        } else {
+          setMessage({ text: r?.message || 'No se pudo eliminar el administrador semilla.', type: 'error' });
+        }
       } else {
-        setMessage({ text: r?.message || 'No se pudo eliminar el administrador semilla.', type: 'error' });
+        // Web preview mode fallback
+        const currentList = getWebAdminsFromStorage();
+        const filtered = currentList.filter((a) => !a.isSeed);
+        localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(filtered));
+        setMessage({ text: 'Administrador semilla eliminado con éxito.', type: 'success' });
       }
       await refresh();
     } catch {
@@ -185,14 +266,13 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                   type="text"
                   minLength={3}
                   maxLength={32}
-                  pattern="[A-Za-z0-9._-]+"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  placeholder="ej: contador_principal"
+                  placeholder="ej: contador_principal o juan_perez"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  3 a 32 caracteres (letras, números, punto, guion).
+                  3 a 32 caracteres (letras, números, punto, guion o guion bajo).
                 </p>
               </div>
 
@@ -203,15 +283,15 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                 <input
                   required
                   type="password"
-                  minLength={10}
+                  minLength={6}
                   maxLength={256}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Mínimo 10 caracteres"
+                  placeholder="Mínimo 6 caracteres"
                   className="w-full px-3.5 py-2.5 rounded-xl border border-slate-300 text-sm text-slate-900 placeholder-slate-400 focus:border-emerald-500 focus:ring-2 focus:ring-emerald-500/20 outline-none transition"
                 />
                 <p className="text-[11px] text-slate-400 mt-1">
-                  Mínimo 10 caracteres para garantizar seguridad.
+                  Mínimo 6 caracteres (admite letras, números y símbolos).
                 </p>
               </div>
             </div>
@@ -270,7 +350,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
                             Semilla inicial
                           </span>
                         )}
-                        {adm.username === user.username && (
+                        {adm.username.toLowerCase() === user.username.toLowerCase() && (
                           <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200">
                             Tú
                           </span>
