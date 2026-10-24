@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import type { CreditSettlementKind, SettlementMethod } from '../../types/creditSettlement';
+import { calculateFxFiscalAdjustment } from '../../types/fxFiscalAdjustment';
 
 type Props = {
   documentId: string;
@@ -16,7 +17,22 @@ const today = () => {
 };
 
 export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNumber, partyName, kind, onClose }) => {
-  const { currentCompany, getCreditBalance, addCreditSettlement } = useAccounting();
+  const { currentCompany, getCreditBalance, addCreditSettlement, purchases, sales } = useAccounting();
+  const document = kind === 'SALE_COLLECTION' ? sales.find(item => item.id === documentId) : purchases.find(item => item.id === documentId);
+  const fiscalMode = document?.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+  const fxProposal = useMemo(() => {
+    if (!document) return null;
+    try {
+      return calculateFxFiscalAdjustment({
+        totalAmountUsd: Number(document.totalAmountUsd || 0),
+        taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+        vatAmountUsd: Number(document.vatAmountUsd || 0),
+        exemptAmountUsd: Number(document.exemptAmountBs || 0) / (Number(document.bcvRate) || 1),
+        invoiceRate: Number(document.bcvRate || 0), settlementRate: Number(rate || 0),
+        settledAmountUsd: Number(usd || 0), mode: fiscalMode
+      });
+    } catch { return null; }
+  }, [document, rate, usd, fiscalMode]);
   const balance = getCreditBalance(documentId, kind);
   const [date, setDate] = useState(today());
   const [rate, setRate] = useState(String(currentCompany.bcvRate || ''));
@@ -64,6 +80,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
         <label className="block text-xs font-semibold text-slate-700">Importe USD<input required type="number" min="0.01" max={balance.outstandingUsd} step="0.01" value={usd} onChange={e=>setUsd(e.target.value)} className="mt-1 w-full rounded-lg border p-2 text-sm" /></label>
       </div>
       <div className="rounded-lg border border-slate-200 p-3 text-sm"><span className="text-slate-500">Equivalente calculado en Bs. (USD × tasa)</span><strong className="block text-base">{bs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</strong></div>
+      {fxProposal && <div className="rounded-lg border border-indigo-200 bg-indigo-50 p-3 text-sm space-y-1"><strong>Estimación de ajuste cambiario (no es una nota fiscal)</strong><div className="grid grid-cols-2 gap-2"><span>Diferencia base imponible</span><strong>{fxProposal.deltaBaseBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong><span>Diferencia IVA estimada</span><strong>{fxProposal.deltaVatBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong><span>Diferencia total estimada</span><strong>{fxProposal.deltaTotalBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})} Bs.</strong></div><p>{fxProposal.direction === 'DEBIT_NOTE' ? 'Posible nota de débito por evaluar.' : fxProposal.direction === 'CREDIT_NOTE' ? 'Posible nota de crédito por evaluar.' : fxProposal.direction === 'REVIEW_REQUIRED' ? 'Revisión del contador requerida.' : 'No se estima diferencia material.'} {fxProposal.explanation}</p></div>}
       <label className="block text-xs font-semibold text-slate-700">Medio de {isSale ? 'cobro' : 'pago'}<select value={method} onChange={e=>setMethod(e.target.value as SettlementMethod)} className="mt-1 w-full rounded-lg border p-2 text-sm">
         <option value="BANK_TRANSFER_BS">Transferencia bancaria Bs.</option><option value="CASH_BS">Efectivo Bs.</option><option value="BANK_TRANSFER_USD">Transferencia USD</option><option value="CASH_USD">Efectivo USD</option><option value="OTHER">Otro</option>
       </select></label>
