@@ -567,15 +567,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     return newEntry;
   };
 
+  const getCreditPrincipal = (document: SaleRecord | PurchaseRecord, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => {
+    // Las cuentas por cobrar/pagar se reconocen por el neto realmente pendiente:
+    // en ventas se resta la retención de IVA del cliente; en compras, las
+    // retenciones de IVA e ISLR enterables. El asiento original ya usa estos netos.
+    const withheldBs = kind === 'SALE_COLLECTION'
+      ? Number((document as SaleRecord).vatWithheldBs || 0)
+      : Number((document as PurchaseRecord).vatWithheldBs || 0) + Number((document as PurchaseRecord).islrWithheldBs || 0);
+    const withheldUsd = kind === 'SALE_COLLECTION'
+      ? Number((document as SaleRecord).vatWithheldUsd || 0)
+      : Number((document as PurchaseRecord).vatWithheldUsd || 0) + Number((document as PurchaseRecord).islrWithheldUsd || 0);
+    const originalAmountBs = Math.max(0, Number(document.totalAmountBs || 0) - withheldBs);
+    const originalAmountUsd = Math.max(0, Number(document.totalAmountUsd || 0) - withheldUsd);
+    return { originalAmountUsd, originalAmountBs };
+  };
+
   const getCreditBalance = (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT'): CreditBalance => {
     const document = kind === 'SALE_COLLECTION'
       ? sales.find(item => item.id === documentId && item.companyId === currentCompany.id)
       : purchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
+    const principal = getCreditPrincipal(document, kind);
     return calculateCreditBalance(
       documentId,
-      Number(document.totalAmountUsd || 0),
-      Number(document.totalAmountBs || 0),
+      principal.originalAmountUsd,
+      principal.originalAmountBs,
       creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind)
     );
   };
@@ -588,7 +604,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (!document) throw new Error('La factura no existe en la empresa activa.');
     if (document.paymentTerm !== 'CREDITO') throw new Error('Solo se pueden liquidar facturas identificadas como crédito.');
     const prior = creditSettlements.filter(item => item.companyId === currentCompany.id && item.documentId === draft.documentId && item.kind === kind);
-    const balance = calculateCreditBalance(draft.documentId, document.totalAmountUsd, document.totalAmountBs, prior);
+    const principal = getCreditPrincipal(document, kind);
+    const balance = calculateCreditBalance(draft.documentId, principal.originalAmountUsd, principal.originalAmountBs, prior);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
