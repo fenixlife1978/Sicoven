@@ -29,6 +29,7 @@ import {
 import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
+import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 
 interface AccountingContextType {
   companies: Company[];
@@ -682,12 +683,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       settlementInFlightRef.current.delete(operationKey);
       throw error;
     }
+    const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+    const fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+      totalAmountUsd: Number(document.totalAmountUsd || 0),
+      taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+      vatAmountUsd: Number(document.vatAmountUsd || 0),
+      exemptAmountUsd: Number(document.exemptAmountBs || 0) / invoiceRate,
+      invoiceRate,
+      settlementRate: draft.bcvRate,
+      settledAmountUsd: amountUsd,
+      mode: fiscalMode
+    });
     const settlement: CreditSettlement = {
       ...draft,
       id: `settlement-${currentCompany.id}-${Date.now()}-${Math.floor(Math.random() * 100000)}`,
       companyId: currentCompany.id,
       amountBs,
       amountUsd,
+      fxFiscalAdjustmentProposal,
       journalEntryId: entry.id,
       createdAt: new Date().toISOString()
     };
