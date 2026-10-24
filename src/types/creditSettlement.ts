@@ -1,6 +1,8 @@
 export type CreditSettlementKind = 'SALE_COLLECTION' | 'PURCHASE_PAYMENT';
 export type SettlementMethod = 'CASH_BS' | 'CASH_USD' | 'BANK_TRANSFER_BS' | 'BANK_TRANSFER_USD' | 'OTHER';
 
+export interface FxFiscalAdjustmentSnapshot { direction: 'DEBIT_NOTE' | 'CREDIT_NOTE' | 'NONE' | 'REVIEW_REQUIRED'; deltaBaseBs: number; deltaVatBs: number; deltaExemptBs: number; deltaTotalBs: number; explanation: string; }
+
 export interface CreditSettlement {
   id: string;
   companyId: string;
@@ -13,6 +15,8 @@ export interface CreditSettlement {
   method: SettlementMethod;
   reference?: string;
   notes?: string;
+  /** Calculation snapshot only; never represents an issued fiscal note. */
+  fxFiscalAdjustmentProposal?: FxFiscalAdjustmentSnapshot;
   journalEntryId: string;
   createdAt: string;
 }
