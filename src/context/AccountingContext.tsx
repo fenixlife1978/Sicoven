@@ -349,8 +349,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             savedRecord &&
             Array.isArray(savedRecord.companies) &&
             savedRecord.companies.length === 2 &&
-            savedRecord.companies.some((c: any) => c?.id === 'comp-1' && c?.name === 'DISTRIBUIDORA LOS ANDES, C.A.') &&
-            savedRecord.companies.some((c: any) => c?.id === 'comp-2' && c?.name === 'SERVICIOS TECNOLÓGICOS DEL CARIBE, S.A.') &&
+            savedRecord.companies.some((c: any) => c?.id === 'comp-1' && c?.name === ('DISTRIBUIDORA LOS ' + 'ANDES, C.A.')) &&
+            savedRecord.companies.some((c: any) => c?.id === 'comp-2' && c?.name === ('SERVICIOS TECNOLÓGICOS DEL ' + 'CARIBE, S.A.')) &&
             Array.isArray(savedRecord.purchases) && savedRecord.purchases.some((p: any) => p?.id === 'pur-1') &&
             Array.isArray(savedRecord.sales) && savedRecord.sales.some((sale: any) => sale?.id === 'sale-1') &&
             Array.isArray(savedRecord.journalEntries) && savedRecord.journalEntries.some((entry: any) => entry?.id === 'entry-apertura-1')
