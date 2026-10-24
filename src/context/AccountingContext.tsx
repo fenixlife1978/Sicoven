@@ -766,6 +766,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       description: `Compra Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
     });
 
+    // Debe: compras/operaciones exentas. Incluir esta línea evita que las
+    // facturas con monto exento queden descuadradas en el asiento automático.
+    if (purchaseData.exemptAmountBs > 0) {
+      items.push({
+        accountCode: debitAccountCode,
+        accountName: `Compras u operaciones exentas - ${debitAccountName}`,
+        debitBs: purchaseData.exemptAmountBs,
+        creditBs: 0,
+        debitUsd: purchaseData.exemptAmountBs / rate,
+        creditUsd: 0,
+        description: `Monto exento Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
+      });
+    }
+
     // Debe: Crédito Fiscal IVA si aplica
     if (purchaseData.vatAmountBs > 0) {
       items.push({
@@ -966,6 +980,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       creditUsd: saleData.taxableBaseBs / rate,
       description: `Ingreso por venta Fac. ${saleData.invoiceNumber}`
     });
+
+    // Haber: ingresos exentos. Sin esta línea, una venta con monto exento
+    // deja el asiento automático descuadrado frente a CxC y retenciones.
+    if (saleData.exemptAmountBs > 0) {
+      items.push({
+        accountCode: '4.1.1.01',
+        accountName: 'Ingresos por ventas exentas',
+        debitBs: 0,
+        creditBs: saleData.exemptAmountBs,
+        debitUsd: 0,
+        creditUsd: saleData.exemptAmountBs / rate,
+        description: `Ingreso exento por venta Fac. ${saleData.invoiceNumber}`
+      });
+    }
 
     // Haber: Débito Fiscal IVA Ventas
     if (saleData.vatAmountBs > 0) {
