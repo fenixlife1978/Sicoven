@@ -598,9 +598,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const sameMethod = item.method === draft.method;
       const sameRate = Math.round(item.bcvRate * 1000000) === Math.round(draft.bcvRate * 1000000);
       const sameReference = Boolean(normalizedReference && item.reference?.trim().toLocaleLowerCase() === normalizedReference);
-      // A repeated reference is always a duplicate; without reference, use a
-      // stable transaction signature to protect against double submission.
-      return (sameReference && sameDate && sameAmount) ||
+      // La referencia bancaria/transferencia identifica la operación: no se
+      // puede reutilizar para la misma factura aunque cambien fecha o importe.
+      // Sin referencia, usar firma estable para bloquear doble envío idéntico.
+      return sameReference ||
         (!normalizedReference && !item.reference?.trim() && sameDate && sameAmount && sameMethod && sameRate);
     });
     if (duplicate) {
