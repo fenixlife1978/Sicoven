@@ -74,9 +74,9 @@ export const Navbar: React.FC<NavbarProps> = ({
           {/* Logo & Brand (New Official Identity) */}
           <div className="flex items-center gap-2 sm:gap-2.5 flex-shrink-0 min-w-0">
             <img
-              src="/assets/aistudio/sicoven-logo-horizontal-nav.svg"
+              src="./assets/aistudio/sicoven-logo-horizontal-nav.svg"
               alt="SICOVEN · Sistema Contable Integral Multiempresas"
-              className="h-8 sm:h-10 w-auto max-w-[170px] sm:max-w-[220px] object-contain flex-shrink-0"
+              className="h-9 sm:h-11 w-auto max-w-[190px] sm:max-w-[250px] object-contain object-left flex-shrink-0"
             />
             <span className="hidden lg:inline-block text-[9px] font-bold tracking-wider uppercase px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
               VEN-NIF
