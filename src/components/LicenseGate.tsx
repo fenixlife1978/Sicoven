@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Wifi, RefreshCw, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { KeyRound, Wifi, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 type LicenseStatus = {
   authorized: boolean;
