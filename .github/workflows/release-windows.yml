@@ -44,6 +44,8 @@ jobs:
         run: npm install
       - name: Test persistent demo action limits
         run: node scripts/test-demo-usage.cjs
+      - name: Test accounting and credit settlement calculations
+        run: npm test
       - name: Type-check the application
         run: npm run check:types
       - name: Build full edition (without sample data)
