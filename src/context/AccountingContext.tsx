@@ -605,12 +605,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     if (duplicate) {
       throw new Error('Posible liquidación duplicada: revise la referencia, fecha, importe, medio y tasa antes de registrar nuevamente.');
     }
-    // Hasta implementar el tratamiento dual de diferencias cambiarias, no se permite
-    // crear un asiento que no pueda cuadrarse de forma idéntica en Bs y USD.
-    const amountAtRate = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
-    if (Math.abs(amountAtRate - draft.amountBs) >= 0.01) {
-      throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Registre esta operación para revisión contable; no se generó asiento.');
+    // La deuda en USD conserva el principal de la factura. En Bs, la cuenta
+    // por cobrar/pagar se cancela al valor contable de la tasa de emisión y la
+    // diferencia se reconoce como ganancia o pérdida cambiaria en la fecha del pago.
+    const invoiceRate = Number(document.bcvRate) > 0
+      ? Number(document.bcvRate)
+      : (Number(document.totalAmountUsd) > 0 ? Number(document.totalAmountBs) / Number(document.totalAmountUsd) : 0);
+    if (!Number.isFinite(invoiceRate) || invoiceRate <= 0) {
+      throw new Error('La factura no tiene una tasa de emisión válida. Corrija la tasa original antes de registrar el pago.');
     }
+    const amountAtInvoiceRate = Math.round(draft.amountUsd * invoiceRate * 100) / 100;
+    const amountAtSettlementRate = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
+    const actualAmountBs = Math.round(draft.amountBs * 100) / 100;
+    if (Math.abs(actualAmountBs - amountAtSettlementRate) >= 0.01) {
+      throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.');
+    }
+    const fxDifferenceBs = Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100;
     const operationKey = [
       currentCompany.id, draft.documentId, kind, draft.settlementDate,
       Math.round(draft.amountUsd * 100), Math.round(draft.amountBs * 100),
@@ -627,24 +637,46 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
     const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
     if (!cashAccount || !controlAccount) throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
-    const amountBs = Math.round(draft.amountBs * 100) / 100;
+    const amountBs = actualAmountBs;
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
+    const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
+    const fxLoss = accounts.find(account => account.code === '6.1.1.08' && account.isMovement);
+    const fxLines = (): JournalEntryItem[] => {
+      if (Math.abs(fxDifferenceBs) < 0.01) return [];
+      if (kind === 'SALE_COLLECTION') {
+        // Cobro superior al valor contable: ganancia (Haber); inferior: pérdida (Debe).
+        if (fxDifferenceBs > 0) {
+          if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
+          return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: fxDifferenceBs, debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por cobro a tasa posterior' }];
+        }
+        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
+        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: Math.abs(fxDifferenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por cobro a tasa posterior' }];
+      }
+      // Pago superior al pasivo contable: pérdida (Debe); inferior: ganancia (Haber).
+      if (fxDifferenceBs > 0) {
+        if (!fxLoss) throw new Error('Falta la cuenta Pérdida en Diferencial Cambiario (6.1.1.08).');
+        return [{ accountCode: fxLoss.code, accountName: fxLoss.name, debitBs: fxDifferenceBs, creditBs: 0, debitUsd: 0, creditUsd: 0, description: 'Pérdida cambiaria por pago a tasa posterior' }];
+      }
+      if (!fxGain) throw new Error('Falta la cuenta Ganancia por Diferencial Cambiario (4.2.1.01).');
+      return [{ accountCode: fxGain.code, accountName: fxGain.name, debitBs: 0, creditBs: Math.abs(fxDifferenceBs), debitUsd: 0, creditUsd: 0, description: 'Ganancia cambiaria por pago a tasa posterior' }];
+    };
     let entry: JournalEntry;
     try {
-      entry = addJournalEntry({
-      entryNumber: 0,
-      date: draft.settlementDate,
-      description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') + ' - ' + document.invoiceNumber,
-      type: 'MANUAL',
-      bcvRate: draft.bcvRate,
-      referenceDoc: document.invoiceNumber,
-      items: kind === 'SALE_COLLECTION' ? [
+      const baseItems: JournalEntryItem[] = kind === 'SALE_COLLECTION' ? [
         { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cobro de factura de crédito' },
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar' }
+        { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountAtInvoiceRate, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar al valor contable original' }
       ] : [
-        { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar' },
+        { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountAtInvoiceRate, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar al valor contable original' },
         { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Pago de factura de crédito' }
-      ]
+      ];
+      entry = addJournalEntry({
+        entryNumber: 0,
+        date: draft.settlementDate,
+        description: (kind === 'SALE_COLLECTION' ? 'Cobro de cuenta por cobrar' : 'Pago de cuenta por pagar') + ' - ' + document.invoiceNumber + (Math.abs(fxDifferenceBs) >= 0.01 ? ' (incluye diferencia cambiaria)' : ''),
+        type: 'AJUSTE',
+        bcvRate: draft.bcvRate,
+        referenceDoc: document.invoiceNumber,
+        items: [...baseItems, ...fxLines()]
       });
     } catch (error) {
       settlementInFlightRef.current.delete(operationKey);
