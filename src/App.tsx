@@ -17,11 +17,31 @@ import { ConciliacionBancariaView } from './components/Conciliacion/Conciliacion
 import { ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
+import { LicenseGate } from './components/LicenseGate';
 
 const AppContent: React.FC = () => {
+  const [licenseAllowed, setLicenseAllowed] = useState(false);
   const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
   const [showAdmins, setShowAdmins] = useState(false);
   const logout = async () => { if(auth&&window.sicovenStore) await window.sicovenStore.logout(auth.token); setAuth(null); setShowAdmins(false); };
+
+  useEffect(() => {
+    if (!window.sicovenStore) return;
+    const enforceStatus = (status: { authorized: boolean }) => {
+      if (!status.authorized) {
+        setAuth(null);
+        setShowAdmins(false);
+        setLicenseAllowed(false);
+      }
+    };
+    const unsubscribe = window.sicovenStore.onLicenseStatusChanged(enforceStatus);
+    const onReconnect = () => { void window.sicovenStore?.revalidateLicense().then(enforceStatus); };
+    window.addEventListener('online', onReconnect);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', onReconnect);
+    };
+  }, []);
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
@@ -60,6 +80,7 @@ const AppContent: React.FC = () => {
     }
   };
 
+  if (window.sicovenStore && !licenseAllowed) return <LicenseGate onReady={() => setLicenseAllowed(true)} />;
   if (!auth) return <LoginScreen onLogin={(token, user) => setAuth({ token, user })} isDemoMode={isDemoMode} />;
   if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} onBack={() => setShowAdmins(false)} />;
   if (!isStorageReady) {
