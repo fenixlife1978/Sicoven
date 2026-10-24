@@ -29,6 +29,7 @@ import {
 import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
+import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 
 interface AccountingContextType {
   companies: Company[];
@@ -621,6 +622,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       throw new Error('El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.');
     }
     const fxDifferenceBs = Math.round((actualAmountBs - amountAtInvoiceRate) * 100) / 100;
+    const fiscalMode = document.fiscalAdjustmentMode || 'REVISION_CONTADOR';
+    // La propuesta fiscal es informativa: nunca debe impedir ni dejar a medias
+    // el registro contable válido de una liquidación histórica.
+    let fxFiscalAdjustmentProposal: CreditSettlement['fxFiscalAdjustmentProposal'];
+    try {
+      fxFiscalAdjustmentProposal = calculateFxFiscalAdjustment({
+        totalAmountUsd: Number(document.totalAmountUsd || 0),
+        taxableBaseUsd: Number(document.taxableBaseUsd || 0),
+        vatAmountUsd: Number(document.vatAmountUsd || 0),
+        exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0)),
+        invoiceRate,
+        settlementRate: draft.bcvRate,
+        settledAmountUsd: Math.round(draft.amountUsd * 100) / 100,
+        mode: fiscalMode
+      });
+    } catch {
+      fxFiscalAdjustmentProposal = {
+        direction: 'REVIEW_REQUIRED', deltaBaseBs: 0, deltaVatBs: 0,
+        deltaExemptBs: 0, deltaTotalBs: 0,
+        explanation: 'No se pudo calcular la propuesta con los datos fiscales disponibles; requiere revisión manual.'
+      };
+    }
     const operationKey = [
       currentCompany.id, draft.documentId, kind, draft.settlementDate,
       Math.round(draft.amountUsd * 100), Math.round(draft.amountBs * 100),
@@ -636,7 +659,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
     const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
     const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
-    if (!cashAccount || !controlAccount) throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
+    if (!cashAccount || !controlAccount) {
+      settlementInFlightRef.current.delete(operationKey);
+      throw new Error('No se encontraron las cuentas contables necesarias para liquidar la factura.');
+    }
     const amountBs = actualAmountBs;
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
     const fxGain = accounts.find(account => account.code === '4.2.1.01' && account.isMovement);
@@ -688,6 +714,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       companyId: currentCompany.id,
       amountBs,
       amountUsd,
+      fxFiscalAdjustmentProposal,
       journalEntryId: entry.id,
       createdAt: new Date().toISOString()
     };
