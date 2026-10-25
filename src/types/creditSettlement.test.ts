@@ -58,7 +58,7 @@ describe('credit settlement balances and validation', () => {
   });
 
 
-  it('keeps balances isolated by document and settlement kind', () => {
+  it('sums settlements for the requested document (company and kind are scoped by caller)', () => {
     const sale = settlement({ documentId: 'invoice-1', kind: 'SALE_COLLECTION', amountUsd: 20 });
     const purchase = settlement({ documentId: 'invoice-1', kind: 'PURCHASE_PAYMENT', amountUsd: 30 });
     const otherCompany = settlement({ documentId: 'invoice-1', companyId: 'c-2', amountUsd: 40 });
