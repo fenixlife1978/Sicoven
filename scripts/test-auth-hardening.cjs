@@ -22,6 +22,10 @@ assert.match(main, /actor\.role !== 'admin'/);
 assert.match(main, /sicoven:load-state', \(_event, token\)/);
 assert.match(main, /sicoven:save-state', \(_event, token, state\)/);
 
+assert.match(main, /function getActiveSession/);
+assert.match(main, /expiry <= Date/);
+assert.match(main, /!licenseView/);
+
 const admins = read('src/components/AdminUsers.tsx');
 assert.doesNotMatch(admins, /sicoven_web_admin_users/);
 assert.doesNotMatch(admins, /localStorage\.setItem\(WEB_ADMINS_STORAGE_KEY/);
