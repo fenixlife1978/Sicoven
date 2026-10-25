@@ -73,6 +73,22 @@ function readLicenseRow() {
   return db.prepare('SELECT * FROM license_state WHERE id=1').get();
 }
 
+function getActiveSession(tokenInput) {
+  const token = String(tokenInput || '');
+  const session = sessions.get(token);
+  if (!session || !licenseView().authorized) return null;
+  const expiry = Date.parse(session.expiresAt || '');
+  if (!Number.isFinite(expiry) || expiry <= Date.now()) {
+    sessions.delete(token);
+    if (/^[a-f0-9]{64}$/.test(token)) {
+      const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
+    }
+    return null;
+  }
+  return session;
+}
+
 function licenseView(row = readLicenseRow()) {
   if (!row) {
     return {
@@ -292,7 +308,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('sicoven:auth-list-admins', (_event, token) => {
-    const actor = sessions.get(String(token || ''));
+    const actor = getActiveSession(token);
     if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     return {
       ok: true,
@@ -301,7 +317,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('sicoven:auth-create-admin', (_event, token, input) => {
-    const actor = sessions.get(String(token || ''));
+    const actor = getActiveSession(token);
     if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida. Cierre sesión e ingrese nuevamente.' };
     const rawUsername = String(input?.username || '').trim();
     const username = rawUsername.replace(/\s+/g, '_');
@@ -326,7 +342,7 @@ app.whenReady().then(async () => {
   });
 
   ipcMain.handle('sicoven:auth-delete-seed', (_event, token) => {
-    const actor = sessions.get(String(token || ''));
+    const actor = getActiveSession(token);
     if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     const total = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
     const seed = db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
@@ -339,7 +355,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:load-state', (_event, token) => {
     // La lectura contable requiere licencia válida y sesión autenticada.
-    if (!licenseView().authorized || !sessions.has(String(token || ''))) return null;
+    if (!licenseView().authorized || !getActiveSession(token)) return null;
     const row = db.prepare('SELECT state_json FROM app_state WHERE state_key = ?').get('accounting');
     if (!row) return null;
     try { return JSON.parse(row.state_json); } catch { return null; }
@@ -348,7 +364,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
-    if (!sessions.has(String(token || ''))) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
+    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
