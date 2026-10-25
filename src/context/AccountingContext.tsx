@@ -134,7 +134,7 @@ const readBrowserStorage = (key: string): string | null => {
   try { return localStorage.getItem(key); } catch { return null; }
 };
 
-export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+export const AccountingProvider: React.FC<{ children: React.ReactNode; token: string }> = ({ children, token }) => {
   // Cargar estado inicial desde localStorage o valores por defecto
   const [companies, setCompanies] = useState<Company[]>(() => {
     try {
@@ -348,7 +348,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const hydrate = async () => {
       try {
         if (window.sicovenStore) {
-          let saved = await window.sicovenStore.load();
+          let saved = await window.sicovenStore.load(token);
           if (cancelled) return;
           // Instalaciones que ya guardaron la firma completa de los datos de demostración
           // en la edición completa se limpian una sola vez. No se toca información real:
@@ -369,7 +369,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
               creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true,
               bcvSyncResult: null, demoUsage: {}
             };
-            await window.sicovenStore.save(saved);
+            await window.sicovenStore.save(token, saved);
           }
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
@@ -397,7 +397,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             setIslrVouchers(INITIAL_ISLR_VOUCHERS); setBankAccounts(INITIAL_BANK_ACCOUNTS);
             setBankStatementMovements(INITIAL_STATEMENT_MOVEMENTS);
           } else {
-            await window.sicovenStore.save(stateSnapshot);
+            await window.sicovenStore.save(token, stateSnapshot);
           }
           if (IS_DEMO) {
             const usage = window.sicovenStore.getDemoUsage();
@@ -424,7 +424,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (!storageReady) return;
     if (window.sicovenStore) {
-      window.sicovenStore.save(stateSnapshot).catch(error => {
+      window.sicovenStore.save(token, stateSnapshot).catch(error => {
         console.error('Error guardando los datos contables en SQLite:', error);
       });
       return;
