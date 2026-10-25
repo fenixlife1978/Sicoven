@@ -50,6 +50,8 @@ jobs:
         run: npm test
       - name: Type-check the application
         run: npm run check:types
+      - name: Audit local resources before production build
+        run: npm run audit:assets -- --source-only
       - name: Build full edition (without sample data)
         run: npm run build
       - name: Audit production assets and verify no mock data leaks
