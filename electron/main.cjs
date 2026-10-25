@@ -51,6 +51,9 @@ function openDatabase() {
   `);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
   db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
+  const licenseColumns = new Set(db.prepare('PRAGMA table_info(license_state)').all().map(column => String(column.name)));
+  if (!licenseColumns.has('offline_days')) db.exec('ALTER TABLE license_state ADD COLUMN offline_days INTEGER NOT NULL DEFAULT 0');
+  if (!licenseColumns.has('last_online_success_at')) db.exec('ALTER TABLE license_state ADD COLUMN last_online_success_at TEXT');
   if (!db.prepare('SELECT id FROM license_state WHERE id=1').get()) {
     db.prepare('INSERT INTO license_state(id,installation_id,status) VALUES(1,?,?)').run(crypto.randomUUID(), 'unlicensed');
   }
@@ -79,17 +82,25 @@ function licenseView(row = readLicenseRow()) {
     };
   }
   const hasKey = Boolean(row.encrypted_key);
-  const authorized = hasKey && String(row.status) === 'active';
+  const offlineDays = Math.max(0, Math.min(365, Number(row.offline_days ?? 0)));
+  const lastOnline = row.last_online_success_at ? Date.parse(String(row.last_online_success_at)) : NaN;
+  const offlineExpired = hasKey && String(row.status) === 'active' &&
+    (!Number.isFinite(lastOnline) || offlineDays === 0 || Date.now() > lastOnline + offlineDays * 86400000);
+  const authorized = hasKey && String(row.status) === 'active' && !offlineExpired;
   return {
     authorized,
     needsActivation: !hasKey,
-    status: String(row.status || 'unlicensed'),
+    status: offlineExpired ? 'offline_expired' : String(row.status || 'unlicensed'),
     customer: row.customer || '',
     product: row.product || '',
+    offlineDays,
+    lastOnlineSuccessAt: row.last_online_success_at || null,
     lastCheckedAt: row.last_checked_at || null,
     message: authorized
       ? (row.message || 'Licencia activada. SICOVEN puede trabajar con sus datos locales.')
-      : (row.message || 'Active SICOVEN con una clave de licencia.')
+      : offlineExpired
+        ? 'Se venció el período de uso sin conexión autorizado por el administrador del CRM. Conecta este equipo a internet para revalidar la licencia.'
+        : (row.message || 'Active SICOVEN con una clave de licencia.')
   };
 }
 
@@ -129,8 +140,10 @@ async function activateLicense(keyInput) {
       return { ok: false, message: result.error || 'El CRM no autorizó esta licencia.' };
     }
     const encryptedKey = safeStorage.encryptString(key).toString('base64');
-    db.prepare("UPDATE license_state SET encrypted_key=?,license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
-      .run(encryptedKey, String(result.license.id), String(result.license.customer || ''), String(result.license.product || ''), new Date().toISOString());
+    const checkedAt = new Date().toISOString();
+    const offlineDays = Math.max(0, Math.min(365, Number(result.license.offlineDays ?? 0)));
+    db.prepare("UPDATE license_state SET encrypted_key=?,license_id=?,customer=?,product=?,status='active',offline_days=?,last_checked_at=?,last_online_success_at=?,message=NULL WHERE id=1")
+      .run(encryptedKey, String(result.license.id), String(result.license.customer || ''), String(result.license.product || ''), offlineDays, checkedAt, checkedAt);
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
       .run('license_activated', JSON.stringify({ licenseId: result.license.id, installationId: row.installation_id }));
     return { ok: true, license: licenseView() };
@@ -148,8 +161,9 @@ async function revalidateLicense() {
     const { response, result } = await callLicenseServer(key, row.installation_id);
     const checkedAt = new Date().toISOString();
     if (response.ok && result.ok && result.license?.id && result.license?.status === 'active') {
-      db.prepare("UPDATE license_state SET license_id=?,customer=?,product=?,status='active',last_checked_at=?,message=NULL WHERE id=1")
-        .run(String(result.license.id || row.license_id || ''), String(result.license.customer || row.customer || ''), String(result.license.product || row.product || ''), checkedAt);
+      const offlineDays = Math.max(0, Math.min(365, Number(result.license.offlineDays ?? row.offline_days ?? 0)));
+      db.prepare("UPDATE license_state SET license_id=?,customer=?,product=?,status='active',offline_days=?,last_checked_at=?,last_online_success_at=?,message=NULL WHERE id=1")
+        .run(String(result.license.id || row.license_id || ''), String(result.license.customer || row.customer || ''), String(result.license.product || row.product || ''), offlineDays, checkedAt, checkedAt);
       return licenseView();
     }
     if ([400, 403, 409].includes(response.status)) {
@@ -166,10 +180,10 @@ async function revalidateLicense() {
     throw new Error('El CRM no está disponible para revalidar.');
   } catch {
     const current = readLicenseRow();
-    // Una caída de internet nunca impone límites de uso a una licencia ya activada.
+    // La licencia puede trabajar offline solo durante el plazo que envió el CRM.
     if (current.encrypted_key && current.status === 'active') {
-      db.prepare("UPDATE license_state SET message=?,last_checked_at=? WHERE id=1")
-        .run('Licencia activada. Se verificará con el CRM cuando haya conexión.', new Date().toISOString());
+      db.prepare("UPDATE license_state SET message=? WHERE id=1")
+        .run('Sin conexión. Se conserva el último estado validado dentro del período offline autorizado por el CRM.');
       return licenseView();
     }
     if (current.status === 'revoked') return licenseView(current);
