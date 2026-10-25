@@ -44,13 +44,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
         setStatusMessage({ text: 'Acceso verificado. Entrando al sistema…', type: 'success' });
         onLogin(res.token, res.user);
       } else {
-        // Web preview / Demo interactive fallback
-        setStatusMessage({ text: 'Acceso verificado. Entrando al sistema…', type: 'success' });
-        onLogin('session-token', {
-          username: userVal,
-          role: 'admin',
-          isSeed: userVal.toLowerCase() === 'admin',
-        });
+        // No existe un proveedor de autenticación web en este proyecto.
+        // Fallar cerrado: nunca crear una sesión ficticia en el navegador.
+        throw new Error('El acceso web no está habilitado. Utilice el instalador oficial de SICOVEN para autenticar contra SQLite local.');
       }
     } catch (err) {
       setStatusMessage({
