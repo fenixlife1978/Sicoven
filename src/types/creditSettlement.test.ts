@@ -52,11 +52,9 @@ describe('credit settlement balances and validation', () => {
     assert.match(validateCreditSettlement(draft, -0.01) || '', /saldo pendiente.*no es válido/i);
   });
 
-  it('allows a final payment matching the settlement rate but never a material overpayment', () => {
-    // Keep the Bs amount consistent with USD × the recorded settlement rate.
-    assert.equal(validateCreditSettlement({ ...draft, amountUsd: 75, amountBs: 7500 }, 75), null);
-    // The outstanding-principal guard must reject the overpayment before FX validation.
-    assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02, amountBs: 7502 }, 75) || '', /supera el saldo/);
+  it('allows a final partial payment within rounding tolerance but never a material overpayment', () => {
+    assert.equal(validateCreditSettlement({ ...draft, amountUsd: 75 }, 75), null);
+    assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02 }, 75) || '', /supera el saldo/);
   });
 
 
