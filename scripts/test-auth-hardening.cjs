@@ -11,7 +11,7 @@ assert.doesNotMatch(login, /onLogin\(['"]session-token['"]/);
 const app = read('src/App.tsx');
 assert.match(app, /restoreSession\(token\)/);
 assert.match(app, /if \(!auth\) return/);
-assert.ok(app.indexOf('if (!auth) return') < app.lastIndexOf('<AccountingProvider>'),
+assert.ok(app.indexOf('if (!auth) return') < app.lastIndexOf('<AccountingProvider token={auth.token}>'),
   'AccountingProvider must mount only after authentication');
 
 const main = read('electron/main.cjs');
