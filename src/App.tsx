@@ -21,29 +21,8 @@ import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
 import { LicenseGate } from './components/LicenseGate';
 
-const AppContent: React.FC = () => {
-  const [licenseAllowed, setLicenseAllowed] = useState(false);
-  const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
+const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => Promise<void> }> = ({ auth, logout }) => {
   const [showAdmins, setShowAdmins] = useState(false);
-  const logout = async () => { if(auth&&window.sicovenStore) await window.sicovenStore.logout(auth.token); setAuth(null); setShowAdmins(false); };
-
-  useEffect(() => {
-    if (!window.sicovenStore) return;
-    const enforceStatus = (status: { authorized: boolean }) => {
-      if (!status.authorized) {
-        setAuth(null);
-        setShowAdmins(false);
-        setLicenseAllowed(false);
-      }
-    };
-    const unsubscribe = window.sicovenStore.onLicenseStatusChanged(enforceStatus);
-    const onReconnect = () => { void window.sicovenStore?.revalidateLicense().then(enforceStatus); };
-    window.addEventListener('online', onReconnect);
-    return () => {
-      unsubscribe();
-      window.removeEventListener('online', onReconnect);
-    };
-  }, []);
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
@@ -86,9 +65,7 @@ const AppContent: React.FC = () => {
     }
   };
 
-  if (window.sicovenStore && !licenseAllowed) return <LicenseGate onReady={() => setLicenseAllowed(true)} />;
-  if (!auth) return <LoginScreen onLogin={(token, user) => setAuth({ token, user })} isDemoMode={isDemoMode} />;
-  if (auth && showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} onBack={() => setShowAdmins(false)} />;
+  if (showAdmins) return <AdminUsers token={auth.token} user={auth.user} onLogout={logout} onBack={() => setShowAdmins(false)} />;
   if (!isStorageReady) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-100 px-6">
@@ -166,9 +143,82 @@ const AppContent: React.FC = () => {
 };
 
 export default function App() {
+  const [licenseAllowed, setLicenseAllowed] = useState(false);
+  const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
+
+  const logout = async () => {
+    if (auth && window.sicovenStore) await window.sicovenStore.logout(auth.token);
+    try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+    setAuth(null);
+  };
+
+  useEffect(() => {
+    if (!window.sicovenStore) return;
+    const enforceStatus = (status: { authorized: boolean }) => {
+      if (!status.authorized) {
+        setAuth(null);
+        setLicenseAllowed(false);
+        try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+      }
+    };
+    const unsubscribe = window.sicovenStore.onLicenseStatusChanged(enforceStatus);
+    const onReconnect = () => {
+      void window.sicovenStore?.revalidateLicense().then(enforceStatus).catch(() => {});
+    };
+    window.addEventListener('online', onReconnect);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('online', onReconnect);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!window.sicovenStore) return;
+    let mounted = true;
+    const restore = async () => {
+      try {
+        const license = await window.sicovenStore!.getLicenseStatus();
+        if (!mounted) return;
+        if (!license.authorized) {
+          setLicenseAllowed(false);
+          return;
+        }
+        setLicenseAllowed(true);
+        let token = '';
+        try { token = localStorage.getItem('sicoven_auth_token') || ''; } catch {}
+        if (!token) return;
+        const result = await window.sicovenStore!.restoreSession(token);
+        if (!mounted) return;
+        if (result.ok && result.token && result.user) {
+          setAuth({ token: result.token, user: result.user });
+        } else {
+          try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+        }
+      } catch {
+        if (mounted) {
+          setAuth(null);
+          try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+        }
+      }
+    };
+    void restore();
+    return () => { mounted = false; };
+  }, []);
+
+  if (window.sicovenStore && !licenseAllowed) return <LicenseGate onReady={() => setLicenseAllowed(true)} />;
+  if (!auth) return (
+    <LoginScreen
+      onLogin={(token, user) => {
+        try { localStorage.setItem('sicoven_auth_token', token); } catch {}
+        setAuth({ token, user });
+      }}
+      isDemoMode={import.meta.env.VITE_SICOVEN_DEMO === 'true'}
+    />
+  );
+
   return (
     <AccountingProvider>
-      <AppContent />
+      <AppContent auth={auth} logout={logout} />
     </AccountingProvider>
   );
 }
