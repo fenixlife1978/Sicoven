@@ -50,6 +50,7 @@ function openDatabase() {
     );
   `);
   db.exec(`CREATE TABLE IF NOT EXISTS auth_users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL UNIQUE COLLATE NOCASE, password_hash TEXT NOT NULL, password_salt TEXT NOT NULL, role TEXT NOT NULL CHECK(role IN ('admin')), is_seed INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
+  db.exec(`CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES auth_users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL, created_at TEXT NOT NULL DEFAULT (datetime('now')));`);
   db.exec(`CREATE TABLE IF NOT EXISTS license_state (id INTEGER PRIMARY KEY CHECK(id=1), installation_id TEXT NOT NULL, encrypted_key TEXT, license_id TEXT, customer TEXT, product TEXT, status TEXT NOT NULL DEFAULT 'unlicensed', last_checked_at TEXT, message TEXT);`);
   const licenseColumns = new Set(db.prepare('PRAGMA table_info(license_state)').all().map(column => String(column.name)));
   if (!licenseColumns.has('offline_days')) db.exec('ALTER TABLE license_state ADD COLUMN offline_days INTEGER NOT NULL DEFAULT 0');
@@ -257,18 +258,41 @@ app.whenReady().then(async () => {
       return { ok: false, message: 'Usuario o contraseña incorrectos.' };
     }
     const token = crypto.randomBytes(32).toString('hex');
-    sessions.set(token, { id: user.id, username: user.username, role: user.role });
+    const expiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString();
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    db.prepare('INSERT INTO auth_sessions(token_hash,user_id,expires_at) VALUES(?,?,?)').run(tokenHash, user.id, expiresAt);
+    sessions.set(token, { id: user.id, username: user.username, role: user.role, expiresAt });
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('login_success', JSON.stringify({ username: user.username }));
     return { ok: true, token, user: { username: user.username, role: user.role, isSeed: Boolean(user.is_seed) } };
   });
 
+  ipcMain.handle('sicoven:auth-restore', (_event, tokenInput) => {
+    if (!licenseView().authorized) return { ok: false, message: 'Licencia no autorizada.' };
+    const token = String(tokenInput || '');
+    if (!/^[a-f0-9]{64}$/.test(token)) return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
+    const tokenHash = crypto.createHash('sha256').update(token).digest('hex');
+    const row = db.prepare('SELECT s.expires_at,u.id,u.username,u.role,u.is_seed FROM auth_sessions s JOIN auth_users u ON u.id=s.user_id WHERE s.token_hash=?').get(tokenHash);
+    if (!row || !Number.isFinite(Date.parse(row.expires_at)) || Date.parse(row.expires_at) <= Date.now()) {
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
+      return { ok: false, message: 'Sesión expirada. Inicie sesión nuevamente.' };
+    }
+    sessions.set(token, { id: row.id, username: row.username, role: row.role, expiresAt: row.expires_at });
+    return { ok: true, token, user: { username: row.username, role: row.role, isSeed: Boolean(row.is_seed) } };
+  });
+
   ipcMain.handle('sicoven:auth-logout', (_event, token) => {
-    sessions.delete(String(token || ''));
+    const value = String(token || '');
+    sessions.delete(value);
+    if (/^[a-f0-9]{64}$/.test(value)) {
+      const tokenHash = crypto.createHash('sha256').update(value).digest('hex');
+      db.prepare('DELETE FROM auth_sessions WHERE token_hash=?').run(tokenHash);
+    }
     return { ok: true };
   });
 
   ipcMain.handle('sicoven:auth-list-admins', (_event, token) => {
-    if (!sessions.has(String(token || ''))) return { ok: false, message: 'Sesión no válida.' };
+    const actor = sessions.get(String(token || ''));
+    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     return {
       ok: true,
       admins: db.prepare('SELECT id,username,is_seed AS isSeed,created_at AS createdAt FROM auth_users ORDER BY id').all().map(u => ({ ...u, isSeed: Boolean(u.isSeed) }))
@@ -277,7 +301,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-create-admin', (_event, token, input) => {
     const actor = sessions.get(String(token || ''));
-    if (!actor) return { ok: false, message: 'Sesión no válida. Cierre sesión e ingrese nuevamente.' };
+    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida. Cierre sesión e ingrese nuevamente.' };
     const rawUsername = String(input?.username || '').trim();
     const username = rawUsername.replace(/\s+/g, '_');
     const password = String(input?.password || '');
@@ -302,7 +326,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('sicoven:auth-delete-seed', (_event, token) => {
     const actor = sessions.get(String(token || ''));
-    if (!actor) return { ok: false, message: 'Sesión no válida.' };
+    if (!actor || actor.role !== 'admin') return { ok: false, message: 'Permisos insuficientes o sesión no válida.' };
     const total = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
     const seed = db.prepare('SELECT id FROM auth_users WHERE username=? AND is_seed=1').get('admin');
     if (total < 2 || !seed) return { ok: false, message: 'El administrador semilla solo puede eliminarse después de crear otro administrador.' };
