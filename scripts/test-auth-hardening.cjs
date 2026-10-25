@@ -19,6 +19,8 @@ assert.match(main, /CREATE TABLE IF NOT EXISTS auth_sessions/);
 assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
 assert.match(main, /actor\.role !== 'admin'/);
+assert.match(main, /sicoven:load-state', \(_event, token\)/);
+assert.match(main, /sicoven:save-state', \(_event, token, state\)/);
 
 const admins = read('src/components/AdminUsers.tsx');
 assert.doesNotMatch(admins, /sicoven_web_admin_users/);
