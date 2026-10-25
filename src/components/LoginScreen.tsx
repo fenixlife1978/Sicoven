@@ -79,31 +79,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
           height: 100vh;
           height: 100dvh;
           overflow: hidden;
-          background-color: #f4f7fb;
-          background-image:
-            radial-gradient(ellipse at 15% 15%, rgba(0, 155, 126, 0.20), transparent 34%),
-            linear-gradient(112deg, #071f3d 0%, #103b65 43%, #edf3f8 43.1%, #ffffff 100%);
+          background-image: url("/sicoven-login-reference.png");
           background-repeat: no-repeat;
           background-position: center center;
-          background-size: cover;
+          background-size: 100% 100%;
           font-family: "Segoe UI", Arial, sans-serif;
-        }
-
-        .login-brand {
-          position: absolute;
-          z-index: 1;
-          left: 5.5%;
-          top: 7%;
-          width: min(32vw, 360px);
-          max-height: 100px;
-          object-fit: contain;
-          object-position: left center;
-          filter: drop-shadow(0 3px 12px rgba(0,0,0,.08));
         }
 
         .login-form {
           position: absolute;
-          z-index: 2;
           left: 58.78%;
           top: 47.65%;
           width: 35.05%;
@@ -296,7 +280,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             align-items: center;
             justify-content: center;
             padding: 24px 16px;
-            background-image: linear-gradient(135deg, #071f3d 0, #164d80 180px, #edf2f8 180px, #edf2f8 100%);
+            background-image: none;
             background-color: #edf2f8;
             overflow: auto;
           }
@@ -309,13 +293,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             background:
               linear-gradient(135deg, transparent 75%, #164d80 75%),
               linear-gradient(120deg, #071f3d 0 75%, #ffca05 75% 78%, #071f3d 78%);
-          }
-
-          .login-brand {
-            left: 24px;
-            top: 28px;
-            width: min(70vw, 280px);
-            max-height: 68px;
           }
 
           .login-form {
@@ -344,11 +321,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             content: "Sistema Contable Integral Multiempresas";
             display: block;
             margin-top: 22px;
-            color: #ffffff;
+            color: #64758d;
             font-size: 12px;
-            font-weight: 600;
             text-align: center;
-            text-shadow: 0 1px 3px rgba(7, 31, 61, 0.85);
           }
 
           .field {
@@ -383,7 +358,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
       `}</style>
 
       <main className="login-screen">
-        <img className="login-brand" src="./sicoven-logo-horizontal.svg" alt="SICOVEN · Sistema contable" />
         <form className="login-form" id="loginForm" autoComplete="on" onSubmit={handleSubmit}>
           <label className="field" htmlFor="username">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-field">
