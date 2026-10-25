@@ -254,6 +254,40 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
           background: #ecfdf5;
         }
 
+        .developer-credit {
+          position: absolute;
+          left: 28px;
+          bottom: 20px;
+          z-index: 12;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          max-width: min(36vw, 390px);
+          padding: 8px 12px;
+          border: 1px solid rgba(255, 255, 255, 0.22);
+          border-radius: 12px;
+          background: rgba(7, 31, 61, 0.58);
+          backdrop-filter: blur(5px);
+          color: rgba(255, 255, 255, 0.9);
+          font: 500 10px/1.35 "Segoe UI", Arial, sans-serif;
+          letter-spacing: 0.06em;
+          text-transform: uppercase;
+          box-sizing: border-box;
+        }
+
+        .developer-credit img {
+          display: block;
+          width: clamp(112px, 12vw, 168px);
+          max-height: 42px;
+          object-fit: contain;
+          flex: 0 0 auto;
+        }
+
+        .developer-credit-label {
+          display: block;
+          max-width: 105px;
+        }
+
         .quick-credentials-hint {
           display: flex;
           align-items: center;
@@ -316,6 +350,31 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             border-radius: 18px;
             background: #fff;
             box-shadow: 0 18px 50px #10243a1c;
+          }
+
+          .developer-credit {
+            position: relative;
+            left: auto;
+            bottom: auto;
+            z-index: 2;
+            max-width: min(100%, 430px);
+            width: min(100%, 430px);
+            justify-content: center;
+            margin: 14px auto 0;
+            padding: 9px 12px;
+            background: #102b4b;
+            border-color: #102b4b;
+            border-radius: 10px;
+          }
+
+          .developer-credit img {
+            width: 138px;
+            max-height: 36px;
+          }
+
+          .developer-credit-label {
+            max-width: 100px;
+            font-size: 9px;
           }
 
           .login-form::before {
@@ -471,6 +530,10 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             </p>
           )}
         </form>
+        <div className="developer-credit" aria-label="Empresa desarrolladora: EFASfreelancer">
+          <img src="/efas-logo-horizontal.png" alt="EFASfreelancer" draggable={false} />
+          <span className="developer-credit-label">Desarrollado por</span>
+        </div>
       </main>
     </>
   );
