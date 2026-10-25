@@ -217,7 +217,7 @@ export default function App() {
   );
 
   return (
-    <AccountingProvider>
+    <AccountingProvider token={auth.token}>
       <AppContent auth={auth} logout={logout} />
     </AccountingProvider>
   );
