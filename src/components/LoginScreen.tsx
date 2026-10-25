@@ -344,9 +344,11 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             content: "Sistema Contable Integral Multiempresas";
             display: block;
             margin-top: 22px;
-            color: #64758d;
+            color: #ffffff;
             font-size: 12px;
+            font-weight: 600;
             text-align: center;
+            text-shadow: 0 1px 3px rgba(7, 31, 61, 0.85);
           }
 
           .field {
