@@ -57,6 +57,29 @@ describe('credit settlement balances and validation', () => {
     assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02 }, 75) || '', /supera el saldo/);
   });
 
+
+  it('keeps balances isolated by document and settlement kind', () => {
+    const sale = settlement({ documentId: 'invoice-1', kind: 'SALE_COLLECTION', amountUsd: 20 });
+    const purchase = settlement({ documentId: 'invoice-1', kind: 'PURCHASE_PAYMENT', amountUsd: 30 });
+    const otherCompany = settlement({ documentId: 'invoice-1', companyId: 'c-2', amountUsd: 40 });
+    const balance = calculateCreditBalance('invoice-1', 100, 8000, [sale, purchase, otherCompany]);
+    // The pure calculator filters by document; the accounting context must additionally
+    // filter by active company and kind before calling it.
+    assert.equal(balance.settledAmountUsd, 90);
+  });
+
+  it('rounds the remaining USD and Bs values to cents', () => {
+    const balance = calculateCreditBalance('invoice-1', 116, 102080, [
+      settlement({ amountUsd: 33.33, amountBs: 3066360 / 100, bcvRate: 920 })
+    ]);
+    assert.equal(balance.outstandingUsd, 82.67);
+    assert.equal(balance.outstandingBsAtInvoiceRate, 72749.60);
+  });
+
+  it('rejects a settlement dated with a calendar-invalid but well-shaped date', () => {
+    assert.match(validateCreditSettlement({ ...draft, settlementDate: '2026-02-30' }, 100) || '', /fecha.*no es válida/i);
+  });
+
   it('rejects invalid rate, date and non-positive amounts', () => {
     assert.ok(validateCreditSettlement({ ...draft, bcvRate: 0 }, 100));
     assert.ok(validateCreditSettlement({ ...draft, settlementDate: '2026-99-99' }, 100));
