@@ -5,6 +5,7 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   revalidateLicense: () => ipcRenderer.invoke('sicoven:license-revalidate'),
   onLicenseStatusChanged: (callback) => { const listener = (_event, status) => callback(status); ipcRenderer.on('sicoven:license-status-changed', listener); return () => ipcRenderer.removeListener('sicoven:license-status-changed', listener); },
   login: (credentials) => ipcRenderer.invoke('sicoven:auth-login', credentials),
+  restoreSession: (token) => ipcRenderer.invoke('sicoven:auth-restore', token),
   logout: (token) => ipcRenderer.invoke('sicoven:auth-logout', token),
   listAdmins: (token) => ipcRenderer.invoke('sicoven:auth-list-admins', token),
   createAdmin: (token, input) => ipcRenderer.invoke('sicoven:auth-create-admin', token, input),
