@@ -80,6 +80,22 @@ describe('credit settlement balances and validation', () => {
     assert.match(validateCreditSettlement({ ...draft, settlementDate: '2026-02-30' }, 100) || '', /fecha.*no es válida/i);
   });
 
+  it('rejects malformed draft, unsupported settlement kind and unsupported payment method', () => {
+    assert.match(validateCreditSettlement(null as unknown as CreditSettlementDraft, 100) || '', /datos de la liquidación/i);
+    assert.match(validateCreditSettlement({ ...draft, documentId: undefined as unknown as string }, 100) || '', /factura/i);
+    assert.match(validateCreditSettlement({ ...draft, kind: 'UNKNOWN' as CreditSettlementDraft['kind'] }, 100) || '', /tipo de liquidación/i);
+    assert.match(validateCreditSettlement({ ...draft, method: 'CRYPTO' as CreditSettlementDraft['method'] }, 100) || '', /medio de pago válido/i);
+  });
+
+  it('rejects a Bs amount that does not match the USD amount and recorded rate', () => {
+    assert.match(validateCreditSettlement({ ...draft, amountBs: 2400 }, 100) || '', /no coincide con el equivalente/i);
+  });
+
+  it('rejects an excessively long or malformed reference', () => {
+    assert.match(validateCreditSettlement({ ...draft, reference: 'x'.repeat(201) }, 100) || '', /200 caracteres/i);
+    assert.match(validateCreditSettlement({ ...draft, reference: 123 as unknown as string }, 100) || '', /200 caracteres/i);
+  });
+
   it('rejects invalid rate, date and non-positive amounts', () => {
     assert.ok(validateCreditSettlement({ ...draft, bcvRate: 0 }, 100));
     assert.ok(validateCreditSettlement({ ...draft, settlementDate: '2026-99-99' }, 100));
