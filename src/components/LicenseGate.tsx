@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { KeyRound, Wifi, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck } from 'lucide-react';
+import { KeyRound, Wifi, RefreshCw, AlertCircle, CheckCircle2, ShieldCheck, ShoppingCart, ExternalLink } from 'lucide-react';
 
 type LicenseStatus = {
   authorized: boolean;
@@ -174,6 +174,17 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
             {busy ? 'Verificando con el CRM…' : 'Activar licencia'}
           </button>
         </form>
+
+        <a
+          href="https://crm-sicoven.vercel.app/comprar"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="mt-3 flex min-h-12 w-full items-center justify-center gap-2 rounded-xl border border-sky-200 bg-sky-50 px-4 text-sm font-bold text-sky-900 hover:bg-sky-100 transition"
+        >
+          <ShoppingCart className="h-4 w-4" />
+          <span>Ver planes y pagos · Activar sin esperar la prueba</span>
+          <ExternalLink className="h-3.5 w-3.5" />
+        </a>
 
         {status?.needsActivation === false && (
           <button
