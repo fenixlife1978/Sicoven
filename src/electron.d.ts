@@ -12,8 +12,8 @@ declare global {
       listAdmins: (token: string) => Promise<{ ok: boolean; message?: string; admins?: Array<{ id: number; username: string; isSeed: boolean; createdAt: string }> }>;
       createAdmin: (token: string, input: { username: string; password: string }) => Promise<{ ok: boolean; message?: string }>;
       deleteSeedAdmin: (token: string) => Promise<{ ok: boolean; message?: string }>;
-      load: () => Promise<Record<string, unknown> | null>;
-      save: (state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
+      load: (token: string) => Promise<Record<string, unknown> | null>;
+      save: (token: string, state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;
