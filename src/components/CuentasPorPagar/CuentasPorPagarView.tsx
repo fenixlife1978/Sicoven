@@ -9,7 +9,7 @@ export const CuentasPorPagarView: React.FC = () => {
  const { purchases, getCreditBalance, currentCompany }=useAccounting();
  const [query,setQuery]=useState('');
  const [selected,setSelected]=useState<(typeof purchases)[number]|null>(null);
- const rows=useMemo(()=>purchases.filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
+ const rows=useMemo(()=>purchases.filter(p=>p.companyId===currentCompany.id).filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
   const q=query.trim().toLowerCase();
   return !q || [p.supplierName,p.supplierRif,p.invoiceNumber,p.controlNumber].some(v=>String(v||'').toLowerCase().includes(q));
  }).map(p=>({p,b:getCreditBalance(p.id,'PURCHASE_PAYMENT')})).sort((a,b)=>String(a.p.dueDate||'9999').localeCompare(String(b.p.dueDate||'9999'))),[purchases,query,getCreditBalance]);
