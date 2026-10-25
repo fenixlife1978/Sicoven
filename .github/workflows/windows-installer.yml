@@ -1,0 +1,66 @@
+name: SICOVEN Windows installer
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sicoven-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout main
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Build renderer
+        run: npm run build
+
+      - name: Audit production assets
+        run: npm run audit:assets
+
+      - name: Build Windows NSIS installer
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File
+          if (-not $installer) {
+            Write-Error "No se generó el instalador Windows x64 de SICOVEN."
+            exit 1
+          }
+          $installer | Select-Object Name, Length, LastWriteTime | Format-Table
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-Windows-${{ github.sha }}
+          path: |
+            release/SICOVEN-Setup-*-x64.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 30
