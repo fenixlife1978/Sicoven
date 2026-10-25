@@ -78,8 +78,8 @@ jobs:
           npm run build
           $bundles = Get-ChildItem -Path dist/assets -Filter '*.js' -File
           if (-not $bundles) { throw 'No se generaron bundles JavaScript para SICOVEN DEMO.' }
-          if (-not (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'DISTRIBUIDORA LOS ANDES, C.A.' -Quiet)) {
-            throw 'La edición DEMO no contiene los datos de ejemplo esperados.'
+          if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'administracion@losandesdist.com.ve' -Quiet) {
+            throw 'La edición DEMO no debe contener datos de ejemplo ficticios.'
           }
           if (-not (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'Máximo 10 acciones por módulo' -Quiet)) {
             throw 'No se encontró el cintillo de límites comerciales en la edición DEMO.'

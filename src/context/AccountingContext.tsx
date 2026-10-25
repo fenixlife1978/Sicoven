@@ -350,27 +350,40 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (window.sicovenStore) {
           let saved = await window.sicovenStore.load(token);
           if (cancelled) return;
-          // Instalaciones que ya guardaron la firma completa de los datos de demostración
-          // en la edición completa se limpian una sola vez. No se toca información real:
-          // deben coincidir las dos empresas de muestra y los registros semilla conocidos.
-          const bundledDemoSignature = !IS_DEMO && saved && typeof saved === 'object'
-            && Array.isArray(saved.companies)
-            && saved.companies.length === 2
-            && saved.companies.some((company: Company) => company.id === 'comp-1' && company.name === 'DISTRIBUIDORA LOS ANDES, C.A.')
-            && saved.companies.some((company: Company) => company.id === 'comp-2' && company.name === 'SERVICIOS TECNOLÓGICOS DEL CARIBE, S.A.')
-            && Array.isArray(saved.purchases) && saved.purchases.some((item: PurchaseRecord) => item.id === 'pur-1' && item.companyId === 'comp-1')
-            && Array.isArray(saved.sales) && saved.sales.some((item: SaleRecord) => item.id === 'sale-1' && item.companyId === 'comp-1')
-            && Array.isArray(saved.journalEntries) && saved.journalEntries.some((item: JournalEntry) => item.id === 'entry-apertura-1');
-          if (bundledDemoSignature) {
-            saved = {
-              companies: [], currentCompanyId: '', accounts: DEFAULT_CHART_OF_ACCOUNTS,
-              journalEntries: [], purchases: [], sales: [], products: [], movements: [],
-              vatVouchers: [], islrVouchers: [], bankAccounts: [], bankStatementMovements: [],
-              creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true,
-              bcvSyncResult: null, demoUsage: {}
-            };
-            await window.sicovenStore.save(token, saved);
+          // Purga completa de cualquier dato de demostración heredado (comp-1, comp-2, Los Andes, Caribe)
+          // tanto en la edición completa como en la demo, garantizando que ninguna incluya datos ficticios.
+          if (saved && typeof saved === 'object' && Array.isArray(saved.companies)) {
+            const hasLegacyDemo = saved.companies.some((c: Company) =>
+              c.id === 'comp-1' || c.id === 'comp-2' ||
+              /DISTRIBUIDORA LOS ANDES/i.test(c.name || '') ||
+              /SERVICIOS TECNOLÓGICOS DEL CARIBE/i.test(c.name || '')
+            );
+            if (hasLegacyDemo) {
+              const cleanedCompanies = saved.companies.filter((c: Company) =>
+                c.id !== 'comp-1' && c.id !== 'comp-2' &&
+                !/DISTRIBUIDORA LOS ANDES/i.test(c.name || '') &&
+                !/SERVICIOS TECNOLÓGICOS DEL CARIBE/i.test(c.name || '')
+              );
+              const demoIds = new Set(['comp-1', 'comp-2']);
+              saved = {
+                ...saved,
+                companies: cleanedCompanies,
+                currentCompanyId: cleanedCompanies[0]?.id || '',
+                purchases: Array.isArray(saved.purchases) ? saved.purchases.filter((p: any) => !demoIds.has(p.companyId)) : [],
+                sales: Array.isArray(saved.sales) ? saved.sales.filter((s: any) => !demoIds.has(s.companyId)) : [],
+                journalEntries: Array.isArray(saved.journalEntries) ? saved.journalEntries.filter((j: any) => !demoIds.has(j.companyId) && j.id !== 'entry-apertura-1') : [],
+                products: Array.isArray(saved.products) ? saved.products.filter((pr: any) => !demoIds.has(pr.companyId)) : [],
+                movements: Array.isArray(saved.movements) ? saved.movements.filter((m: any) => !demoIds.has(m.companyId)) : [],
+                vatVouchers: Array.isArray(saved.vatVouchers) ? saved.vatVouchers.filter((v: any) => !demoIds.has(v.companyId)) : [],
+                islrVouchers: Array.isArray(saved.islrVouchers) ? saved.islrVouchers.filter((i: any) => !demoIds.has(i.companyId)) : [],
+                bankAccounts: Array.isArray(saved.bankAccounts) ? saved.bankAccounts.filter((b: any) => !demoIds.has(b.companyId)) : [],
+                bankStatementMovements: Array.isArray(saved.bankStatementMovements) ? saved.bankStatementMovements.filter((bm: any) => !demoIds.has(bm.companyId)) : [],
+                creditSettlements: Array.isArray(saved.creditSettlements) ? saved.creditSettlements.filter((cs: any) => !demoIds.has(cs.companyId)) : [],
+              };
+              await window.sicovenStore.save(token, saved);
+            }
           }
+
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
@@ -389,14 +402,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
             if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
             if (saved.demoUsage && typeof saved.demoUsage === 'object') { const usage = saved.demoUsage as Record<string, number>; demoUsageRef.current = usage; setDemoUsage(usage); }
-          } else if (IS_DEMO) {
-            setCompanies(INITIAL_COMPANIES); setCurrentCompanyId(INITIAL_COMPANIES[0]?.id || '');
-            setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries(INITIAL_JOURNAL_ENTRIES);
-            setPurchases(INITIAL_PURCHASES); setSales(INITIAL_SALES); setProducts(INITIAL_INVENTORY_PRODUCTS);
-            setMovements(INITIAL_INVENTORY_MOVEMENTS); setVatVouchers(INITIAL_VAT_VOUCHERS);
-            setIslrVouchers(INITIAL_ISLR_VOUCHERS); setBankAccounts(INITIAL_BANK_ACCOUNTS);
-            setBankStatementMovements(INITIAL_STATEMENT_MOVEMENTS);
           } else {
+            // Arranque limpio sin datos ficticios para ambas ediciones (completa y DEMO)
+            setCompanies([]);
+            setCurrentCompanyId('');
+            setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
+            setJournalEntries([]);
+            setPurchases([]);
+            setSales([]);
+            setProducts([]);
+            setMovements([]);
+            setVatVouchers([]);
+            setIslrVouchers([]);
+            setBankAccounts([]);
+            setBankStatementMovements([]);
+            setCreditSettlements([]);
             await window.sicovenStore.save(token, stateSnapshot);
           }
           if (IS_DEMO) {
@@ -1422,21 +1442,23 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const resetToSampleData = () => {
-    if (!IS_DEMO) { setCompanies([]); setCurrentCompanyId(''); setAccounts(DEFAULT_CHART_OF_ACCOUNTS); setJournalEntries([]); setPurchases([]); setSales([]); setProducts([]); setMovements([]); setVatVouchers([]); setIslrVouchers([]); setBankAccounts([]); setBankStatementMovements([]); setDemoUsage({}); return; }
-    // Restaurar la muestra también es una acción y nunca reinicia los contadores.
-    consumeDemoAction('configuracion');
-    setCompanies(INITIAL_COMPANIES);
-    setCurrentCompanyId(INITIAL_COMPANIES[0].id);
+    // SICOVEN opera sin datos ficticios en ninguna edición. Restablece a estado limpio.
+    if (IS_DEMO) {
+      consumeDemoAction('configuracion');
+    }
+    setCompanies([]);
+    setCurrentCompanyId('');
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
-    setJournalEntries(INITIAL_JOURNAL_ENTRIES);
-    setPurchases(INITIAL_PURCHASES);
-    setSales(INITIAL_SALES);
-    setProducts(INITIAL_INVENTORY_PRODUCTS);
-    setMovements(INITIAL_INVENTORY_MOVEMENTS);
-    setVatVouchers(INITIAL_VAT_VOUCHERS);
-    setIslrVouchers(INITIAL_ISLR_VOUCHERS);
-    setBankAccounts(INITIAL_BANK_ACCOUNTS);
-    setBankStatementMovements(INITIAL_STATEMENT_MOVEMENTS);
+    setJournalEntries([]);
+    setPurchases([]);
+    setSales([]);
+    setProducts([]);
+    setMovements([]);
+    setVatVouchers([]);
+    setIslrVouchers([]);
+    setBankAccounts([]);
+    setBankStatementMovements([]);
+    setCreditSettlements([]);
   };
 
   const exportBackupJson = (): string => {

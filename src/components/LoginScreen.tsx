@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import loginReferenceImg from '../assets/sicoven-login-reference.png';
 
 export type AuthUser = {
   username: string;
@@ -75,11 +76,20 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
           height: 100vh;
           height: 100dvh;
           overflow: hidden;
-          background-image: url("./sicoven-login-reference.png");
-          background-repeat: no-repeat;
-          background-position: center center;
-          background-size: 100% 100%;
+          background-color: #071f3d;
           font-family: "Segoe UI", Arial, sans-serif;
+        }
+
+        .login-background-img {
+          position: absolute;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          object-fit: fill;
+          pointer-events: none;
+          user-select: none;
+          z-index: 1;
         }
 
         .login-form {
@@ -88,6 +98,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
           top: 47.65%;
           width: 35.05%;
           margin: 0;
+          z-index: 10;
         }
 
         .field {
@@ -253,7 +264,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
         }
 
         .quick-credentials-btn {
-          background: rgba(255, 255, 255, 0.85);
+          background: rgba(255, 255, 255, 0.9);
           border: 1px solid #cbd5e1;
           color: #334155;
           padding: 3px 8px;
@@ -276,9 +287,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             align-items: center;
             justify-content: center;
             padding: 24px 16px;
-            background-image: none;
-            background-color: #edf2f8;
+            background-color: #edf2f8 !important;
             overflow: auto;
+          }
+
+          .login-background-img {
+            display: none;
           }
 
           .login-screen::before {
@@ -353,7 +367,16 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
         }
       `}</style>
 
-      <main className="login-screen">
+      <main
+        className="login-screen"
+        style={{ backgroundImage: `url(${loginReferenceImg})`, backgroundSize: '100% 100%' }}
+      >
+        <img
+          src={loginReferenceImg}
+          alt="SICOVEN - Sistema Contable Integral Multiempresas"
+          className="login-background-img"
+          draggable={false}
+        />
         <form className="login-form" id="loginForm" autoComplete="on" onSubmit={handleSubmit}>
           <label className="field" htmlFor="username">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-field">

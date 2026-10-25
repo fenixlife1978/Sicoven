@@ -10,6 +10,7 @@ import {
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
+import sicovenNavLogo from '../assets/sicoven-logo-horizontal-nav.svg';
 
 interface AdminUsersProps {
   token: string;
@@ -141,7 +142,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           {/* Logo & System Identity */}
           <div className="flex items-center gap-3">
             <img
-              src="/sicoven-logo-horizontal-nav.svg"
+              src={sicovenNavLogo}
               alt="SICOVEN"
               className="h-8 sm:h-9 w-auto max-w-[180px] sm:max-w-[220px] object-contain"
             />
