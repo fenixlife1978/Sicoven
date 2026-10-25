@@ -13,7 +13,8 @@
     "electron:dev": "npm run build && electron .",
     "dist": "electron-builder --win nsis --publish never",
     "check:types": "tsc --noEmit",
-    "test": "tsx --test src/types/*.test.ts"
+    "test": "tsx --test src/types/*.test.ts",
+    "audit:assets": "node scripts/audit-production-assets.cjs"
   },
   "dependencies": {
     "@google/genai": "^2.4.0",

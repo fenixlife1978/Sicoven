@@ -350,20 +350,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (window.sicovenStore) {
           let saved = await window.sicovenStore.load(token);
           if (cancelled) return;
-          // Purga completa de cualquier dato de demostración heredado (comp-1, comp-2, Los Andes, Caribe)
+          // Purga completa de cualquier dato de demostración heredado (comp-1, comp-2)
           // tanto en la edición completa como en la demo, garantizando que ninguna incluya datos ficticios.
           if (saved && typeof saved === 'object' && Array.isArray(saved.companies)) {
-            const hasLegacyDemo = saved.companies.some((c: Company) =>
-              c.id === 'comp-1' || c.id === 'comp-2' ||
-              /DISTRIBUIDORA LOS ANDES/i.test(c.name || '') ||
-              /SERVICIOS TECNOLÓGICOS DEL CARIBE/i.test(c.name || '')
-            );
+            const isLegacyDemo = (c: Company) => {
+              const id = String(c?.id || '');
+              const n = String(c?.name || '').toLowerCase();
+              return id === 'comp-1' || id === 'comp-2' ||
+                (n.includes('los andes') && n.includes('distrib')) ||
+                (n.includes('caribe') && n.includes('tecnol'));
+            };
+            const hasLegacyDemo = saved.companies.some(isLegacyDemo);
             if (hasLegacyDemo) {
-              const cleanedCompanies = saved.companies.filter((c: Company) =>
-                c.id !== 'comp-1' && c.id !== 'comp-2' &&
-                !/DISTRIBUIDORA LOS ANDES/i.test(c.name || '') &&
-                !/SERVICIOS TECNOLÓGICOS DEL CARIBE/i.test(c.name || '')
-              );
+              const cleanedCompanies = saved.companies.filter((c: Company) => !isLegacyDemo(c));
               const demoIds = new Set(['comp-1', 'comp-2']);
               saved = {
                 ...saved,
