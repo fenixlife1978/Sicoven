@@ -82,6 +82,12 @@ export function validateCreditSettlement(
   draft: CreditSettlementDraft,
   outstandingUsd: number
 ): string | null {
+  if (!draft || typeof draft !== 'object') return 'Los datos de la liquidación no son válidos.';
+  if (typeof draft.documentId !== 'string') return 'Debe seleccionar la factura de crédito.';
+  if (!['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(draft.kind)) return 'El tipo de liquidación no es válido.';
+  if (typeof draft.settlementDate !== 'string') return 'La fecha de liquidación no es válida.';
+  if (!['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD', 'OTHER'].includes(draft.method)) return 'Seleccione un medio de pago válido.';
+  if (draft.reference != null && (typeof draft.reference !== 'string' || draft.reference.length > 200)) return 'La referencia no puede superar 200 caracteres.';
   if (!draft.documentId.trim()) return 'Debe seleccionar la factura de crédito.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.settlementDate)) return 'La fecha de liquidación no es válida.';
   const [year, month, day] = draft.settlementDate.split('-').map(Number);
@@ -94,6 +100,8 @@ export function validateCreditSettlement(
   if (!Number.isFinite(draft.amountUsd) || draft.amountUsd <= 0) return 'El abono debe ser mayor que cero.';
   if (draft.amountUsd > outstandingUsd + 0.005) return 'El abono supera el saldo pendiente de la factura.';
   if (!Number.isFinite(draft.amountBs) || draft.amountBs <= 0) return 'El importe efectivamente pagado/cobrado en Bs debe ser mayor que cero.';
-  if (!draft.method) return 'Seleccione el medio de pago.';
+  const expectedBs = Math.round(draft.amountUsd * draft.bcvRate * 100) / 100;
+  const actualBs = Math.round(draft.amountBs * 100) / 100;
+  if (Math.abs(actualBs - expectedBs) >= 0.01) return 'El importe en Bs no coincide con el equivalente a la tasa de liquidación. Revise la tasa o el importe.';
   return null;
 }
