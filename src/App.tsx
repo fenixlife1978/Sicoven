@@ -147,9 +147,12 @@ export default function App() {
   const [auth, setAuth] = useState<{token:string; user:AuthUser} | null>(null);
 
   const logout = async () => {
-    if (auth && window.sicovenStore) await window.sicovenStore.logout(auth.token);
-    try { localStorage.removeItem('sicoven_auth_token'); } catch {}
-    setAuth(null);
+    try {
+      if (auth && window.sicovenStore) await window.sicovenStore.logout(auth.token);
+    } finally {
+      try { localStorage.removeItem('sicoven_auth_token'); } catch {}
+      setAuth(null);
+    }
   };
 
   useEffect(() => {
