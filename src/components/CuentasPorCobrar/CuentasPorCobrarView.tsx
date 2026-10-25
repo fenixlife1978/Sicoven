@@ -12,7 +12,7 @@ export const CuentasPorCobrarView: React.FC = () => {
  const rows=useMemo(()=>sales.filter(p=>p.companyId===currentCompany.id).filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
   const q=query.trim().toLowerCase();
   return !q || [p.customerName,p.customerRif,p.invoiceNumber,p.controlNumber].some(v=>String(v||'').toLowerCase().includes(q));
- }).map(p=>({p,b:getCreditBalance(p.id,'SALE_COLLECTION')})).sort((a,b)=>String(a.p.dueDate||'9999').localeCompare(String(b.p.dueDate||'9999'))),[sales,query,getCreditBalance]);
+ }).map(p=>({p,b:getCreditBalance(p.id,'SALE_COLLECTION')})).sort((a,b)=>String(a.p.dueDate||'9999').localeCompare(String(b.p.dueDate||'9999'))),[sales,query,getCreditBalance,currentCompany.id]);
  const open=rows.filter(r=>r.b.outstandingUsd>0.005);
  const overdue=open.filter(r=>r.p.dueDate && r.p.dueDate<today());
  const total=open.reduce((s,r)=>s+r.b.outstandingUsd,0);
