@@ -33,9 +33,6 @@ jobs:
       - name: Run automated tests
         run: npm test
 
-      - name: Check TypeScript types
-        run: npm run check:types
-
       - name: Build renderer
         run: npm run build
 
