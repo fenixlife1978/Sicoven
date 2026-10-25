@@ -241,6 +241,7 @@ app.whenReady().then(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
       sessions.clear();
+      db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
     return status;
@@ -387,6 +388,7 @@ app.whenReady().then(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
       sessions.clear();
+      db.prepare('DELETE FROM auth_sessions').run();
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
   }, 60 * 60 * 1000);
