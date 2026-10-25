@@ -66,8 +66,8 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           setMessage({ text: r?.message || 'No se pudo consultar usuarios administradores.', type: 'error' });
         }
       } else {
-        // Fallback for Web preview mode
-        setAdmins(getWebAdminsFromStorage());
+        setAdmins([]);
+        setMessage({ text: 'La administración de usuarios solo está disponible en SICOVEN de escritorio autenticado.', type: 'error' });
       }
     } catch {
       setMessage({ text: 'Error al consultar la lista de administradores.', type: 'error' });
@@ -115,19 +115,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           throw new Error(r?.message || 'No se pudo crear el administrador.');
         }
       } else {
-        // Web preview mode fallback with localStorage
-        const currentList = getWebAdminsFromStorage();
-        if (currentList.some((a) => a.username.toLowerCase() === cleanUser.toLowerCase())) {
-          throw new Error('Ese nombre de usuario ya existe. Elige uno diferente.');
-        }
-        const newRecord: AdminUserRecord = {
-          id: Date.now(),
-          username: cleanUser,
-          isSeed: false,
-          createdAt: new Date().toISOString(),
-        };
-        const updatedList = [...currentList, newRecord];
-        localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(updatedList));
+        throw new Error('No se pueden crear administradores fuera de la aplicación de escritorio autenticada.');
       }
 
       setUsername('');
@@ -157,11 +145,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           setMessage({ text: r?.message || 'No se pudo eliminar el administrador semilla.', type: 'error' });
         }
       } else {
-        // Web preview mode fallback
-        const currentList = getWebAdminsFromStorage();
-        const filtered = currentList.filter((a) => !a.isSeed);
-        localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(filtered));
-        setMessage({ text: 'Administrador semilla eliminado con éxito.', type: 'success' });
+        setMessage({ text: 'No se pueden eliminar usuarios fuera de la aplicación de escritorio autenticada.', type: 'error' });
       }
       await refresh();
     } catch {
