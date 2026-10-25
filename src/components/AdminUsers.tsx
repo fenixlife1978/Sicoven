@@ -28,27 +28,6 @@ interface AdminUserRecord {
   createdAt: string;
 }
 
-const WEB_ADMINS_STORAGE_KEY = 'sicoven_web_admin_users';
-
-function getWebAdminsFromStorage(): AdminUserRecord[] {
-  try {
-    const raw = localStorage.getItem(WEB_ADMINS_STORAGE_KEY);
-    if (raw) {
-      const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed;
-      }
-    }
-  } catch {}
-  const defaults: AdminUserRecord[] = [
-    { id: 1, username: 'admin', isSeed: true, createdAt: new Date().toISOString() },
-  ];
-  try {
-    localStorage.setItem(WEB_ADMINS_STORAGE_KEY, JSON.stringify(defaults));
-  } catch {}
-  return defaults;
-}
-
 export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
   const [admins, setAdmins] = useState<AdminUserRecord[]>([]);
   const [username, setUsername] = useState('');
