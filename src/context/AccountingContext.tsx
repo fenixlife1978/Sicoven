@@ -1358,12 +1358,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const adjustmentAccount = accounts.find(a => a.code === adjustmentCode && a.isMovement);
       const isSale = row.type === 'SALIDA' && row.concept === 'VENTA';
       const isLoss = row.type === 'SALIDA' && ['MERMA','AUTOCONSUMO'].includes(row.concept);
+      const isCustomerReturn = row.type === 'ENTRADA' && row.concept === 'DEVOLUCION_CLIENTE';
+      const isSupplierReturn = row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA';
       const positiveAdjustment = row.type === 'AJUSTE' && targetStock > product.currentStock;
-      if (isSale || isLoss || isAdjustment) {
+      if (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment) {
         if (!inventoryAccount) throw new Error('Cuenta de inventario inválida para ' + product.code + '.');
-        if ((isSale && !costAccount) || ((isLoss || isAdjustment) && !adjustmentAccount)) throw new Error('Cuenta de costo/ajuste inválida para ' + product.code + '.');
-        const debitCode = isSale ? costCode : adjustmentCode;
-        const debitAccount = isSale ? costAccount : adjustmentAccount;
+        const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
+        if ((isSale || isCustomerReturn) && !costAccount) throw new Error('Cuenta de costo de ventas inválida para ' + product.code + '.');
+        if ((isLoss || isAdjustment) && !adjustmentAccount) throw new Error('Cuenta de mermas/ajustes inválida para ' + product.code + '.');
+        if (isSupplierReturn && !payableAccount) throw new Error('Falta la cuenta de control CxP 2.1.1.01 para la devolución al proveedor.');
+        const debitCode = isSale ? costCode : isSupplierReturn ? '2.1.1.01' : adjustmentCode;
         const amountUsd = totalCostUsd;
         const makeLine = (code:string, debitBs:number, creditBs:number, debitUsd:number, creditUsd:number, description:string): JournalEntryItem => ({
           accountCode: code, accountName: accounts.find(a => a.code === code)?.name || code,
@@ -1371,10 +1375,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         });
         const lines: JournalEntryItem[] = positiveAdjustment
           ? [makeLine(inventoryCode,totalCostBs,0,amountUsd,0,'Entrada por sobrante de inventario'),makeLine(adjustmentCode,0,totalCostBs,0,amountUsd,'Contrapartida por sobrante de inventario')]
-          : [makeLine(debitCode,totalCostBs,0,amountUsd,0,isSale?'Costo de ventas por movimiento importado':'Merma/ajuste de inventario importado'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Descargo de inventario importado')];
+          : isCustomerReturn
+            ? [makeLine(inventoryCode,totalCostBs,0,amountUsd,0,'Entrada por devolución de cliente'),makeLine(costCode,0,totalCostBs,0,amountUsd,'Reversión del costo de ventas por devolución')]
+            : isSupplierReturn
+              ? [makeLine('2.1.1.01',totalCostBs,0,amountUsd,0,'Devolución de mercancía al proveedor'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Salida por devolución de compra')]
+              : [makeLine(debitCode,totalCostBs,0,amountUsd,0,isSale?'Costo de ventas por movimiento importado':'Merma/ajuste de inventario importado'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Descargo de inventario importado')];
         const entry: JournalEntry = {
           id: 'entry-inventory-import-' + Date.now() + '-' + index, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
-          date: row.date, description: (isSale?'Costo de venta':positiveAdjustment?'Sobrante':'Merma/ajuste') + ' importado · ' + product.code + ' · ' + row.documentRef,
+          date: row.date, description: (isSale?'Costo de venta':isCustomerReturn?'Devolución de cliente':isSupplierReturn?'Devolución a proveedor':positiveAdjustment?'Sobrante':'Merma/ajuste') + ' importado · ' + product.code + ' · ' + row.documentRef,
           type: 'INVENTARIO', bcvRate: rate, referenceDoc: row.documentRef, items: lines, createdAt: new Date().toISOString()
         };
         movement.journalEntryId = entry.id;
