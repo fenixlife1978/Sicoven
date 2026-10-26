@@ -9,7 +9,7 @@ interface NewProductModalProps {
 }
 
 export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addProduct } = useAccounting();
+  const { currentCompany, addProduct, accounts } = useAccounting();
 
   const [code, setCode] = useState('');
   const [name, setName] = useState('');
@@ -19,6 +19,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [currentStock, setCurrentStock] = useState<number>(0);
   const [avgCostBs, setAvgCostBs] = useState<number>(0);
   const [salesPriceBs, setSalesPriceBs] = useState<number>(0);
+  const [inventoryAccountCode, setInventoryAccountCode] = useState('1.1.4.01');
+  const [costOfSalesAccountCode, setCostOfSalesAccountCode] = useState('5.1.1.01');
+  const [adjustmentAccountCode, setAdjustmentAccountCode] = useState('5.1.2.01');
+  const [openingBalanceAccountCode, setOpeningBalanceAccountCode] = useState('3.3.1.01');
+  const [costingMethod, setCostingMethod] = useState<'PROMEDIO_PONDERADO' | 'PEPS'>('PROMEDIO_PONDERADO');
+  const [vatTreatment, setVatTreatment] = useState<'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO'>('GENERAL_16');
+  const [itemType, setItemType] = useState<'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO'>('MERCANCIA');
+  const [error, setError] = useState('');
 
   if (!isOpen) return null;
 
@@ -26,10 +34,16 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
   const salesPriceUsd = bcvRate > 0 ? salesPriceBs / bcvRate : 0;
 
+  const movementAccounts = accounts.filter(account => account.isMovement);
+  const inventoryAccounts = movementAccounts.filter(account => account.type === 'ACTIVO');
+  const costAccounts = movementAccounts.filter(account => account.type === 'COSTOS' || account.type === 'GASTOS');
+  const equityAccounts = movementAccounts.filter(account => account.type === 'PATRIMONIO');
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!code.trim() || !name.trim()) return;
-
+    setError('');
+    if (!code.trim() || !name.trim()) { setError('El código y la descripción son obligatorios.'); return; }
+    try {
     addProduct({
       code: code.trim().toUpperCase(),
       name: name.trim().toUpperCase(),
@@ -42,10 +56,14 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       lastCostBs: Number(avgCostBs) || 0,
       lastCostUsd: Number(avgCostUsd.toFixed(2)),
       salesPriceBs: Number(salesPriceBs) || 0,
-      salesPriceUsd: Number(salesPriceUsd.toFixed(2))
+      salesPriceUsd: Number(salesPriceUsd.toFixed(2)),
+      inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
+      costingMethod, vatTreatment, itemType
     });
-
     onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo crear el artículo.');
+    }
   };
 
   return (
@@ -93,6 +111,54 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none uppercase"
               />
             </div>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tipo de artículo contable</label>
+              <select value={itemType} onChange={e => setItemType(e.target.value as typeof itemType)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                <option value="MERCANCIA">Mercancía</option><option value="MATERIA_PRIMA">Materia prima</option><option value="PRODUCTO_EN_PROCESO">Producto en proceso</option><option value="PRODUCTO_TERMINADO">Producto terminado</option><option value="SUBPRODUCTO">Subproducto</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Método de costeo</label>
+              <select value={costingMethod} onChange={e => setCostingMethod(e.target.value as typeof costingMethod)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                <option value="PROMEDIO_PONDERADO">Promedio ponderado</option><option value="PEPS">PEPS / FIFO</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tratamiento IVA</label>
+              <select value={vatTreatment} onChange={e => setVatTreatment(e.target.value as typeof vatTreatment)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                <option value="GENERAL_16">General 16%</option><option value="REDUCIDA_8">Reducida 8%</option><option value="EXENTO">Exento</option><option value="EXONERADO">Exonerado</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 border-t border-slate-200 pt-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Cuenta contable de inventario *</label>
+              <select required value={inventoryAccountCode} onChange={e => setInventoryAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                {inventoryAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Cuenta de costo de ventas/consumo *</label>
+              <select required value={costOfSalesAccountCode} onChange={e => setCostOfSalesAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                {costAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Cuenta de mermas y ajustes *</label>
+              <select required value={adjustmentAccountCode} onChange={e => setAdjustmentAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                {costAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              </select>
+            </div>
+            {Number(currentStock) > 0 && <div>
+              <label className="block font-semibold text-slate-700 mb-1">Contrapartida de apertura *</label>
+              <select required value={openingBalanceAccountCode} onChange={e => setOpeningBalanceAccountCode(e.target.value)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+                {equityAccounts.map(a => <option key={a.code} value={a.code}>{a.code} · {a.name}</option>)}
+              </select>
+            </div>}
           </div>
 
           <div className="grid grid-cols-2 gap-3">
@@ -179,6 +245,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               </span>
             </div>
           </div>
+
+          {error && <p role="alert" className="rounded-lg bg-rose-50 border border-rose-200 p-3 text-rose-700">{error}</p>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
             <button
