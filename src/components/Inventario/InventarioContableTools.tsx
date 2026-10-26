@@ -3,6 +3,7 @@ import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown, calculatePeriodicCostOfSales } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
+import { validateOpeningInventoryRow, validateMovementImportRow } from '../../types/inventoryImport';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import ExcelJS from 'exceljs';
@@ -110,23 +111,25 @@ export const InventarioContableTools: React.FC = () => {
       if (importMode === 'INVENTARIO_INICIAL') {
         const required = ['code', 'name', 'currentstock', 'avgcostbs'];
         if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
+        const seenCodes = new Set<string>();
         const rows = records.map(({row,sourceLine}) => {
-          const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
-          const method: NonNullable<InventoryProduct['costingMethod']> = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
-          const vat = ['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(row.vattreatment || '') ? row.vattreatment as InventoryProduct['vatTreatment'] : 'GENERAL_16';
-          const type = ['MERCANCIA', 'MATERIA_PRIMA', 'PRODUCTO_EN_PROCESO', 'PRODUCTO_TERMINADO', 'SUBPRODUCTO'].includes(row.itemtype || '') ? row.itemtype as InventoryProduct['itemType'] : 'MERCANCIA';
-          if (!row.code?.trim() || !row.name?.trim()) throw new Error('Fila ' + sourceLine + ': falta code o name.');
+          const validated = validateOpeningInventoryRow(row, sourceLine, Number(currentCompany.bcvRate));
+          const normalizedCode = row.code!.trim().toUpperCase();
+          if (seenCodes.has(normalizedCode)) throw new Error('Fila ' + sourceLine + ': código duplicado en el archivo: ' + row.code);
+          seenCodes.add(normalizedCode);
+          const method = validated.costingMethod as NonNullable<InventoryProduct['costingMethod']>;
+          const vat = validated.vatTreatment as InventoryProduct['vatTreatment'];
+          const type = validated.itemType as InventoryProduct['itemType'];
           return {
-            code: row.code, name: row.name, category: row.category || 'General', unit: row.unit || 'Unidad',
-            minStock: numeric('minstock'), currentStock: numeric('currentstock'), avgCostBs: numeric('avgcostbs'),
-            avgCostUsd: 0, lastCostBs: numeric('avgcostbs'), lastCostUsd: 0, salesPriceBs: numeric('salespricebs'),
-            salesPriceUsd: numeric('salespriceusd'), inventoryAccountCode: row.inventoryaccountcode || '1.1.4.01',
+            code: row.code!.trim(), name: row.name!.trim(), category: row.category || 'General', unit: row.unit || 'Unidad',
+            minStock: validated.minStock, currentStock: validated.currentStock, avgCostBs: validated.avgCostBs,
+            avgCostUsd: 0, lastCostBs: validated.avgCostBs, lastCostUsd: 0, salesPriceBs: validated.salesPriceBs,
+            salesPriceUsd: validated.salesPriceUsd, inventoryAccountCode: row.inventoryaccountcode || '1.1.4.01',
             costOfSalesAccountCode: row.costofsalesaccountcode || '5.1.1.01',
             adjustmentAccountCode: row.adjustmentaccountcode || '5.1.2.01',
             openingBalanceAccountCode: row.openingbalanceaccountcode || '3.3.1.01',
             costingMethod: method, vatTreatment: vat, itemType: type,
-            openingDate: row.openingdate || new Date().toISOString().slice(0, 10),
-            openingBcvRate: numeric('openingbcvrate', currentCompany.bcvRate)
+            openingDate: validated.openingDate, openingBcvRate: validated.openingBcvRate
           };
         });
         const imported = importInventoryProducts(rows);
@@ -137,21 +140,18 @@ export const InventarioContableTools: React.FC = () => {
         const rows = records.map(({row,sourceLine}) => {
           const product = products.find(p => p.code.trim().toUpperCase() === String(row.productcode || '').trim().toUpperCase());
           if (!product) throw new Error('Fila ' + sourceLine + ': no existe el artículo ' + row.productcode + ' en SICOVEN.');
-          const type = String(row.type || '').trim().toUpperCase();
-          if (!['ENTRADA','SALIDA','AJUSTE'].includes(type)) throw new Error('Fila ' + sourceLine + ': tipo debe ser ENTRADA, SALIDA o AJUSTE.');
-          const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
-          const quantity = numeric('quantity');
-          const cost = numeric('unitcostbs');
-          const rate = numeric('bcvrate');
+          const validated = validateMovementImportRow(row, sourceLine);
           return {
             productId: product.id, productName: product.name, productCode: product.code,
-            date: row.date, type: type as 'ENTRADA' | 'SALIDA' | 'AJUSTE', concept: String(row.concept || '').trim().toUpperCase(),
-            documentRef: String(row.documentref || '').trim(), documentType: row.documenttype || 'Resumen importado',
+            date: validated.date, type: validated.type, concept: String(row.concept).trim().toUpperCase(),
+            documentRef: String(row.documentref).trim(), documentType: row.documenttype || 'Resumen importado',
             counterpartyRif: row.counterpartyrif || '', counterpartyName: row.counterpartyname || '',
-            quantity, unitCostBs: cost, additionalLandedCostsBs: numeric('additionallandedcostsbs'), unitCostUsd: rate > 0 ? cost / rate : 0,
-            totalCostBs: quantity * cost, totalCostUsd: rate > 0 ? quantity * cost / rate : 0,
-            balanceQty: numeric('balanceqty'), balanceTotalBs: numeric('balancetotalbs'), balanceTotalUsd: numeric('balancetotalusd'),
-            bcvRate: rate
+            quantity: validated.quantity, unitCostBs: validated.unitCostBs, additionalLandedCostsBs: validated.additionalLandedCostsBs,
+            unitCostUsd: validated.unitCostBs / validated.bcvRate,
+            totalCostBs: validated.quantity * validated.unitCostBs,
+            totalCostUsd: validated.quantity * validated.unitCostBs / validated.bcvRate,
+            balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+            bcvRate: validated.bcvRate
           };
         }).sort((a,b) => a.date.localeCompare(b.date));
         const imported = importInventoryMovements(rows);
