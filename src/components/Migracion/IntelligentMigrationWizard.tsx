@@ -110,7 +110,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(seen.has(k))throw new Error('Código duplicado dentro de los archivos: '+code+'. No se importó ningún artículo.');
     if(existing.has(k))throw new Error('El código '+code+' ya existe en SICOVEN. No se sobrescriben registros automáticamente.');
     seen.add(k);
-    const number=(...keys:string[])=>{const raw=pick(r,...keys); if(raw===undefined||raw==='')return 0; const n=Number(String(raw).replace(/\s/g,'').replace(',','.')); if(!Number.isFinite(n)||n<0)throw new Error('Registro '+(i+1)+': valor numérico inválido en '+keys[0]+'.');return n;};
+    const number=(...keys:string[])=>{const raw=pick(r,...keys); if(raw===undefined||raw===''){const essential=keys.some(key=>['currentStock','existencia','stock','quantity','cantidad','avgCostBs','costoPromedioBs','costBs','costoBs'].includes(norm(key))); if(essential)throw new Error('Registro '+(i+1)+': falta el valor de '+keys[0]+'. No se asumirá cero ni se importará parcialmente.'); return 0;} const normalized=String(raw).trim().replace(/\s/g,''); const n=normalized.includes(',')&&normalized.includes('.') ? (normalized.lastIndexOf(',')>normalized.lastIndexOf('.') ? Number(normalized.replace(/\./g,'').replace(',','.')) : Number(normalized.replace(/,/g,''))) : normalized.includes(',') ? Number(normalized.replace(',','.')) : Number(normalized); if(!Number.isFinite(n)||n<0)throw new Error('Registro '+(i+1)+': valor numérico inválido en '+keys[0]+'.');return n;};
     const stock=number('currentStock','existencia','stock','quantity','cantidad');
     const cost=number('avgCostBs','costoPromedioBs','costBs','costoBs');
     const priceBs=number('salesPriceBs','precioVentaBs','priceBs');
