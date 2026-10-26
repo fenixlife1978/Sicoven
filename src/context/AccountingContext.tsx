@@ -237,7 +237,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
   // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
-  const consumeDemoAction = (_moduleKey: string) => {};
 
   const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
     id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
@@ -245,7 +244,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const updateCompany = (updated: Company) => {
-    consumeDemoAction('empresa');
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
@@ -467,7 +465,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   }, [companies.length, autoSyncBcv]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
-    consumeDemoAction('empresa');
     const newComp: Company = {
       ...comp,
       id: `comp-${Date.now()}`
@@ -478,7 +475,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const updateBcvRate = (newRate: number, effectiveDate?: string) => {
-    consumeDemoAction('configuracion');
     if (!currentCompany || newRate <= 0) return;
     const today = effectiveDate || new Date().toISOString().split('T')[0];
     updateCompany({
@@ -489,7 +485,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addAccount = (account: Account) => {
-    consumeDemoAction('catalogo');
     setAccounts(prev => {
       if (prev.some(a => a.code === account.code)) {
         return prev.map(a => (a.code === account.code ? account : a));
@@ -518,8 +513,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         `Verificación de asiento fallida. Bs: Debe ${totalDebitBs.toFixed(2)} / Haber ${totalCreditBs.toFixed(2)} (dif. ${diff.toFixed(2)}); USD: Debe ${totalDebitUsd.toFixed(2)} / Haber ${totalCreditUsd.toFixed(2)} (dif. ${diffUsd.toFixed(2)}). Revise líneas, importes y cuentas.`
       );
     }
-
-    consumeDemoAction('diario');
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const newEntry: JournalEntry = {
@@ -714,14 +707,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteJournalEntry = (id: string) => {
-    consumeDemoAction('diario');
     setJournalEntries(prev => prev.filter(e => e.id !== id));
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
-    consumeDemoAction('compras');
-    if ((purchaseData.vatWithheldBs || 0) > 0 || (purchaseData.islrWithheldBs || 0) > 0) consumeDemoAction('retenciones');
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const nextOp = companyPurchases.length + 1;
     const purchaseId = `pur-${Date.now()}`;
@@ -914,7 +904,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deletePurchase = (id: string) => {
-    consumeDemoAction('compras');
     const purchase = purchases.find(p => p.id === id);
     if (!purchase || purchase.companyId !== currentCompany.id) return;
     setPurchases(prev => prev.filter(p => p.id !== id));
@@ -926,7 +915,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
-    consumeDemoAction('ventas');
     const companySales = sales.filter(s => s.companyId === currentCompany.id);
     const nextOp = companySales.length + 1;
     const saleId = `sale-${Date.now()}`;
@@ -1029,7 +1017,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteSale = (id: string) => {
-    consumeDemoAction('ventas');
     const sale = sales.find(item => item.id === id);
     if (!sale || sale.companyId !== currentCompany.id) return;
     setSales(prev => prev.filter(item => item.id !== id));
@@ -1040,7 +1027,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Inventario contable: cada movimiento valida existencias y conserva la tasa histórica.
   const addProduct = (prodData: Omit<InventoryProduct, 'id' | 'companyId'>): InventoryProduct => {
-    consumeDemoAction('inventario');
     const code = String(prodData.code || '').trim().toLocaleUpperCase();
     if (!code || !String(prodData.name || '').trim()) throw new Error('El código y la descripción del artículo son obligatorios.');
     if (products.some(p => p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === code)) {
@@ -1121,7 +1107,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
 
   const importInventoryProducts = (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): number => {
-    consumeDemoAction('inventario');
     if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
     const existingCodes = new Set(products.filter(p => p.companyId === currentCompany.id).map(p => p.code.trim().toLocaleUpperCase()));
     const batchCodes = new Set<string>();
@@ -1335,7 +1320,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
       });
     }
-    consumeDemoAction('inventario');
     setProducts(prev => prev.map(product => virtualProducts.get(product.id) || product));
     setMovements(prev => [...prev, ...importedMovements]);
     if (importedEntries.length) setJournalEntries(prev => [...prev, ...importedEntries]);
@@ -1343,7 +1327,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const updateProduct = (updated: InventoryProduct) => {
-    consumeDemoAction('inventario');
     if (!products.some(p => p.id === updated.id && p.companyId === currentCompany.id)) {
       throw new Error('El artículo no pertenece a la empresa activa.');
     }
@@ -1354,7 +1337,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
-    consumeDemoAction('inventario');
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
     const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
@@ -1533,7 +1515,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
 
   const executeProduction = (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): InventoryMovement[] => {
-    consumeDemoAction('inventario');
     const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
     if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
@@ -1654,18 +1635,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteVatVoucher = (id: string) => {
-    consumeDemoAction('retenciones');
     setVatVouchers(prev => prev.filter(v => v.id !== id));
   };
 
   const deleteIslrVoucher = (id: string) => {
-    consumeDemoAction('retenciones');
     setIslrVouchers(prev => prev.filter(v => v.id !== id));
   };
 
   // Conciliación Bancaria
   const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId'>): BankAccount => {
-    consumeDemoAction('conciliacion');
     const newBank: BankAccount = {
       ...bankData,
       id: `bank-acc-${Date.now()}`,
@@ -1676,7 +1654,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
-    consumeDemoAction('conciliacion');
     const newMov: BankStatementMovement = {
       ...movData,
       id: `stmt-${Date.now()}`,
@@ -1687,12 +1664,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteBankStatementMovement = (id: string) => {
-    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev => prev.filter(m => m.id !== id));
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
-    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
@@ -1709,7 +1684,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const unreconcileMovement = (statementMovementId: string) => {
-    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.id === statementMovementId
@@ -1726,7 +1700,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const unreconcileAll = (bankAccountId: string) => {
-    consumeDemoAction('conciliacion');
     setBankStatementMovements(prev =>
       prev.map(m =>
         m.companyId === currentCompany.id && m.bankAccountId === bankAccountId
@@ -1743,7 +1716,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
-    consumeDemoAction('conciliacion');
     const targetAccount = bankAccounts.find(b => b.id === bankAccountId);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
