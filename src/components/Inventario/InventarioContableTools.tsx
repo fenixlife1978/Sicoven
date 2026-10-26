@@ -150,7 +150,7 @@ export const InventarioContableTools: React.FC = () => {
             unitCostUsd: validated.unitCostBs / validated.bcvRate,
             totalCostBs: validated.quantity * validated.unitCostBs,
             totalCostUsd: validated.quantity * validated.unitCostBs / validated.bcvRate,
-            balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0,
+            balanceQty: validated.balanceQty, balanceTotalBs: 0, balanceTotalUsd: 0,
             bcvRate: validated.bcvRate
           };
         }).sort((a,b) => a.date.localeCompare(b.date));
