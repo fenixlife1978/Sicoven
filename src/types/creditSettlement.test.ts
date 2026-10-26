@@ -53,8 +53,8 @@ describe('credit settlement balances and validation', () => {
   });
 
   it('allows a final partial payment within rounding tolerance but never a material overpayment', () => {
-    assert.equal(validateCreditSettlement({ ...draft, amountUsd: 75 }, 75), null);
-    assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02 }, 75) || '', /supera el saldo/);
+    assert.equal(validateCreditSettlement({ ...draft, amountUsd: 75, amountBs: 7500 }, 75), null);
+    assert.match(validateCreditSettlement({ ...draft, amountUsd: 75.02, amountBs: 7502 }, 75) || '', /supera el saldo/);
   });
 
 
