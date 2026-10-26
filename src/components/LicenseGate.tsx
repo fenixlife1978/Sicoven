@@ -8,6 +8,7 @@ type LicenseStatus = {
   customer?: string;
   product?: string;
   lastCheckedAt?: string | null;
+  trialExpiresAt?: string | null;
   message?: string;
 };
 
@@ -27,7 +28,7 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
         if (!mounted) return;
         setStatus(result);
         setChecking(false);
-        if (result.authorized) onReady();
+        if (result.authorized && result.status !== 'trial') onReady();
       })
       .catch(() => {
         if (mounted) {
@@ -115,10 +116,12 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
         </div>
 
         {status?.authorized ? (
-          <div className="mb-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+          <div className={`mb-5 rounded-xl border p-4 text-sm ${status.status === 'trial' ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-emerald-200 bg-emerald-50 text-emerald-900'}`}>
             <p className="flex items-center gap-2 font-bold">
-              <CheckCircle2 className="h-5 w-5 text-emerald-600" /> Licencia autorizada
+              <CheckCircle2 className={`h-5 w-5 ${status.status === 'trial' ? 'text-amber-600' : 'text-emerald-600'}`} />
+              {status.status === 'trial' ? 'Prueba gratuita activa · 24 horas' : 'Licencia de pago autorizada'}
             </p>
+            {status.status === 'trial' && <p className="mt-1">Puedes activar tu licencia de pago ahora o continuar con la prueba temporal.</p>}
             {status.product && <p className="mt-1">Producto: {status.product}</p>}
             {status.customer && <p>Cliente: {status.customer}</p>}
           </div>
@@ -174,6 +177,16 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
             {busy ? 'Verificando con el CRM…' : 'Activar licencia'}
           </button>
         </form>
+
+        {status?.authorized && status.status === 'trial' && (
+          <button
+            type="button"
+            onClick={onReady}
+            className="mt-3 flex h-11 w-full items-center justify-center gap-2 rounded-xl border border-slate-300 px-4 text-sm font-semibold text-slate-700 hover:bg-slate-50 transition cursor-pointer"
+          >
+            Continuar con la prueba gratuita
+          </button>
+        )}
 
         <a
           href="https://crm-sicoven.vercel.app/comprar"
