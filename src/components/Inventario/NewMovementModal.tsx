@@ -222,7 +222,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </label>
               <input
                 type="number"
-                min="1"
+                min={type === 'AJUSTE' ? 0 : 0.000001}
+                step="0.000001"
                 required
                 value={quantity}
                 onChange={e => setQuantity(Number(e.target.value))}
