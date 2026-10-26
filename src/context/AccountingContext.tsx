@@ -1664,10 +1664,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
     if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
     const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
-    journalItems.push(
-      { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: totalFinishedBs / rate, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
-      { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: totalFinishedBs / rate, description: 'Transferencia de producción terminada: ' + finished.code }
-    );
+    if (finished.itemType !== 'PRODUCTO_EN_PROCESO') {
+      journalItems.push(
+        { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: totalFinishedBs / rate, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: totalFinishedBs / rate, description: 'Transferencia de producción terminada: ' + finished.code }
+      );
+    }
     const entry = addJournalEntry({
       entryNumber: 0, date, description: 'Orden de producción ' + (documentRef || '') + ' · ' + finished.code,
       type: 'INVENTARIO', bcvRate: rate, referenceDoc: documentRef || ('PROD-' + Date.now()), items: journalItems
