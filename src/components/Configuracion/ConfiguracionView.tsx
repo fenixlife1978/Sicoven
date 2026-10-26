@@ -26,6 +26,7 @@ export const ConfiguracionView: React.FC = () => {
     setCurrentCompanyId,
     updateCompany,
     resetToSampleData,
+    resetFactoryData,
     exportBackupJson,
     importBackupJson
   } = useAccounting();
