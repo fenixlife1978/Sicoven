@@ -3,6 +3,8 @@ name: SICOVEN Windows installer
 on:
   push:
     branches: [main, feature/inventario-contable-integral]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
 
 permissions:
