@@ -1887,9 +1887,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const resetToSampleData = () => {
-    // SICOVEN opera sin datos ficticios en ninguna edición. Restablece a estado limpio.
-    setCompanies([]);
-    setCurrentCompanyId('');
+    // Reset de fábrica: conserva empresas/configuración fiscal, plan contable base,
+    // usuarios administrativos y estado de licencia (almacenados fuera de este estado).
+    // Elimina exclusivamente los registros operativos de todas las empresas.
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
     setJournalEntries([]);
     setPurchases([]);
