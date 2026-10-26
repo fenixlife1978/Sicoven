@@ -54,11 +54,11 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       minStock: Number(minStock) || 0,
       currentStock: Number(currentStock) || 0,
       avgCostBs: Number(avgCostBs) || 0,
-      avgCostUsd: Number(avgCostUsd.toFixed(2)),
+      avgCostUsd,
       lastCostBs: Number(avgCostBs) || 0,
-      lastCostUsd: Number(avgCostUsd.toFixed(2)),
+      lastCostUsd: avgCostUsd,
       salesPriceBs: Number(salesPriceBs) || 0,
-      salesPriceUsd: Number(salesPriceUsd.toFixed(2)),
+      salesPriceUsd,
       inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
       costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
     });
@@ -209,6 +209,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               <input
                 type="number"
                 min="0"
+                step="0.000001"
                 value={currentStock}
                 onChange={e => setCurrentStock(Number(e.target.value))}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
@@ -219,6 +220,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
               <input
                 type="number"
                 min="0"
+                step="0.000001"
                 value={minStock}
                 onChange={e => setMinStock(Number(e.target.value))}
                 className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
