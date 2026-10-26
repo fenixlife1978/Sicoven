@@ -1154,7 +1154,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
       const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
       const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
-      const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).length + 1;
+      const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
       openingEntry = {
         id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
         date: new Date().toISOString().slice(0, 10), description: `Asiento de apertura de inventario · ${newProd.code} · ${newProd.name}`,
@@ -1190,7 +1190,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const prepared: InventoryProduct[] = [];
     const openingMovements: InventoryMovement[] = [];
     const openingEntries: JournalEntry[] = [];
-    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).length + 1;
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
     const today = new Date().toISOString().slice(0, 10);
     for (const row of rows) {
       const code = String(row.code || '').trim().toLocaleUpperCase();
