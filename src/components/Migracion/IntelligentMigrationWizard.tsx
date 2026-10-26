@@ -92,6 +92,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const runMigration=()=>{
   setError('');setNotice('');
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
+  const available = new Set(headers.map(norm));
+  const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs']];
+  const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
+  if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan columnas esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias ni costos en cero.'); return; }
   if(selected.length!==1||!selected.includes('inventory')){setError('Selecciona Inventario para ejecutar esta primera etapa. Los demás módulos quedan identificados en el plan, pero no se escribirán hasta habilitar sus importadores con validación transaccional.');return;}
   setBusy(true);
   try{
