@@ -388,7 +388,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
-            if (Array.isArray(saved.accounts)) setAccounts(saved.accounts as Account[]);
+            if (Array.isArray(saved.accounts)) {
+              const savedAccounts = saved.accounts as Account[];
+              const savedCodes = new Set(savedAccounts.map(account => account.code));
+              // Migración compatible: incorpora cuentas nuevas de inventario sin sobrescribir el plan personalizado.
+              setAccounts([...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))]
+                .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+            }
             if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
             if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
             if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
