@@ -141,7 +141,7 @@ export const InventarioContableTools: React.FC = () => {
       const allowanceAccount = accounts.find(a => a.code === '1.1.4.03' && a.isMovement);
       if (!lossAccount || !allowanceAccount) throw new Error('Faltan las cuentas contables de desvalorización VNR.');
       const amountBs = Math.abs(delta);
-      const amountUsd = Math.round(amountBs / rate * 100) / 100;
+      const amountUsd = Math.round(amountBs / rate * 1000000) / 1000000;
       const items = delta > 0 ? [
         { accountCode: lossAccount.code, accountName: lossAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Pérdida por desvalorización VNR · ' + selectedProduct.code },
         { accountCode: allowanceAccount.code, accountName: allowanceAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Provisión correctora VNR · ' + selectedProduct.code }
@@ -220,9 +220,9 @@ export const InventarioContableTools: React.FC = () => {
       const items: Array<{accountCode:string;accountName:string;debitBs:number;creditBs:number;debitUsd:number;creditUsd:number;description:string}> = [];
       for (const group of groups.values()) {
         const expectedCogs = calculatePeriodicCostOfSales({
-          openingInventoryBs: Math.max(0, group.opening),
-          purchasesAndLandedCostsBs: Math.max(0, group.purchases),
-          closingInventoryBs: Math.max(0, group.closing)
+          openingInventoryBs: group.opening,
+          purchasesAndLandedCostsBs: group.purchases,
+          closingInventoryBs: group.closing
         });
         const costAccount = accounts.find(a => a.code === group.costCode && a.isMovement);
         const inventoryAccount = accounts.find(a => a.code === group.inventoryCode && a.isMovement);
@@ -232,7 +232,7 @@ export const InventarioContableTools: React.FC = () => {
         const delta = Math.round((expectedCogs - alreadyPosted) * 100) / 100;
         if (Math.abs(delta) < 0.01) continue;
         const amount = Math.abs(delta);
-        const usd = Math.round(amount / rate * 100) / 100;
+        const usd = Math.round(amount / rate * 1000000) / 1000000;
         if (delta > 0) {
           items.push({ accountCode: costAccount.code, accountName: costAccount.name, debitBs: amount, creditBs: 0, debitUsd: usd, creditUsd: 0, description: 'Regularización costo de ventas por cierre de inventario' });
           items.push({ accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: usd, description: 'Regularización inventario al cierre del período' });
