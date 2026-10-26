@@ -29,7 +29,7 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products, movements, accounts, importInventoryProducts, updateProduct, addJournalEntry } = useAccounting();
+  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, updateProduct, addJournalEntry } = useAccounting();
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -161,6 +161,75 @@ export const InventarioContableTools: React.FC = () => {
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la provisión VNR.'); }
   };
 
+
+  const closeInventoryPeriod = () => {
+    setError(''); setMessage(''); setClosingBusy(true);
+    try {
+      if (!periodStart || !periodEnd || periodStart > periodEnd) throw new Error('Seleccione un período contable válido.');
+      const rate = Number(closingRate);
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Introduzca la tasa BCV histórica correspondiente al cierre.');
+      const reference = 'CIERRE-INVENTARIO-' + periodStart + '-' + periodEnd;
+      if (journalEntries.some(entry => entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
+      const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number }>();
+      const entriesInPeriod = journalEntries.filter(entry => entry.date >= periodStart && entry.date <= periodEnd);
+      for (const product of products) {
+        const history = movements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        if (product.currentStock > 0 && history.length === 0) throw new Error('El artículo ' + product.code + ' tiene existencia sin Kardex. Registre o importe su inventario inicial antes del cierre.');
+        const before = history.filter(m => m.date < periodStart);
+        const atEnd = history.filter(m => m.date <= periodEnd);
+        const openingMovement = before.length ? before[before.length - 1] : null;
+        const closingMovement = atEnd.length ? atEnd[atEnd.length - 1] : null;
+        const opening = openingMovement ? Number(openingMovement.balanceTotalBs || 0) : 0;
+        const closing = closingMovement ? Number(closingMovement.balanceTotalBs || 0) : 0;
+        const purchasesInPeriod = history.filter(m => m.date >= periodStart && m.date <= periodEnd && m.type === 'ENTRADA' && ['COMPRA','DEVOLUCION_CLIENTE','INVENTARIO_INICIAL'].includes(m.concept))
+          .reduce((sum,m) => sum + Number(m.totalCostBs || 0), 0)
+          - history.filter(m => m.date >= periodStart && m.date <= periodEnd && m.type === 'SALIDA' && m.concept === 'DEVOLUCION_COMPRA')
+          .reduce((sum,m) => sum + Number(m.totalCostBs || 0), 0);
+        const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+        const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+        const key = inventoryCode + '|' + costCode;
+        const group = groups.get(key) || { inventoryCode, costCode, opening: 0, purchases: 0, closing: 0 };
+        group.opening += opening; group.purchases += purchasesInPeriod; group.closing += closing;
+        groups.set(key, group);
+      }
+      const items: Array<{accountCode:string;accountName:string;debitBs:number;creditBs:number;debitUsd:number;creditUsd:number;description:string}> = [];
+      for (const group of groups.values()) {
+        const expectedCogs = calculatePeriodicCostOfSales({
+          openingInventoryBs: Math.max(0, group.opening),
+          purchasesAndLandedCostsBs: Math.max(0, group.purchases),
+          closingInventoryBs: Math.max(0, group.closing)
+        });
+        const costAccount = accounts.find(a => a.code === group.costCode && a.isMovement);
+        const inventoryAccount = accounts.find(a => a.code === group.inventoryCode && a.isMovement);
+        if (!costAccount || !inventoryAccount) throw new Error('Falta una cuenta contable válida para el par ' + group.inventoryCode + ' / ' + group.costCode + '.');
+        const alreadyPosted = entriesInPeriod.filter(entry => entry.type === 'INVENTARIO' && entry.description.toLowerCase().includes('costo de venta'))
+          .reduce((sum,entry) => sum + entry.items.filter(line => line.accountCode === group.costCode).reduce((subtotal,line) => subtotal + Number(line.debitBs || 0) - Number(line.creditBs || 0),0),0);
+        const delta = Math.round((expectedCogs - alreadyPosted) * 100) / 100;
+        if (Math.abs(delta) < 0.01) continue;
+        const amount = Math.abs(delta);
+        const usd = Math.round(amount / rate * 100) / 100;
+        if (delta > 0) {
+          items.push({ accountCode: costAccount.code, accountName: costAccount.name, debitBs: amount, creditBs: 0, debitUsd: usd, creditUsd: 0, description: 'Regularización costo de ventas por cierre de inventario' });
+          items.push({ accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: usd, description: 'Regularización inventario al cierre del período' });
+        } else {
+          items.push({ accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: amount, creditBs: 0, debitUsd: usd, creditUsd: 0, description: 'Reversión de exceso de costo de ventas del período' });
+          items.push({ accountCode: costAccount.code, accountName: costAccount.name, debitBs: 0, creditBs: amount, debitUsd: 0, creditUsd: usd, description: 'Reversión de exceso de costo de ventas del período' });
+        }
+      }
+      if (!items.length) {
+        setMessage('El período ' + periodStart + ' a ' + periodEnd + ' ya concilia con los costos de ventas contabilizados. No se generó un asiento duplicado.');
+        return;
+      }
+      addJournalEntry({
+        entryNumber: 0, date: periodEnd, description: 'Cierre y conciliación de inventario ' + periodStart + ' a ' + periodEnd,
+        type: 'CIERRE', bcvRate: rate, referenceDoc: reference, items
+      });
+      setMessage('Cierre de inventario registrado y conciliado con los costos de ventas existentes. Referencia: ' + reference);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'No se pudo cerrar el inventario.');
+    } finally { setClosingBusy(false); }
+  };
+
   return <div className="space-y-5">
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
       <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-emerald-700" /><h2 className="font-bold text-slate-900">Importación y exportación contable</h2></div>
@@ -175,6 +244,25 @@ export const InventarioContableTools: React.FC = () => {
         <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro de entradas/salidas</button>
       </div>
       <p className="text-xs text-slate-500">La exportación contiene cantidades, costos, valores en Bs./USD, cuenta contable y tasa histórica del movimiento. El archivo CSV puede abrirse en Excel; la importación directa de archivos XLSX y conectores API se incorporarán en la siguiente fase.</p>
+    </section>
+
+
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+      <div className="flex items-center gap-2"><Scale className="h-5 w-5 text-emerald-700" /><h2 className="font-bold text-slate-900">Cierre y valoración periódica de inventario</h2></div>
+      <p className="text-sm text-slate-600">Calcula el costo de ventas por artículo y cuentas asociadas a partir del Kardex histórico, descuenta el costo de ventas ya contabilizado y solo genera el asiento de ajuste que falte. El cierre se bloquea si detecta artículos con existencias sin trazabilidad.</p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <label className="text-sm font-medium text-slate-700">Desde
+          <input type="date" value={periodStart} onChange={e => setPeriodStart(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">Hasta
+          <input type="date" value={periodEnd} onChange={e => setPeriodEnd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">Tasa BCV histórica de cierre
+          <input type="number" min="0.000001" step="0.000001" value={closingRate} onChange={e => setClosingRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+      </div>
+      <button disabled={closingBusy || !products.length} onClick={closeInventoryPeriod} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{closingBusy ? 'Procesando cierre…' : 'Calcular, conciliar y registrar cierre'}</button>
+      <p className="text-xs text-amber-800">El cálculo depende de que las compras, devoluciones, ajustes y salidas estén importados o registrados en el Kardex con fecha y costo correctos. El sistema no inventa movimientos faltantes.</p>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
