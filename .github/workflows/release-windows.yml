@@ -73,7 +73,7 @@ jobs:
           if (-not $installer) { throw 'No se generó el instalador completo .exe de SICOVEN.' }
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
       - name: Publish GitHub Release
-        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/sqlite-desktop-release' || startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           GH_TOKEN: ${{ github.token }}
           REF_NAME: ${{ github.ref_name }}
@@ -81,15 +81,9 @@ jobs:
         shell: pwsh
         run: |
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName)
-          if ($env:REF_NAME -eq 'main' -or $env:REF_NAME -eq 'sqlite-desktop-release') {
-            $tag = 'v1.0.0-sqlite-desktop'
-            $title = 'SICOVEN 1.0.0 — instaladores de escritorio (Producción)'
-            $notes = 'Release oficial de SICOVEN para Windows. Incluye el instalador completo con base SQLite local y soporte de licencias CRM. El período de prueba se gestiona mediante licenciamiento, no con una edición DEMO separada.'
-          } else {
-            $tag = $env:REF_NAME
-            $title = "SICOVEN $tag"
-            $notes = 'Instalador completo de SICOVEN para Windows, compilado por GitHub Actions.'
-          }
+          $tag = $env:REF_NAME
+          $title = "SICOVEN $tag"
+          $notes = 'Instalador completo de SICOVEN para Windows, compilado por GitHub Actions. El período de prueba se gestiona mediante licenciamiento, no con una edición DEMO separada.'
           $releaseExists = $false
           try {
             $null = gh release view $tag 2>&1
