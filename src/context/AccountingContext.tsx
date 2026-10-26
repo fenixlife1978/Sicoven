@@ -1109,7 +1109,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (products.some(p => p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === code)) {
       throw new Error(`Ya existe un artículo con el código ${code} en la empresa activa.`);
     }
-    const rate = Number(prodData.openingBcvRate || currentCompany.bcvRate);
+    const rate = Number(prodData.openingBcvRate ?? currentCompany.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure la tasa BCV histórica válida antes de crear artículos con valoración.');
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
@@ -1191,7 +1191,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!code || !name) throw new Error('Cada artículo debe incluir código y descripción.');
       if (existingCodes.has(code) || batchCodes.has(code)) throw new Error('Código duplicado en la empresa o archivo: ' + code + '.');
       batchCodes.add(code);
-      const rate = Number(row.openingBcvRate || currentCompany.bcvRate);
+      const rate = Number(row.openingBcvRate ?? currentCompany.bcvRate);
       const quantity = Number(row.currentStock || 0);
       const unitCostBs = Number(row.avgCostBs || 0);
       const date = row.openingDate || today;
@@ -1263,7 +1263,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       keys.add(key);
       const priorProductMovements = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
       if (priorProductMovements.length && row.date < priorProductMovements[priorProductMovements.length - 1].date) throw new Error('Fila ' + (index + 2) + ': importe los períodos históricos en orden cronológico; esta fecha es anterior al último movimiento de ' + product.code + '.');
-      const rate = Number(row.bcvRate || currentCompany.bcvRate);
+      const rate = Number(row.bcvRate ?? currentCompany.bcvRate);
       const requestedCost = Number(row.unitCostBs);
       const isAdjustment = row.type === 'AJUSTE';
       const targetStock = Number(row.balanceQty);
@@ -1391,7 +1391,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     consumeDemoAction('inventario');
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
-    const rate = Number(movData.bcvRate || currentCompany.bcvRate);
+    const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
     const isAdjustment = movData.type === 'AJUSTE';
     const actualQuantity = isAdjustment ? Math.abs(Number(movData.balanceQty) - prod.currentStock) : Number(movData.quantity);
     const requestedCost = Number(movData.unitCostBs);
