@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Download, FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
+import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
@@ -38,6 +38,18 @@ export const InventarioContableTools: React.FC = () => {
   const [sellingPrice, setSellingPrice] = useState('0');
   const [completionCost, setCompletionCost] = useState('0');
   const [sellingCost, setSellingCost] = useState('0');
+  const [periodStart, setPeriodStart] = useState(new Date().getFullYear() + '-01-01');
+  const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
+  const [closingRate, setClosingRate] = useState(String(currentCompany.bcvRate || ''));
+  const [closingBusy, setClosingBusy] = useState(false);
+  const [finishedProductId, setFinishedProductId] = useState(products.find(p => p.itemType === 'PRODUCTO_TERMINADO')?.id || '');
+  const [recipeLines, setRecipeLines] = useState<Array<{productId:string;quantityPerUnit:number}>>([]);
+  const [componentId, setComponentId] = useState('');
+  const [componentQty, setComponentQty] = useState('1');
+  const [productionQty, setProductionQty] = useState('1');
+  const [productionDate, setProductionDate] = useState(new Date().toISOString().slice(0,10));
+  const [productionRate, setProductionRate] = useState(String(currentCompany.bcvRate || ''));
+  const [productionRef, setProductionRef] = useState('');
 
   const selectedProduct = products.find(product => product.id === productId);
   const selectedFinishedProduct = products.find(product => product.id === finishedProductId);
