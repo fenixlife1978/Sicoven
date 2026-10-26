@@ -1261,6 +1261,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('Movimiento duplicado en la fila ' + (index + 2) + ': ' + row.documentRef + '.');
       }
       keys.add(key);
+      const priorProductMovements = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+      if (priorProductMovements.length && row.date < priorProductMovements[priorProductMovements.length - 1].date) throw new Error('Fila ' + (index + 2) + ': importe los períodos históricos en orden cronológico; esta fecha es anterior al último movimiento de ' + product.code + '.');
       const rate = Number(row.bcvRate || currentCompany.bcvRate);
       const requestedCost = Number(row.unitCostBs);
       const isAdjustment = row.type === 'AJUSTE';
@@ -1402,6 +1404,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const prior = movements.filter(m => m.companyId === currentCompany.id && m.productId === prod.id)
       .slice().sort((a, b) => a.date.localeCompare(b.date));
+    if (prior.length && movData.date < prior[prior.length - 1].date) throw new Error('El movimiento está fechado antes del último registro del Kardex. Importe primero los períodos históricos en orden cronológico para evitar saldos y costos incorrectos.');
     let unitCostBs = requestedCost;
     let unitCostUsd = requestedCost / rate;
     let totalCostBs = 0;
