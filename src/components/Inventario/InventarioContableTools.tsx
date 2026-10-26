@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Download, FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown } from '../../types/inventoryAccounting';
@@ -29,7 +29,7 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, updateProduct, addJournalEntry } = useAccounting();
+  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, updateProduct, addJournalEntry, executeProduction } = useAccounting();
   const [importing, setImporting] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -39,6 +39,8 @@ export const InventarioContableTools: React.FC = () => {
   const [sellingCost, setSellingCost] = useState('0');
 
   const selectedProduct = products.find(product => product.id === productId);
+  const selectedFinishedProduct = products.find(product => product.id === finishedProductId);
+  useEffect(() => { setRecipeLines(selectedFinishedProduct?.bomComponents || []); }, [finishedProductId]);
   const vnr = useMemo(() => {
     if (!selectedProduct) return null;
     try {
@@ -162,6 +164,29 @@ export const InventarioContableTools: React.FC = () => {
   };
 
 
+
+  const saveRecipe = () => {
+    setError(''); setMessage('');
+    if (!selectedFinishedProduct) { setError('Seleccione el producto terminado.'); return; }
+    if (selectedFinishedProduct.itemType !== 'PRODUCTO_TERMINADO') { setError('Clasifique primero el artículo como Producto terminado en su ficha.'); return; }
+    if (!recipeLines.length) { setError('Agregue al menos una materia prima o componente en proceso a la matriz.'); return; }
+    if (recipeLines.some(line => !products.some(p => p.id === line.productId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')) || line.productId === finishedProductId || !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0)) {
+      setError('La matriz contiene componentes inválidos. Use materias primas/productos en proceso y cantidades positivas.'); return;
+    }
+    try {
+      updateProduct({ ...selectedFinishedProduct, bomComponents: recipeLines });
+      setMessage('Matriz insumo-producto guardada en el registro del producto terminado.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la matriz.'); }
+  };
+
+  const runProduction = () => {
+    setError(''); setMessage('');
+    try {
+      const result = executeProduction(finishedProductId, Number(productionQty), productionDate, Number(productionRate), productionRef.trim() || ('PROD-' + Date.now()));
+      setMessage('Producción registrada: ' + result.length + ' movimientos de consumo/entrada y asiento contable de producción.');
+    } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la producción.'); }
+  };
+
   const closeInventoryPeriod = () => {
     setError(''); setMessage(''); setClosingBusy(true);
     try {
@@ -263,6 +288,55 @@ export const InventarioContableTools: React.FC = () => {
       </div>
       <button disabled={closingBusy || !products.length} onClick={closeInventoryPeriod} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{closingBusy ? 'Procesando cierre…' : 'Calcular, conciliar y registrar cierre'}</button>
       <p className="text-xs text-amber-800">El cálculo depende de que las compras, devoluciones, ajustes y salidas estén importados o registrados en el Kardex con fecha y costo correctos. El sistema no inventa movimientos faltantes.</p>
+    </section>
+
+
+    <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
+      <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-violet-700" /><h2 className="font-bold text-slate-900">Matriz insumo-producto y producción</h2></div>
+      <p className="text-sm text-slate-600">Configure la receta por unidad del producto terminado. Al ejecutar una orden, SICOVEN descuenta materias primas según su método de costeo, registra el consumo en productos en proceso y capitaliza el costo en el producto terminado mediante un asiento de partida doble.</p>
+      <label className="block text-sm font-medium text-slate-700">Producto terminado
+        <select value={finishedProductId} onChange={e => setFinishedProductId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+          <option value="">Seleccione…</option>
+          {products.filter(p => p.itemType === 'PRODUCTO_TERMINADO').map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+        </select>
+      </label>
+      <div className="space-y-2">
+        {recipeLines.map((line,index) => {
+          const component = products.find(p => p.id === line.productId);
+          return <div key={line.productId} className="grid grid-cols-[1fr_110px_auto] items-center gap-2">
+            <span className="text-sm text-slate-700">{component ? component.code + ' · ' + component.name : 'Componente no encontrado'}</span>
+            <input aria-label="Cantidad por unidad" type="number" min="0.000001" step="0.000001" value={line.quantityPerUnit} onChange={e => setRecipeLines(prev => prev.map((x,i) => i === index ? { ...x, quantityPerUnit: Number(e.target.value) } : x))} className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm" />
+            <button onClick={() => setRecipeLines(prev => prev.filter((_,i) => i !== index))} className="rounded-lg border border-slate-300 px-3 py-1.5 text-sm">Quitar</button>
+          </div>;
+        })}
+      </div>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-[1fr_140px_auto]">
+        <select value={componentId} onChange={e => setComponentId(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="">Añadir materia prima / producto en proceso…</option>
+          {products.filter(p => p.id !== finishedProductId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')).map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+        </select>
+        <input aria-label="Cantidad por unidad" type="number" min="0.000001" step="0.000001" value={componentQty} onChange={e => setComponentQty(e.target.value)} className="rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        <button onClick={() => {
+          if (!componentId || Number(componentQty) <= 0 || recipeLines.some(line => line.productId === componentId)) { setError('Seleccione un componente válido, con cantidad positiva y sin duplicados.'); return; }
+          setError(''); setRecipeLines(prev => [...prev, { productId: componentId, quantityPerUnit: Number(componentQty) }]); setComponentId('');
+        }} className="rounded-lg border border-slate-300 px-3 py-2 text-sm font-semibold">Añadir componente</button>
+      </div>
+      <button onClick={saveRecipe} disabled={!selectedFinishedProduct} className="rounded-lg border border-violet-300 bg-violet-50 px-4 py-2 text-sm font-semibold text-violet-800 disabled:opacity-50">Guardar matriz</button>
+      <div className="grid grid-cols-1 gap-3 border-t border-slate-200 pt-4 sm:grid-cols-4">
+        <label className="text-sm font-medium text-slate-700">Cantidad a producir
+          <input type="number" min="0.000001" step="0.000001" value={productionQty} onChange={e => setProductionQty(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">Fecha
+          <input type="date" value={productionDate} onChange={e => setProductionDate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">Tasa BCV
+          <input type="number" min="0.000001" step="0.000001" value={productionRate} onChange={e => setProductionRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+        <label className="text-sm font-medium text-slate-700">N° orden
+          <input value={productionRef} onChange={e => setProductionRef(e.target.value)} placeholder="OP-00001" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
+        </label>
+      </div>
+      <button onClick={runProduction} disabled={!selectedFinishedProduct || !selectedFinishedProduct.bomComponents?.length} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Ejecutar orden de producción</button>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
