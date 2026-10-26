@@ -123,7 +123,7 @@ export const InventarioContableTools: React.FC = () => {
             date: row.date, type: type as 'ENTRADA' | 'SALIDA' | 'AJUSTE', concept: String(row.concept || '').trim().toUpperCase(),
             documentRef: String(row.documentref || '').trim(), documentType: row.documenttype || 'Resumen importado',
             counterpartyRif: row.counterpartyrif || '', counterpartyName: row.counterpartyname || '',
-            quantity, unitCostBs: cost, unitCostUsd: rate > 0 ? cost / rate : 0,
+            quantity, unitCostBs: cost, additionalLandedCostsBs: numeric('additionallandedcostsbs'), unitCostUsd: rate > 0 ? cost / rate : 0,
             totalCostBs: quantity * cost, totalCostUsd: rate > 0 ? quantity * cost / rate : 0,
             balanceQty: numeric('balanceqty'), balanceTotalBs: numeric('balancetotalbs'), balanceTotalUsd: numeric('balancetotalusd'),
             bcvRate: rate
@@ -144,7 +144,7 @@ export const InventarioContableTools: React.FC = () => {
   ], []);
 
   const exportMovementTemplate = () => downloadCsv('SICOVEN_Plantilla_Movimientos.csv', [
-    'date','type','concept','productCode','quantity','unitCostBs','bcvRate','documentRef','documentType','counterpartyRif','counterpartyName','balanceQty'
+    'date','type','concept','productCode','quantity','unitCostBs','additionalLandedCostsBs','bcvRate','documentRef','documentType','counterpartyRif','counterpartyName','balanceQty'
   ], []);
 
   const exportInventory = () => downloadCsv('SICOVEN_Inventario_Valorado.csv', [
