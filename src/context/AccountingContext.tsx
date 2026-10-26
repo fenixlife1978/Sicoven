@@ -1115,6 +1115,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
       throw new Error('La existencia y el costo inicial no pueden ser negativos.');
     }
+    if (initialQuantity > 0 && initialCostBs <= 0) throw new Error('El inventario inicial debe tener un costo unitario mayor que cero.');
     const newProd: InventoryProduct = {
       ...prodData,
       code,
@@ -1194,7 +1195,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const unitCostBs = Number(row.avgCostBs || 0);
       const date = row.openingDate || today;
       if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
-          !Number.isFinite(unitCostBs) || unitCostBs < 0) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
+          !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
       const product: InventoryProduct = {
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
         companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
@@ -1386,6 +1387,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const debitCode = isSale ? costAccountCode : adjustmentAccountCode;
         const debitAccount = isSale ? costAccount : adjustmentAccount;
         if (!isPositiveAdjustment && (!debitAccount || !debitAccount.isMovement)) throw new Error(`La cuenta de costo/ajuste ${debitCode} no existe o no admite movimientos.`);
+        if (isPositiveAdjustment && (!adjustmentAccount || !adjustmentAccount.isMovement)) throw new Error(`La cuenta de contrapartida de ajuste ${adjustmentAccountCode} no existe o no admite movimientos.`);
         const amountBs = totalCostBs;
         const amountUsd = totalCostUsd;
         const items: JournalEntryItem[] = isPositiveAdjustment
@@ -1460,7 +1462,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
         if (layerQuantity < component.currentStock - 1e-8) layers.unshift({ quantity: component.currentStock - layerQuantity, unitCostBs: component.avgCostBs, unitCostUsd: component.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
-        if (layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0) < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
+        const availableLayers = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
+        if (availableLayers > component.currentStock + 1e-8) throw new Error('El Kardex PEPS no concilia con la existencia actual de ' + component.code + '.');
+        if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
         totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
       } else {
         totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
