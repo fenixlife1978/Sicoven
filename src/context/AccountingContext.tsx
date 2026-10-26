@@ -30,6 +30,7 @@ import { formatVoucherNumber } from '../utils/formatters';
 import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
+import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 
 interface AccountingContextType {
   companies: Company[];
@@ -78,6 +79,9 @@ interface AccountingContextType {
   // Inventario
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
+  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
+  importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
+  executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => InventoryMovement[];
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
@@ -114,19 +118,6 @@ const AccountingContext = createContext<AccountingContextType | undefined>(undef
 
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
 const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
-const DEMO_LIMIT = 10;
-const DEMO_LABELS: Record<string, string> = {
-  empresa: 'Empresas',
-  diario: 'Libro Diario',
-  compras: 'Compras',
-  ventas: 'Ventas',
-  inventario: 'Inventario',
-  catalogo: 'Catálogo y plan de cuentas',
-  retenciones: 'Retenciones',
-  configuracion: 'Configuración',
-  conciliacion: 'Conciliación bancaria'
-};
-
 // En escritorio, SQLite es la única fuente operativa; localStorage se reserva
 // para la vista web de desarrollo y nunca inicializa datos del instalador.
 const readBrowserStorage = (key: string): string | null => {
@@ -249,48 +240,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
   const demoUsageRef = useRef<Record<string, number>>({});
-  const consumeDemoAction = (moduleKey: string) => {
-    if (!IS_DEMO) return;
-    const label = DEMO_LABELS[moduleKey] || moduleKey;
-    if (window.sicovenStore) {
-      const result = window.sicovenStore.consumeDemoAction(moduleKey);
-      if (result?.usage && typeof result.usage === 'object') {
-        demoUsageRef.current = result.usage;
-        setDemoUsage(result.usage);
-      }
-      if (!result?.ok) {
-        const message = result?.used !== undefined
-          ? `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`
-          : 'No se pudo registrar la acción demo en SQLite. La operación fue bloqueada para proteger el límite.';
-        window.alert(message);
-        throw new Error(message);
-      }
-      return;
-    }
-
-    // Respaldo para la vista web de desarrollo: el contador se escribe antes
-    // de permitir la mutación y sobrevive a una recarga del navegador.
-    let storedUsage: Record<string, number> = {};
-    try {
-      storedUsage = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_demoUsage`) || '{}');
-    } catch {
-      storedUsage = {};
-    }
-    const used = Number(storedUsage[moduleKey] ?? demoUsageRef.current[moduleKey] ?? 0);
-    if (used >= DEMO_LIMIT) {
-      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
-      window.alert(message);
-      throw new Error(message);
-    }
-    const nextUsage = { ...storedUsage, [moduleKey]: used + 1 };
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_demoUsage`, JSON.stringify(nextUsage));
-    } catch {
-      throw new Error('No se pudo guardar el contador de la demo; la operación fue bloqueada.');
-    }
-    demoUsageRef.current = nextUsage;
-    setDemoUsage(nextUsage);
-  };
+  // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
+  // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
+  const consumeDemoAction = (_moduleKey: string) => {};
 
   const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
     id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
@@ -386,7 +338,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
-            if (Array.isArray(saved.accounts)) setAccounts(saved.accounts as Account[]);
+            if (Array.isArray(saved.accounts)) {
+              const savedAccounts = saved.accounts as Account[];
+              const savedCodes = new Set(savedAccounts.map(account => account.code));
+              // Migración compatible: incorpora cuentas nuevas de inventario sin sobrescribir el plan personalizado.
+              setAccounts([...savedAccounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !savedCodes.has(account.code))]
+                .sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+            }
             if (Array.isArray(saved.journalEntries)) setJournalEntries(saved.journalEntries as JournalEntry[]);
             if (Array.isArray(saved.purchases)) setPurchases(saved.purchases as PurchaseRecord[]);
             if (Array.isArray(saved.sales)) setSales(saved.sales as SaleRecord[]);
@@ -1091,92 +1049,619 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  // Inventario
+  // Inventario contable: cada movimiento valida existencias y conserva la tasa histórica.
   const addProduct = (prodData: Omit<InventoryProduct, 'id' | 'companyId'>): InventoryProduct => {
     consumeDemoAction('inventario');
+    const code = String(prodData.code || '').trim().toLocaleUpperCase();
+    if (!code || !String(prodData.name || '').trim()) throw new Error('El código y la descripción del artículo son obligatorios.');
+    if (products.some(p => p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === code)) {
+      throw new Error(`Ya existe un artículo con el código ${code} en la empresa activa.`);
+    }
+    const rate = Number(prodData.openingBcvRate ?? currentCompany.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure la tasa BCV histórica válida antes de crear artículos con valoración.');
+    const initialQuantity = Number(prodData.currentStock || 0);
+    const initialCostBs = Number(prodData.avgCostBs || 0);
+    const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
+    const openingDateParsed = new Date(openingDateValue + 'T00:00:00Z');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDateValue) || !Number.isFinite(openingDateParsed.getTime()) || openingDateParsed.toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
+    if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
+      throw new Error('La existencia y el costo inicial no pueden ser negativos.');
+    }
+    if (initialQuantity > 0 && initialCostBs <= 0) throw new Error('El inventario inicial debe tener un costo unitario mayor que cero.');
     const newProd: InventoryProduct = {
       ...prodData,
-      id: `prod-${Date.now()}`,
+      code,
+      currentStock: initialQuantity,
+      avgCostBs: initialCostBs,
+      avgCostUsd: initialCostBs / rate,
+      lastCostBs: initialCostBs,
+      lastCostUsd: initialCostBs / rate,
+      inventoryAccountCode: prodData.inventoryAccountCode || '1.1.4.01',
+      costOfSalesAccountCode: prodData.costOfSalesAccountCode || '5.1.1.01',
+      adjustmentAccountCode: prodData.adjustmentAccountCode || '5.1.2.01',
+      openingBalanceAccountCode: prodData.openingBalanceAccountCode || '3.3.1.01',
+      costingMethod: prodData.costingMethod || 'PROMEDIO_PONDERADO',
+      vatTreatment: prodData.vatTreatment || 'GENERAL_16',
+      itemType: prodData.itemType || 'MERCANCIA',
+      openingDate: openingDateValue,
+      openingBcvRate: rate,
+      vnrProvisionBs: Number(prodData.vnrProvisionBs || 0),
+      id: `prod-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id
     };
+    const inventoryAccount = accounts.find(a => a.code === newProd.inventoryAccountCode && a.isMovement && a.type === 'ACTIVO');
+    const costAccount = accounts.find(a => a.code === newProd.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+    const adjustmentAccount = accounts.find(a => a.code === newProd.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+    if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no es una cuenta de activo de movimiento.`);
+    if (newProd.itemType === 'PRODUCTO_EN_PROCESO' && newProd.inventoryAccountCode !== '1.1.4.04') throw new Error('Los productos en proceso deben asociarse a la cuenta 1.1.4.04.');
+    if (!costAccount) throw new Error(`La cuenta de costo de ventas ${newProd.costOfSalesAccountCode} no existe o no admite movimientos.`);
+    if (!adjustmentAccount) throw new Error(`La cuenta de mermas/ajustes ${newProd.adjustmentAccountCode} no existe o no admite movimientos.`);
+    let opening: InventoryMovement | null = null;
+    let openingEntry: JournalEntry | null = null;
+    if (initialQuantity > 0) {
+      const offsetAccount = accounts.find(a => a.code === newProd.openingBalanceAccountCode && a.isMovement);
+      if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
+      const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
+      const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
+      const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+      openingEntry = {
+        id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
+        date: openingDateValue, description: `Asiento de apertura de inventario · ${newProd.code} · ${newProd.name}`,
+        type: 'APERTURA', bcvRate: rate, referenceDoc: `APERTURA-${newProd.code}`,
+        items: [
+          { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: openingValueBs, creditBs: 0, debitUsd: openingValueUsd, creditUsd: 0, description: `Existencia inicial de ${initialQuantity} ${newProd.unit}` },
+          { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: openingValueBs, debitUsd: 0, creditUsd: openingValueUsd, description: `Contrapartida de apertura de inventario ${newProd.code}` }
+        ], createdAt: new Date().toISOString()
+      };
+      opening = {
+        id: `mov-opening-${newProd.id}`, companyId: currentCompany.id,
+        productId: newProd.id, productName: newProd.name, productCode: newProd.code,
+        date: openingEntry.date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
+        documentRef: openingEntry.referenceDoc || 'APERTURA-INVENTARIO', quantity: initialQuantity, unitCostBs: initialCostBs,
+        unitCostUsd: initialCostBs / rate, totalCostBs: openingValueBs,
+        totalCostUsd: openingValueUsd, balanceQty: initialQuantity,
+        balanceTotalBs: openingValueBs, balanceTotalUsd: openingValueUsd,
+        bcvRate: rate, costingMethod: newProd.costingMethod, journalEntryId: openingEntry.id
+      };
+    }
     setProducts(prev => [...prev, newProd]);
+    if (opening) setMovements(prev => [...prev, opening!]);
+    if (openingEntry) setJournalEntries(prev => [...prev, openingEntry!]);
     return newProd;
+  };
+
+
+  const importInventoryProducts = (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): number => {
+    consumeDemoAction('inventario');
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
+    const existingCodes = new Set(products.filter(p => p.companyId === currentCompany.id).map(p => p.code.trim().toLocaleUpperCase()));
+    const batchCodes = new Set<string>();
+    const prepared: InventoryProduct[] = [];
+    const openingMovements: InventoryMovement[] = [];
+    const openingEntries: JournalEntry[] = [];
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    const today = new Date().toISOString().slice(0, 10);
+    for (const row of rows) {
+      const code = String(row.code || '').trim().toLocaleUpperCase();
+      const name = String(row.name || '').trim();
+      if (!code || !name) throw new Error('Cada artículo debe incluir código y descripción.');
+      if (existingCodes.has(code) || batchCodes.has(code)) throw new Error('Código duplicado en la empresa o archivo: ' + code + '.');
+      batchCodes.add(code);
+      const rate = Number(row.openingBcvRate ?? currentCompany.bcvRate);
+      const quantity = Number(row.currentStock || 0);
+      const unitCostBs = Number(row.avgCostBs || 0);
+      const date = row.openingDate || today;
+      const parsedOpeningDate = new Date(date + 'T00:00:00Z');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedOpeningDate.getTime()) || parsedOpeningDate.toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
+      if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
+          !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
+      const product: InventoryProduct = {
+        ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
+        companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
+        avgCostUsd: unitCostBs / rate, lastCostBs: unitCostBs, lastCostUsd: unitCostBs / rate,
+        inventoryAccountCode: row.inventoryAccountCode || '1.1.4.01',
+        costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
+        adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
+        openingBalanceAccountCode: row.openingBalanceAccountCode || '3.3.1.01',
+        costingMethod: row.costingMethod || 'PROMEDIO_PONDERADO',
+        vatTreatment: row.vatTreatment || 'GENERAL_16', itemType: row.itemType || 'MERCANCIA',
+        openingDate: date, openingBcvRate: rate, vnrProvisionBs: Number(row.vnrProvisionBs || 0)
+      };
+      const inventoryAccount = accounts.find(a => a.code === product.inventoryAccountCode && a.isMovement && a.type === 'ACTIVO');
+      const costAccount = accounts.find(a => a.code === product.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+      const adjustmentAccount = accounts.find(a => a.code === product.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+      if (!inventoryAccount || !costAccount || !adjustmentAccount) throw new Error('Cuentas contables inválidas para el artículo ' + code + '.');
+      if (product.itemType === 'PRODUCTO_EN_PROCESO' && product.inventoryAccountCode !== '1.1.4.04') throw new Error('El artículo ' + code + ' es producto en proceso y debe usar la cuenta 1.1.4.04.');
+      if (quantity > 0) {
+        const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
+        if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
+        const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
+        const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
+        const entry: JournalEntry = {
+          id: 'entry-inventory-opening-' + product.id, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
+          bcvRate: rate, referenceDoc: 'APERTURA-' + code,
+          items: [
+            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalUsd, creditUsd: 0, description: 'Existencia inicial de ' + quantity + ' ' + product.unit },
+            { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Contrapartida de apertura de inventario ' + code }
+          ], createdAt: new Date().toISOString()
+        };
+        openingEntries.push(entry);
+        openingMovements.push({
+          id: 'mov-opening-' + product.id, companyId: currentCompany.id, productId: product.id,
+          productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
+          documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
+          unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalUsd,
+          balanceQty: quantity, balanceTotalBs: totalBs, balanceTotalUsd: totalUsd,
+          bcvRate: rate, costingMethod: product.costingMethod, journalEntryId: entry.id
+        });
+      }
+      prepared.push(product);
+    }
+    setProducts(prev => [...prev, ...prepared]);
+    if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
+    if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
+    return prepared.length;
+  };
+
+
+  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[]): number => {
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
+    const virtualProducts = new Map(products.filter(p => p.companyId === currentCompany.id).map(p => [p.id, p]));
+    const virtualMovements = movements.filter(m => m.companyId === currentCompany.id).slice();
+    const importedMovements: InventoryMovement[] = [];
+    const importedEntries: JournalEntry[] = [];
+    const keys = new Set<string>();
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      const product = virtualProducts.get(row.productId);
+      if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa activa.');
+      if (!row.documentRef || !String(row.documentRef).trim()) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
+      const key = [row.productId,row.date,row.type,String(row.documentRef).trim().toLowerCase()].join('|');
+      if (keys.has(key) || virtualMovements.some(m => m.productId === row.productId && m.date === row.date && m.type === row.type && m.documentRef.trim().toLowerCase() === String(row.documentRef).trim().toLowerCase())) {
+        throw new Error('Movimiento duplicado en la fila ' + (index + 2) + ': ' + row.documentRef + '.');
+      }
+      keys.add(key);
+      const priorProductMovements = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+      if (priorProductMovements.length && row.date < priorProductMovements[priorProductMovements.length - 1].date) throw new Error('Fila ' + (index + 2) + ': importe los períodos históricos en orden cronológico; esta fecha es anterior al último movimiento de ' + product.code + '.');
+      const rate = Number(row.bcvRate ?? currentCompany.bcvRate);
+      const requestedCost = Number(row.unitCostBs);
+      const landedCostsBs = Number(row.additionalLandedCostsBs || 0);
+      if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Fila ' + (index + 2) + ': los fletes/gastos asociados no pueden ser negativos.');
+      const effectiveUnitCost = row.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(row.quantity), 1e-8) : requestedCost;
+      const isAdjustment = row.type === 'AJUSTE';
+      const targetStock = Number(row.balanceQty);
+      const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
+      const validation = validateInventoryMovement({
+        date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
+        bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: product.currentStock,
+        type: isAdjustment ? 'AJUSTE' : row.type
+      });
+      if (validation) throw new Error('Fila ' + (index + 2) + ': ' + validation);
+      if (isAdjustment && (!Number.isFinite(targetStock) || targetStock < 0 || quantity < 0.00000001)) {
+        throw new Error('Fila ' + (index + 2) + ': indique una existencia final de ajuste distinta de la actual.');
+      }
+      let unitCostBs = requestedCost;
+      let totalCostBs = 0;
+      let newStock = product.currentStock;
+      let newAverageBs = product.avgCostBs;
+      let movementQuantity = Number(row.quantity);
+      if (row.type === 'ENTRADA') {
+        unitCostBs = effectiveUnitCost;
+        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate);
+        newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
+        totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
+      } else if (row.type === 'SALIDA') {
+        if (product.costingMethod === 'PEPS') {
+          const layers: CostLayer[] = [];
+          const history = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+          let runningQuantity = 0;
+          for (const m of history) {
+            if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
+            else if (m.type === 'SALIDA') {
+              let remaining = m.quantity;
+              for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
+              runningQuantity -= m.quantity;
+            } else {
+              const delta = m.balanceQty - runningQuantity;
+              if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
+              else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
+              runningQuantity = m.balanceQty;
+            }
+          }
+          const layerQty = layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0);
+          if (layerQty < product.currentStock - 1e-8) layers.unshift({ quantity: product.currentStock - layerQty, unitCostBs: product.avgCostBs, unitCostUsd: product.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
+          if (layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0) > product.currentStock + 1e-8) throw new Error('Fila ' + (index + 2) + ': el Kardex PEPS no concilia para ' + product.code + '.');
+          const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
+          totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
+          newStock = Math.max(0, product.currentStock - Number(row.quantity));
+          newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
+        } else totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
+        unitCostBs = totalCostBs / Number(row.quantity);
+        newStock = Math.max(0, product.currentStock - Number(row.quantity));
+      } else {
+        movementQuantity = quantity;
+        newStock = targetStock;
+        if (targetStock > product.currentStock) {
+          const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, targetStock - product.currentStock, requestedCost, rate);
+          newAverageBs = weighted.unitCostBs;
+        }
+        totalCostBs = Math.round(quantity * (targetStock < product.currentStock ? product.avgCostBs : requestedCost) * 100) / 100;
+        unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
+      }
+      const totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+      const newAverageUsd = newAverageBs / rate;
+      const movement: InventoryMovement = {
+        ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
+        companyId: currentCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
+        totalCostBs, totalCostUsd, balanceQty: newStock,
+        balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+        balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+        bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
+      };
+      const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+      const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+      const adjustmentCode = product.adjustmentAccountCode || '5.1.2.01';
+      const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
+      const costAccount = accounts.find(a => a.code === costCode && a.isMovement);
+      const adjustmentAccount = accounts.find(a => a.code === adjustmentCode && a.isMovement);
+      const isSale = row.type === 'SALIDA' && row.concept === 'VENTA';
+      const isLoss = row.type === 'SALIDA' && ['MERMA','AUTOCONSUMO'].includes(row.concept);
+      const isCustomerReturn = row.type === 'ENTRADA' && row.concept === 'DEVOLUCION_CLIENTE';
+      const isSupplierReturn = row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA';
+      const positiveAdjustment = row.type === 'AJUSTE' && targetStock > product.currentStock;
+      if (isSale || isLoss || isCustomerReturn || isSupplierReturn || isAdjustment) {
+        if (!inventoryAccount) throw new Error('Cuenta de inventario inválida para ' + product.code + '.');
+        const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
+        if ((isSale || isCustomerReturn) && !costAccount) throw new Error('Cuenta de costo de ventas inválida para ' + product.code + '.');
+        if ((isLoss || isAdjustment) && !adjustmentAccount) throw new Error('Cuenta de mermas/ajustes inválida para ' + product.code + '.');
+        if (isSupplierReturn && !payableAccount) throw new Error('Falta la cuenta de control CxP 2.1.1.01 para la devolución al proveedor.');
+        const debitCode = isSale ? costCode : isSupplierReturn ? '2.1.1.01' : adjustmentCode;
+        const amountUsd = totalCostUsd;
+        const makeLine = (code:string, debitBs:number, creditBs:number, debitUsd:number, creditUsd:number, description:string): JournalEntryItem => ({
+          accountCode: code, accountName: accounts.find(a => a.code === code)?.name || code,
+          debitBs, creditBs, debitUsd, creditUsd, description
+        });
+        const lines: JournalEntryItem[] = positiveAdjustment
+          ? [makeLine(inventoryCode,totalCostBs,0,amountUsd,0,'Entrada por sobrante de inventario'),makeLine(adjustmentCode,0,totalCostBs,0,amountUsd,'Contrapartida por sobrante de inventario')]
+          : isCustomerReturn
+            ? [makeLine(inventoryCode,totalCostBs,0,amountUsd,0,'Entrada por devolución de cliente'),makeLine(costCode,0,totalCostBs,0,amountUsd,'Reversión del costo de ventas por devolución')]
+            : isSupplierReturn
+              ? [makeLine('2.1.1.01',totalCostBs,0,amountUsd,0,'Devolución de mercancía al proveedor'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Salida por devolución de compra')]
+              : [makeLine(debitCode,totalCostBs,0,amountUsd,0,isSale?'Costo de ventas por movimiento importado':'Merma/ajuste de inventario importado'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Descargo de inventario importado')];
+        const entry: JournalEntry = {
+          id: 'entry-inventory-import-' + Date.now() + '-' + index, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          date: row.date, description: (isSale?'Costo de venta':isCustomerReturn?'Devolución de cliente':isSupplierReturn?'Devolución a proveedor':positiveAdjustment?'Sobrante':'Merma/ajuste') + ' importado · ' + product.code + ' · ' + row.documentRef,
+          type: 'INVENTARIO', bcvRate: rate, referenceDoc: row.documentRef, items: lines, createdAt: new Date().toISOString()
+        };
+        movement.journalEntryId = entry.id;
+        importedEntries.push(entry);
+      }
+      importedMovements.push(movement);
+      virtualMovements.push(movement);
+      virtualProducts.set(product.id, {
+        ...product, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
+        lastCostBs: row.type === 'ENTRADA' ? effectiveUnitCost : product.lastCostBs,
+        lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
+      });
+    }
+    consumeDemoAction('inventario');
+    setProducts(prev => prev.map(product => virtualProducts.get(product.id) || product));
+    setMovements(prev => [...prev, ...importedMovements]);
+    if (importedEntries.length) setJournalEntries(prev => [...prev, ...importedEntries]);
+    return importedMovements.length;
   };
 
   const updateProduct = (updated: InventoryProduct) => {
     consumeDemoAction('inventario');
-    setProducts(prev => prev.map(p => (p.id === updated.id ? updated : p)));
+    if (!products.some(p => p.id === updated.id && p.companyId === currentCompany.id)) {
+      throw new Error('El artículo no pertenece a la empresa activa.');
+    }
+    if (products.some(p => p.id !== updated.id && p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === updated.code.trim().toLocaleUpperCase())) {
+      throw new Error('Ya existe otro artículo con ese código en la empresa activa.');
+    }
+    setProducts(prev => prev.map(p => (p.id === updated.id && p.companyId === currentCompany.id ? updated : p)));
   };
 
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     consumeDemoAction('inventario');
-    const rate = currentCompany.bcvRate;
-    const newMov: InventoryMovement = {
-      ...movData,
-      id: `mov-${Date.now()}`,
-      companyId: currentCompany.id
-    };
+    const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
+    if (!prod) throw new Error('El artículo no existe en la empresa activa.');
+    const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
+    const isAdjustment = movData.type === 'AJUSTE';
+    const actualQuantity = isAdjustment ? Math.abs(Number(movData.balanceQty) - prod.currentStock) : Number(movData.quantity);
+    const requestedCost = Number(movData.unitCostBs);
+    const landedCostsBs = Number(movData.additionalLandedCostsBs || 0);
+    if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Los fletes y gastos asociados no pueden ser negativos.');
+    const effectiveUnitCost = movData.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(movData.quantity), 1e-8) : requestedCost;
+    const validation = validateInventoryMovement({
+      date: movData.date, quantity: isAdjustment ? Math.max(actualQuantity, 0.00000001) : Number(movData.quantity),
+      bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: prod.currentStock, type: isAdjustment ? 'AJUSTE' : movData.type
+    });
+    if (validation) throw new Error(validation);
+    if (isAdjustment && actualQuantity < 0.00000001) throw new Error('El ajuste no cambia la existencia; no hay movimiento que registrar.');
 
-    setMovements(prev => [...prev, newMov]);
+    const prior = movements.filter(m => m.companyId === currentCompany.id && m.productId === prod.id)
+      .slice().sort((a, b) => a.date.localeCompare(b.date));
+    if (prior.length && movData.date < prior[prior.length - 1].date) throw new Error('El movimiento está fechado antes del último registro del Kardex. Importe primero los períodos históricos en orden cronológico para evitar saldos y costos incorrectos.');
+    let unitCostBs = requestedCost;
+    let unitCostUsd = requestedCost / rate;
+    let totalCostBs = 0;
+    let totalCostUsd = 0;
+    let newStock = prod.currentStock;
+    let newAverageBs = prod.avgCostBs;
+    let newAverageUsd = prod.avgCostBs / rate;
+    let movementQuantity = Number(movData.quantity);
 
-    // Actualizar producto en inventario
-    const prod = products.find(p => p.id === movData.productId);
-    if (prod) {
-      let newStock = prod.currentStock;
-      if (movData.type === 'ENTRADA') newStock += movData.quantity;
-      else if (movData.type === 'SALIDA') newStock = Math.max(0, newStock - movData.quantity);
-      else newStock = movData.quantity; // AJUSTE directo
-
-      updateProduct({
-        ...prod,
-        currentStock: newStock,
-        lastCostBs: movData.unitCostBs || prod.lastCostBs,
-        lastCostUsd: movData.unitCostUsd || prod.lastCostUsd
-      });
-
-      // Si es salida por venta, generar asiento automático de costo de venta
-      if (movData.type === 'SALIDA' && movData.concept === 'VENTA') {
-        const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-        const nextEntryNum = companyEntries.length + 1;
-        const totalBs = movData.totalCostBs;
-        const totalUsd = movData.totalCostUsd || (totalBs / rate);
-
-        const costEntry: JournalEntry = {
-          id: `entry-cost-${Date.now()}`,
-          companyId: currentCompany.id,
-          entryNumber: nextEntryNum,
-          date: movData.date,
-          description: `Costo de Venta por Despacho Ref: ${movData.documentRef} (${prod.name})`,
-          type: 'INVENTARIO',
-          bcvRate: rate,
-          referenceDoc: movData.documentRef,
-          items: [
-            {
-              accountCode: '5.1.1.01',
-              accountName: 'Costo de Ventas de Mercancías',
-              debitBs: totalBs,
-              creditBs: 0,
-              debitUsd: totalUsd,
-              creditUsd: 0,
-              description: `Costo de ${movData.quantity} ${prod.unit}`
-            },
-            {
-              accountCode: '1.1.4.01',
-              accountName: 'Inventario de Mercancías para la Venta',
-              debitBs: 0,
-              creditBs: totalBs,
-              debitUsd: 0,
-              creditUsd: totalUsd,
-              description: `Descargo de inventario`
+    if (movData.type === 'ENTRADA') {
+      unitCostBs = effectiveUnitCost;
+      unitCostUsd = unitCostBs / rate;
+      const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
+      newStock = weighted.quantity;
+      newAverageBs = weighted.unitCostBs;
+      newAverageUsd = weighted.unitCostUsd;
+      totalCostBs = Math.round(Number(movData.quantity) * effectiveUnitCost * 100) / 100;
+      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+    } else if (movData.type === 'SALIDA') {
+      if (prod.costingMethod === 'PEPS') {
+        const layers: CostLayer[] = [];
+        let runningQuantity = 0;
+        for (const priorMovement of prior) {
+          if (priorMovement.type === 'ENTRADA') {
+            layers.push({ quantity: priorMovement.quantity, unitCostBs: priorMovement.unitCostBs, unitCostUsd: priorMovement.unitCostUsd, date: priorMovement.date, documentRef: priorMovement.documentRef });
+            runningQuantity += priorMovement.quantity;
+          } else if (priorMovement.type === 'SALIDA') {
+            let remaining = priorMovement.quantity;
+            for (const layer of layers) {
+              const used = Math.min(layer.quantity, remaining);
+              layer.quantity -= used;
+              remaining -= used;
+              if (remaining <= 1e-8) break;
             }
-          ],
-          createdAt: new Date().toISOString()
-        };
-        setJournalEntries(prev => [...prev, costEntry]);
+            runningQuantity -= priorMovement.quantity;
+          } else if (priorMovement.type === 'AJUSTE') {
+            const delta = priorMovement.balanceQty - runningQuantity;
+            if (delta > 0) layers.push({ quantity: delta, unitCostBs: priorMovement.unitCostBs, unitCostUsd: priorMovement.unitCostUsd, date: priorMovement.date, documentRef: priorMovement.documentRef });
+            else if (delta < 0) {
+              let remaining = Math.abs(delta);
+              for (const layer of layers) {
+                const used = Math.min(layer.quantity, remaining);
+                layer.quantity -= used;
+                remaining -= used;
+                if (remaining <= 1e-8) break;
+              }
+            }
+            runningQuantity = priorMovement.balanceQty;
+          }
+        }
+        const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
+        if (layerQuantity < prod.currentStock - 1e-8) {
+          layers.unshift({ quantity: prod.currentStock - layerQuantity, unitCostBs: prod.avgCostBs, unitCostUsd: prod.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
+        } else if (layerQuantity > prod.currentStock + 1e-8) {
+          throw new Error('El Kardex PEPS no concilia con la existencia actual. Reconstruya el Kardex antes de registrar salidas.');
+        }
+        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
+        const fifo = calculateFifoIssue(layers, Number(movData.quantity));
+        totalCostBs = fifo.totalCostBs;
+        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        unitCostBs = fifo.unitCostBs;
+        unitCostUsd = unitCostBs / rate;
+        newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
+        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
+        newAverageUsd = newAverageBs / rate;
+      } else {
+        unitCostBs = prod.avgCostBs;
+        unitCostUsd = unitCostBs / rate;
+        totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
+        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+        newStock = prod.currentStock - Number(movData.quantity);
       }
+    } else {
+      movementQuantity = actualQuantity;
+      const targetStock = Number(movData.balanceQty);
+      if (!Number.isFinite(targetStock) || targetStock < 0) throw new Error('La existencia final del ajuste no es válida.');
+      newStock = targetStock;
+      if (targetStock > prod.currentStock) {
+        const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, targetStock - prod.currentStock, requestedCost, rate);
+        newAverageBs = weighted.unitCostBs;
+        newAverageUsd = weighted.unitCostUsd;
+      }
+      totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
+      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+      unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
+      unitCostUsd = unitCostBs / rate;
     }
 
+    const newMov: InventoryMovement = {
+      ...movData,
+      id: `mov-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+      companyId: currentCompany.id,
+      quantity: movementQuantity,
+      unitCostBs, unitCostUsd, totalCostBs, totalCostUsd,
+      balanceQty: newStock,
+      balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+      balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+      bcvRate: rate, additionalLandedCostsBs: landedCostsBs,
+      costingMethod: prod.costingMethod || 'PROMEDIO_PONDERADO'
+    };
+
+    const generatedEntries: JournalEntry[] = [];
+    const inventoryAccountCode = prod.inventoryAccountCode || '1.1.4.01';
+    const costAccountCode = prod.costOfSalesAccountCode || '5.1.1.01';
+    const adjustmentAccountCode = prod.adjustmentAccountCode || '5.1.2.01';
+    const inventoryAccount = accounts.find(a => a.code === inventoryAccountCode);
+    const costAccount = accounts.find(a => a.code === costAccountCode);
+    const adjustmentAccount = accounts.find(a => a.code === adjustmentAccountCode);
+    const makeLine = (code: string, debitBs: number, creditBs: number, debitUsd: number, creditUsd: number, description: string): JournalEntryItem => ({
+      accountCode: code, accountName: accounts.find(a => a.code === code)?.name || code,
+      debitBs, creditBs, debitUsd, creditUsd, description
+    });
+    const isSale = movData.type === 'SALIDA' && movData.concept === 'VENTA';
+    const isLoss = movData.type === 'SALIDA' && (movData.concept === 'MERMA' || movData.concept === 'AUTOCONSUMO');
+    const isCustomerReturn = movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE';
+    const isSupplierReturn = movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
+    const adjustmentDelta = Number(movData.balanceQty) - prod.currentStock;
+    const isPositiveAdjustment = movData.type === 'AJUSTE' && adjustmentDelta > 0;
+    const shouldPost = isSale || isLoss || isCustomerReturn || isSupplierReturn || movData.type === 'AJUSTE';
+    if (shouldPost) {
+      if (!inventoryAccount || !inventoryAccount.isMovement) throw new Error(`La cuenta de inventario ${inventoryAccountCode} no existe o no admite movimientos.`);
+      const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
+      const debitCode = isSale ? costAccountCode : isSupplierReturn ? '2.1.1.01' : adjustmentAccountCode;
+      const debitAccount = isSale || isCustomerReturn ? costAccount : isSupplierReturn ? payableAccount : adjustmentAccount;
+      if ((isSale || isCustomerReturn) && (!costAccount || !costAccount.isMovement)) throw new Error(`La cuenta de costo de ventas ${costAccountCode} no existe o no admite movimientos.`);
+      if (isSupplierReturn && (!payableAccount || !payableAccount.isMovement)) throw new Error('Falta la cuenta de control de Cuentas por Pagar 2.1.1.01 para registrar la devolución al proveedor.');
+      if (!isPositiveAdjustment && !isCustomerReturn && (!debitAccount || !debitAccount.isMovement)) throw new Error(`La cuenta de costo/ajuste ${debitCode} no existe o no admite movimientos.`);
+      if (isPositiveAdjustment && (!adjustmentAccount || !adjustmentAccount.isMovement)) throw new Error(`La cuenta de contrapartida de ajuste ${adjustmentAccountCode} no existe o no admite movimientos.`);
+      const amountBs = totalCostBs;
+      const amountUsd = totalCostUsd;
+      const items: JournalEntryItem[] = isPositiveAdjustment
+        ? [makeLine(inventoryAccountCode, amountBs, 0, amountUsd, 0, 'Entrada por sobrante de inventario'), makeLine(adjustmentAccountCode, 0, amountBs, 0, amountUsd, 'Contrapartida por sobrante de inventario')]
+        : isCustomerReturn
+          ? [makeLine(inventoryAccountCode, amountBs, 0, amountUsd, 0, 'Entrada por devolución de cliente'), makeLine(costAccountCode, 0, amountBs, 0, amountUsd, 'Reversión del costo de ventas por devolución')]
+          : isSupplierReturn
+            ? [makeLine('2.1.1.01', amountBs, 0, amountUsd, 0, 'Devolución de mercancía al proveedor'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Salida por devolución de compra')]
+            : [makeLine(debitCode, amountBs, 0, amountUsd, 0, isSale ? 'Costo de ventas según método de costeo' : 'Merma, faltante o ajuste de inventario'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Descargo de inventario')];
+      const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+      generatedEntries.push({
+        id: `entry-inventory-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        companyId: currentCompany.id, entryNumber: companyEntries.reduce((max,e) => Math.max(max,e.entryNumber),0) + generatedEntries.length + 1,
+        date: movData.date, description: `${isSale ? 'Costo de venta' : isCustomerReturn ? 'Devolución de cliente' : isSupplierReturn ? 'Devolución a proveedor' : isPositiveAdjustment ? 'Sobrante de inventario' : 'Ajuste/merma de inventario'}: ${prod.name} · ${movData.documentRef}`,
+        type: 'INVENTARIO', bcvRate: rate, referenceDoc: movData.documentRef,
+        items, createdAt: new Date().toISOString()
+      });
+    }
+    if (generatedEntries.length > 0) newMov.journalEntryId = generatedEntries[0].id;
+    setMovements(prev => [...prev, newMov]);
+    setProducts(prev => prev.map(p => p.id === prod.id ? {
+      ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
+      lastCostBs: movData.type === 'ENTRADA' ? effectiveUnitCost : p.lastCostBs,
+      lastCostUsd: movData.type === 'ENTRADA' ? effectiveUnitCost / rate : p.lastCostUsd
+    } : p));
+    if (generatedEntries.length > 0) setJournalEntries(prev => [...prev, ...generatedEntries]);
     return newMov;
+  };
+
+
+  const executeProduction = (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): InventoryMovement[] => {
+    consumeDemoAction('inventario');
+    const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
+    if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
+    if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
+    if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
+    const parsedProductionDate = new Date(date + 'T00:00:00Z');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    const recipe = finished.bomComponents || [];
+    if (!recipe.length) throw new Error('Configure primero la matriz insumo-producto del artículo.');
+    if (recipe.some(line => !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0 || line.productId === finishedProductId)) {
+      throw new Error('La matriz contiene componentes inválidos o una referencia circular directa.');
+    }
+    const rate = bcvRateInput;
+    const wipAccount = accounts.find(a => a.code === '1.1.4.04' && a.isMovement);
+    if (!wipAccount) throw new Error('Falta la cuenta contable de productos en proceso 1.1.4.04.');
+    const movementsToAdd: InventoryMovement[] = [];
+    const journalItems: JournalEntryItem[] = [];
+    const productUpdates = new Map<string, InventoryProduct>();
+    let totalProductionCostBs = 0;
+    for (const line of recipe) {
+      const component = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
+      if (!component) throw new Error('Un componente de la matriz ya no existe en la empresa activa.');
+      if (component.itemType !== 'MATERIA_PRIMA' && component.itemType !== 'PRODUCTO_EN_PROCESO') {
+        throw new Error('Los componentes de producción deben clasificarse como materia prima o producto en proceso: ' + component.code + '.');
+      }
+      if (component.itemType === 'PRODUCTO_EN_PROCESO' && component.inventoryAccountCode !== '1.1.4.04') throw new Error('El componente en proceso ' + component.code + ' debe estar asociado a la cuenta 1.1.4.04.');
+      const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
+      if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
+      let totalBs = 0;
+      let componentNewAverageBs = component.avgCostBs;
+      let componentNewAverageUsd = component.avgCostUsd;
+      if (component.costingMethod === 'PEPS') {
+        const layers: CostLayer[] = [];
+        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+        let runningQuantity = 0;
+        for (const m of history) {
+          if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
+          else if (m.type === 'SALIDA') {
+            let remaining = m.quantity;
+            for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
+            runningQuantity -= m.quantity;
+          } else {
+            const delta = m.balanceQty - runningQuantity;
+            if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
+            else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
+            runningQuantity = m.balanceQty;
+          }
+        }
+        const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
+        if (layerQuantity < component.currentStock - 1e-8) layers.unshift({ quantity: component.currentStock - layerQuantity, unitCostBs: component.avgCostBs, unitCostUsd: component.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
+        const availableLayers = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
+        if (availableLayers > component.currentStock + 1e-8) throw new Error('El Kardex PEPS no concilia con la existencia actual de ' + component.code + '.');
+        if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
+        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
+        totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
+        const remainingQuantity = Math.max(0, component.currentStock - requiredQuantity);
+        componentNewAverageBs = remainingQuantity > 0 ? Math.max(0, fifoLayerValue - totalBs) / remainingQuantity : 0;
+        componentNewAverageUsd = componentNewAverageBs / rate;
+      } else {
+        totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
+      }
+      const unitCostBs = totalBs / requiredQuantity;
+      totalProductionCostBs += totalBs;
+      const inventoryCode = component.inventoryAccountCode || '1.1.4.01';
+      const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
+      if (!inventoryAccount) throw new Error('La cuenta de inventario del componente ' + component.code + ' no es válida.');
+      const movementId = 'mov-prod-consume-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      const outMovement: InventoryMovement = {
+        id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
+        date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
+        quantity: requiredQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalBs / rate,
+        balanceQty: Math.max(0, component.currentStock - requiredQuantity),
+        balanceTotalBs: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageBs * 100) / 100,
+        balanceTotalUsd: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageUsd * 1000000) / 1000000,
+        bcvRate: rate, costingMethod: component.costingMethod
+      };
+      movementsToAdd.push(outMovement);
+      journalItems.push(
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalBs / rate, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
+        { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalBs / rate, description: 'Salida de materia prima: ' + component.code }
+      );
+      productUpdates.set(component.id, { ...component, currentStock: Math.max(0, component.currentStock - requiredQuantity), avgCostBs: componentNewAverageBs, avgCostUsd: componentNewAverageUsd });
+    }
+    totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
+    const productionUnitCostBs = totalProductionCostBs / outputQuantity;
+    const weightedFinished = calculateWeightedAverageCost(finished.currentStock, finished.avgCostBs, outputQuantity, productionUnitCostBs, rate);
+    const finishedInventoryCode = finished.inventoryAccountCode || '1.1.4.01';
+    const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
+    if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
+    if (finished.itemType === 'PRODUCTO_EN_PROCESO' && finishedInventoryCode !== '1.1.4.04') throw new Error('El producto en proceso debe estar asociado a la cuenta 1.1.4.04.');
+    const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
+    if (finished.itemType !== 'PRODUCTO_EN_PROCESO') {
+      journalItems.push(
+        { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: totalFinishedBs / rate, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: totalFinishedBs / rate, description: 'Transferencia de producción terminada: ' + finished.code }
+      );
+    }
+    const entry = addJournalEntry({
+      entryNumber: 0, date, description: 'Orden de producción ' + (documentRef || '') + ' · ' + finished.code,
+      type: 'INVENTARIO', bcvRate: rate, referenceDoc: documentRef || ('PROD-' + Date.now()), items: journalItems
+    });
+    for (const movement of movementsToAdd) movement.journalEntryId = entry.id;
+    const finishedMovement: InventoryMovement = {
+      id: 'mov-prod-finished-' + Date.now(), companyId: currentCompany.id, productId: finished.id, productName: finished.name, productCode: finished.code,
+      date, type: 'ENTRADA', concept: 'PRODUCCION', documentRef: entry.referenceDoc || '', documentType: 'Orden de producción',
+      quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostBs / rate,
+      totalCostBs: totalFinishedBs, totalCostUsd: totalFinishedBs / rate, balanceQty: weightedFinished.quantity,
+      balanceTotalBs: weightedFinished.totalCostBs, balanceTotalUsd: weightedFinished.totalCostUsd,
+      bcvRate: rate, costingMethod: finished.costingMethod, journalEntryId: entry.id
+    };
+    movementsToAdd.push(finishedMovement);
+    productUpdates.set(finished.id, {
+      ...finished, currentStock: weightedFinished.quantity, avgCostBs: weightedFinished.unitCostBs,
+      avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostBs / rate
+    });
+    setProducts(prev => prev.map(product => productUpdates.get(product.id) || product));
+    setMovements(prev => [...prev, ...movementsToAdd]);
+    return movementsToAdd;
   };
 
   const deleteVatVoucher = (id: string) => {
@@ -1580,6 +2065,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteSale,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
+        importInventoryProducts,
+        importInventoryMovements,
+        executeProduction,
         updateProduct,
         movements: movements.filter(m => m.companyId === currentCompany.id),
         addMovement,
