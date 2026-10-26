@@ -52,7 +52,7 @@ function openDatabase() {
   if (!licenseColumns.has('last_online_success_at')) db.exec('ALTER TABLE license_state ADD COLUMN last_online_success_at TEXT');
   if (!licenseColumns.has('trial_started_at')) db.exec('ALTER TABLE license_state ADD COLUMN trial_started_at TEXT');
   if (!db.prepare('SELECT id FROM license_state WHERE id=1').get()) {
-    db.prepare('INSERT INTO license_state(id,installation_id,status,trial_started_at) VALUES(?,?,?,?)').run(crypto.randomUUID(), 'unlicensed', new Date().toISOString());
+    db.prepare('INSERT INTO license_state(id,installation_id,status,trial_started_at) VALUES(1,?,?,?)').run(crypto.randomUUID(), 'unlicensed', new Date().toISOString());
   } else {
     db.prepare('UPDATE license_state SET trial_started_at=? WHERE id=1 AND trial_started_at IS NULL').run(new Date().toISOString());
   }
