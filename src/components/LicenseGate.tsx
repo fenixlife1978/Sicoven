@@ -131,7 +131,7 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
               <Wifi className="h-4 w-4 text-sky-600" /> Se requiere internet para la activación inicial
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Después de activar, SICOVEN trabaja con su base SQLite local sin límites por falta de conexión. Cuando internet esté disponible, comprobará el estado de la licencia.
+              Después de activar, SICOVEN guarda sus datos en SQLite local y puede trabajar sin conexión durante el plazo offline autorizado por tu plan. Al reconectarse, comprobará el estado de la licencia con el CRM.
             </p>
           </div>
         )}
