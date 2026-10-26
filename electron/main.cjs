@@ -49,8 +49,11 @@ function openDatabase() {
   const licenseColumns = new Set(db.prepare('PRAGMA table_info(license_state)').all().map(column => String(column.name)));
   if (!licenseColumns.has('offline_days')) db.exec('ALTER TABLE license_state ADD COLUMN offline_days INTEGER NOT NULL DEFAULT 0');
   if (!licenseColumns.has('last_online_success_at')) db.exec('ALTER TABLE license_state ADD COLUMN last_online_success_at TEXT');
+  if (!licenseColumns.has('trial_started_at')) db.exec('ALTER TABLE license_state ADD COLUMN trial_started_at TEXT');
   if (!db.prepare('SELECT id FROM license_state WHERE id=1').get()) {
-    db.prepare('INSERT INTO license_state(id,installation_id,status) VALUES(1,?,?)').run(crypto.randomUUID(), 'unlicensed');
+    db.prepare('INSERT INTO license_state(id,installation_id,status,trial_started_at) VALUES(?,?,?,?)').run(crypto.randomUUID(), 'unlicensed', new Date().toISOString());
+  } else {
+    db.prepare('UPDATE license_state SET trial_started_at=? WHERE id=1 AND trial_started_at IS NULL').run(new Date().toISOString());
   }
 
   const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
@@ -95,21 +98,29 @@ function licenseView(row = readLicenseRow()) {
   const lastOnline = row.last_online_success_at ? Date.parse(String(row.last_online_success_at)) : NaN;
   const offlineExpired = hasKey && String(row.status) === 'active' &&
     (!Number.isFinite(lastOnline) || offlineDays === 0 || Date.now() > lastOnline + offlineDays * 86400000);
-  const authorized = hasKey && String(row.status) === 'active' && !offlineExpired;
+  const trialStarted = row.trial_started_at ? Date.parse(String(row.trial_started_at)) : NaN;
+  const trialExpiresAt = Number.isFinite(trialStarted) ? new Date(trialStarted + 24 * 60 * 60 * 1000).toISOString() : null;
+  const trialActive = !hasKey && Number.isFinite(trialStarted) && Date.now() < trialStarted + 24 * 60 * 60 * 1000;
+  const authorized = (hasKey && String(row.status) === 'active' && !offlineExpired) || trialActive;
   return {
     authorized,
-    needsActivation: !hasKey,
-    status: offlineExpired ? 'offline_expired' : String(row.status || 'unlicensed'),
+    needsActivation: !hasKey && !trialActive,
+    status: trialActive ? 'trial' : offlineExpired ? 'offline_expired' : String(row.status || 'unlicensed'),
     customer: row.customer || '',
     product: row.product || '',
+    trialExpiresAt,
     offlineDays,
     lastOnlineSuccessAt: row.last_online_success_at || null,
     lastCheckedAt: row.last_checked_at || null,
-    message: authorized
-      ? (row.message || 'Licencia activada. SICOVEN puede trabajar con sus datos locales.')
-      : offlineExpired
-        ? 'Se venció el período de uso sin conexión autorizado por el administrador del CRM. Conecta este equipo a internet para revalidar la licencia.'
-        : (row.message || 'Active SICOVEN con una clave de licencia.')
+    message: trialActive
+      ? 'Prueba de SICOVEN activa durante 24 horas. Los datos se guardan localmente en SQLite.'
+      : authorized
+        ? (row.message || 'Licencia activada. SICOVEN puede trabajar con sus datos locales.')
+        : offlineExpired
+          ? 'Se venció el período de uso sin conexión autorizado por el administrador del CRM. Conecta este equipo a internet para revalidar la licencia.'
+          : (Date.now() >= (Number.isFinite(trialStarted) ? trialStarted + 24 * 60 * 60 * 1000 : 0)
+              ? 'El período de prueba de 24 horas terminó. Introduce una clave de licencia para continuar.'
+              : (row.message || 'Active SICOVEN con una clave de licencia.'))
   };
 }
 
