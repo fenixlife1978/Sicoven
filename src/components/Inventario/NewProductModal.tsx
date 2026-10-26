@@ -17,6 +17,8 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
   const [unit, setUnit] = useState('Unidad');
   const [minStock, setMinStock] = useState<number>(10);
   const [currentStock, setCurrentStock] = useState<number>(0);
+  const [openingDate, setOpeningDate] = useState(new Date().toISOString().slice(0, 10));
+  const [openingBcvRateInput, setOpeningBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
   const [avgCostBs, setAvgCostBs] = useState<number>(0);
   const [salesPriceBs, setSalesPriceBs] = useState<number>(0);
   const [inventoryAccountCode, setInventoryAccountCode] = useState('1.1.4.01');
@@ -30,7 +32,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
 
   if (!isOpen) return null;
 
-  const bcvRate = currentCompany.bcvRate || 68.50;
+  const bcvRate = Number(openingBcvRateInput);
   const avgCostUsd = bcvRate > 0 ? avgCostBs / bcvRate : 0;
   const salesPriceUsd = bcvRate > 0 ? salesPriceBs / bcvRate : 0;
 
@@ -58,7 +60,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
       salesPriceBs: Number(salesPriceBs) || 0,
       salesPriceUsd: Number(salesPriceUsd.toFixed(2)),
       inventoryAccountCode, costOfSalesAccountCode, adjustmentAccountCode, openingBalanceAccountCode,
-      costingMethod, vatTreatment, itemType
+      costingMethod, vatTreatment, itemType, openingDate, openingBcvRate: bcvRate
     });
     onClose();
     } catch (err) {
@@ -187,6 +189,17 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
                 <option value="Metro">Metro (Mts)</option>
                 <option value="Servicio">Servicio / Licencia</option>
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Fecha del inventario inicial</label>
+              <input type="date" required value={openingDate} onChange={e => setOpeningDate(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+              <input type="number" required min="0.000001" step="0.000001" value={openingBcvRateInput} onChange={e => setOpeningBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
             </div>
           </div>
 
