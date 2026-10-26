@@ -1144,6 +1144,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const costAccount = accounts.find(a => a.code === newProd.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
     const adjustmentAccount = accounts.find(a => a.code === newProd.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
     if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no es una cuenta de activo de movimiento.`);
+    if (newProd.itemType === 'PRODUCTO_EN_PROCESO' && newProd.inventoryAccountCode !== '1.1.4.04') throw new Error('Los productos en proceso deben asociarse a la cuenta 1.1.4.04.');
     if (!costAccount) throw new Error(`La cuenta de costo de ventas ${newProd.costOfSalesAccountCode} no existe o no admite movimientos.`);
     if (!adjustmentAccount) throw new Error(`La cuenta de mermas/ajustes ${newProd.adjustmentAccountCode} no existe o no admite movimientos.`);
     let opening: InventoryMovement | null = null;
@@ -1220,6 +1221,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const costAccount = accounts.find(a => a.code === product.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
       const adjustmentAccount = accounts.find(a => a.code === product.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
       if (!inventoryAccount || !costAccount || !adjustmentAccount) throw new Error('Cuentas contables inválidas para el artículo ' + code + '.');
+      if (product.itemType === 'PRODUCTO_EN_PROCESO' && product.inventoryAccountCode !== '1.1.4.04') throw new Error('El artículo ' + code + ' es producto en proceso y debe usar la cuenta 1.1.4.04.');
       if (quantity > 0) {
         const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
         if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
@@ -1578,7 +1580,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const executeProduction = (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): InventoryMovement[] => {
     consumeDemoAction('inventario');
     const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
-    if (!finished) throw new Error('Seleccione un producto terminado válido.');
+    if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     if (!date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
@@ -1600,6 +1602,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (component.itemType !== 'MATERIA_PRIMA' && component.itemType !== 'PRODUCTO_EN_PROCESO') {
         throw new Error('Los componentes de producción deben clasificarse como materia prima o producto en proceso: ' + component.code + '.');
       }
+      if (component.itemType === 'PRODUCTO_EN_PROCESO' && component.inventoryAccountCode !== '1.1.4.04') throw new Error('El componente en proceso ' + component.code + ' debe estar asociado a la cuenta 1.1.4.04.');
       const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
       if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
       let totalBs = 0;
@@ -1663,6 +1666,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const finishedInventoryCode = finished.inventoryAccountCode || '1.1.4.01';
     const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
     if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
+    if (finished.itemType === 'PRODUCTO_EN_PROCESO' && finishedInventoryCode !== '1.1.4.04') throw new Error('El producto en proceso debe estar asociado a la cuenta 1.1.4.04.');
     const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
     if (finished.itemType !== 'PRODUCTO_EN_PROCESO') {
       journalItems.push(
