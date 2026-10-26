@@ -79,6 +79,7 @@ interface AccountingContextType {
   // Inventario
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
+  importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
@@ -1100,8 +1101,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (products.some(p => p.companyId === currentCompany.id && p.code.trim().toLocaleUpperCase() === code)) {
       throw new Error(`Ya existe un artículo con el código ${code} en la empresa activa.`);
     }
-    const rate = Number(currentCompany.bcvRate);
-    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida antes de crear artículos con valoración.');
+    const rate = Number(prodData.openingBcvRate || currentCompany.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure la tasa BCV histórica válida antes de crear artículos con valoración.');
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
     if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
@@ -1122,6 +1123,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       costingMethod: prodData.costingMethod || 'PROMEDIO_PONDERADO',
       vatTreatment: prodData.vatTreatment || 'GENERAL_16',
       itemType: prodData.itemType || 'MERCANCIA',
+      openingDate: prodData.openingDate || new Date().toISOString().slice(0, 10),
+      openingBcvRate: rate,
+      vnrProvisionBs: Number(prodData.vnrProvisionBs || 0),
       id: `prod-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id
     };
@@ -1159,6 +1163,74 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (opening) setMovements(prev => [...prev, opening!]);
     if (openingEntry) setJournalEntries(prev => [...prev, openingEntry!]);
     return newProd;
+  };
+
+
+  const importInventoryProducts = (rows: Omit<InventoryProduct, 'id' | 'companyId'>[]): number => {
+    consumeDemoAction('inventario');
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene artículos para importar.');
+    const existingCodes = new Set(products.filter(p => p.companyId === currentCompany.id).map(p => p.code.trim().toLocaleUpperCase()));
+    const batchCodes = new Set<string>();
+    const prepared: InventoryProduct[] = [];
+    const openingMovements: InventoryMovement[] = [];
+    const openingEntries: JournalEntry[] = [];
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).length + 1;
+    const today = new Date().toISOString().slice(0, 10);
+    for (const row of rows) {
+      const code = String(row.code || '').trim().toLocaleUpperCase();
+      const name = String(row.name || '').trim();
+      if (!code || !name) throw new Error('Cada artículo debe incluir código y descripción.');
+      if (existingCodes.has(code) || batchCodes.has(code)) throw new Error('Código duplicado en la empresa o archivo: ' + code + '.');
+      batchCodes.add(code);
+      const rate = Number(row.openingBcvRate || currentCompany.bcvRate);
+      const quantity = Number(row.currentStock || 0);
+      const unitCostBs = Number(row.avgCostBs || 0);
+      const date = row.openingDate || today;
+      if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
+          !Number.isFinite(unitCostBs) || unitCostBs < 0) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
+      const product: InventoryProduct = {
+        ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
+        companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
+        avgCostUsd: unitCostBs / rate, lastCostBs: unitCostBs, lastCostUsd: unitCostBs / rate,
+        inventoryAccountCode: row.inventoryAccountCode || '1.1.4.01',
+        costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
+        adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
+        openingBalanceAccountCode: row.openingBalanceAccountCode || '3.3.1.01',
+        costingMethod: row.costingMethod || 'PROMEDIO_PONDERADO',
+        vatTreatment: row.vatTreatment || 'GENERAL_16', itemType: row.itemType || 'MERCANCIA',
+        openingDate: date, openingBcvRate: rate, vnrProvisionBs: Number(row.vnrProvisionBs || 0)
+      };
+      if (quantity > 0) {
+        const inventoryAccount = accounts.find(a => a.code === product.inventoryAccountCode && a.isMovement);
+        const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
+        if (!inventoryAccount || !offsetAccount) throw new Error('Cuentas de apertura inválidas para el artículo ' + code + '.');
+        const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
+        const totalUsd = Math.round(totalBs / rate * 100) / 100;
+        const entry: JournalEntry = {
+          id: 'entry-inventory-opening-' + product.id, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
+          bcvRate: rate, referenceDoc: 'APERTURA-' + code,
+          items: [
+            { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalUsd, creditUsd: 0, description: 'Existencia inicial de ' + quantity + ' ' + product.unit },
+            { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalUsd, description: 'Contrapartida de apertura de inventario ' + code }
+          ], createdAt: new Date().toISOString()
+        };
+        openingEntries.push(entry);
+        openingMovements.push({
+          id: 'mov-opening-' + product.id, companyId: currentCompany.id, productId: product.id,
+          productName: name, productCode: code, date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
+          documentRef: entry.referenceDoc || 'APERTURA-INVENTARIO', quantity, unitCostBs,
+          unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalUsd,
+          balanceQty: quantity, balanceTotalBs: totalBs, balanceTotalUsd: totalUsd,
+          bcvRate: rate, costingMethod: product.costingMethod, journalEntryId: entry.id
+        });
+      }
+      prepared.push(product);
+    }
+    setProducts(prev => [...prev, ...prepared]);
+    if (openingMovements.length) setMovements(prev => [...prev, ...openingMovements]);
+    if (openingEntries.length) setJournalEntries(prev => [...prev, ...openingEntries]);
+    return prepared.length;
   };
 
   const updateProduct = (updated: InventoryProduct) => {
@@ -1734,6 +1806,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteSale,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
+        importInventoryProducts,
         updateProduct,
         movements: movements.filter(m => m.companyId === currentCompany.id),
         addMovement,
