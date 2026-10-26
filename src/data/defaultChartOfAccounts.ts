@@ -89,6 +89,8 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '5', name: 'COSTOS DE VENTAS Y PRODUCCIÓN', type: 'COSTOS', level: 1, isMovement: false },
   { code: '5.1', name: 'Costo de Ventas', type: 'COSTOS', level: 2, isMovement: false, parentCode: '5' },
   { code: '5.1.1.01', name: 'Costo de Ventas de Mercancías', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
+  { code: '5.1.2', name: 'Mermas, Faltantes y Ajustes de Inventario', type: 'COSTOS', level: 3, isMovement: false, parentCode: '5.1' },
+  { code: '5.1.2.01', name: 'Pérdidas por Mermas y Ajustes de Inventario', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1.2' },
   { code: '5.1.1.02', name: 'Costo de Servicios Prestados', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
   { code: '5.1.1.03', name: 'Fletes y Acarreos en Compras de Mercancías', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
 
