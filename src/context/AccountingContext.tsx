@@ -80,6 +80,7 @@ interface AccountingContextType {
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
+  importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
   executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => InventoryMovement[];
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
@@ -1241,6 +1242,138 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return prepared.length;
   };
 
+
+  const importInventoryMovements = (rows: Omit<InventoryMovement, 'id' | 'companyId'>[]): number => {
+    if (!Array.isArray(rows) || rows.length === 0) throw new Error('El archivo no contiene movimientos para importar.');
+    const virtualProducts = new Map(products.filter(p => p.companyId === currentCompany.id).map(p => [p.id, p]));
+    const virtualMovements = movements.filter(m => m.companyId === currentCompany.id).slice();
+    const importedMovements: InventoryMovement[] = [];
+    const importedEntries: JournalEntry[] = [];
+    const keys = new Set<string>();
+    let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
+    for (let index = 0; index < rows.length; index++) {
+      const row = rows[index];
+      const product = virtualProducts.get(row.productId);
+      if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa activa.');
+      if (!row.documentRef || !String(row.documentRef).trim()) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
+      const key = [row.productId,row.date,row.type,String(row.documentRef).trim().toLowerCase()].join('|');
+      if (keys.has(key) || virtualMovements.some(m => m.productId === row.productId && m.date === row.date && m.type === row.type && m.documentRef.trim().toLowerCase() === String(row.documentRef).trim().toLowerCase())) {
+        throw new Error('Movimiento duplicado en la fila ' + (index + 2) + ': ' + row.documentRef + '.');
+      }
+      keys.add(key);
+      const rate = Number(row.bcvRate || currentCompany.bcvRate);
+      const requestedCost = Number(row.unitCostBs);
+      const isAdjustment = row.type === 'AJUSTE';
+      const targetStock = Number(row.balanceQty);
+      const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
+      const validation = validateInventoryMovement({
+        date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
+        bcvRate: rate, unitCostBs: requestedCost, availableQuantity: product.currentStock,
+        type: isAdjustment ? 'AJUSTE' : row.type
+      });
+      if (validation) throw new Error('Fila ' + (index + 2) + ': ' + validation);
+      if (isAdjustment && (!Number.isFinite(targetStock) || targetStock < 0 || quantity < 0.00000001)) {
+        throw new Error('Fila ' + (index + 2) + ': indique una existencia final de ajuste distinta de la actual.');
+      }
+      let unitCostBs = requestedCost;
+      let totalCostBs = 0;
+      let newStock = product.currentStock;
+      let newAverageBs = product.avgCostBs;
+      let movementQuantity = Number(row.quantity);
+      if (row.type === 'ENTRADA') {
+        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), requestedCost, rate);
+        newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
+        totalCostBs = Math.round(Number(row.quantity) * requestedCost * 100) / 100;
+      } else if (row.type === 'SALIDA') {
+        if (product.costingMethod === 'PEPS') {
+          const layers: CostLayer[] = [];
+          const history = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+          let runningQuantity = 0;
+          for (const m of history) {
+            if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
+            else if (m.type === 'SALIDA') {
+              let remaining = m.quantity;
+              for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
+              runningQuantity -= m.quantity;
+            } else {
+              const delta = m.balanceQty - runningQuantity;
+              if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
+              else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
+              runningQuantity = m.balanceQty;
+            }
+          }
+          const layerQty = layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0);
+          if (layerQty < product.currentStock - 1e-8) layers.unshift({ quantity: product.currentStock - layerQty, unitCostBs: product.avgCostBs, unitCostUsd: product.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
+          if (layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0) > product.currentStock + 1e-8) throw new Error('Fila ' + (index + 2) + ': el Kardex PEPS no concilia para ' + product.code + '.');
+          totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
+        } else totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
+        unitCostBs = totalCostBs / Number(row.quantity);
+        newStock = product.currentStock - Number(row.quantity);
+      } else {
+        movementQuantity = quantity;
+        newStock = targetStock;
+        if (targetStock > product.currentStock) {
+          const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, targetStock - product.currentStock, requestedCost, rate);
+          newAverageBs = weighted.unitCostBs;
+        }
+        totalCostBs = Math.round(quantity * (targetStock < product.currentStock ? product.avgCostBs : requestedCost) * 100) / 100;
+        unitCostBs = quantity > 0 ? totalCostBs / quantity : 0;
+      }
+      const totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
+      const newAverageUsd = newAverageBs / rate;
+      const movement: InventoryMovement = {
+        ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
+        companyId: currentCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate,
+        totalCostBs, totalCostUsd, balanceQty: newStock,
+        balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
+        balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
+        bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
+      };
+      const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+      const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+      const adjustmentCode = product.adjustmentAccountCode || '5.1.2.01';
+      const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
+      const costAccount = accounts.find(a => a.code === costCode && a.isMovement);
+      const adjustmentAccount = accounts.find(a => a.code === adjustmentCode && a.isMovement);
+      const isSale = row.type === 'SALIDA' && row.concept === 'VENTA';
+      const isLoss = row.type === 'SALIDA' && ['MERMA','AUTOCONSUMO'].includes(row.concept);
+      const positiveAdjustment = row.type === 'AJUSTE' && targetStock > product.currentStock;
+      if (isSale || isLoss || isAdjustment) {
+        if (!inventoryAccount) throw new Error('Cuenta de inventario inválida para ' + product.code + '.');
+        if ((isSale && !costAccount) || ((isLoss || isAdjustment) && !adjustmentAccount)) throw new Error('Cuenta de costo/ajuste inválida para ' + product.code + '.');
+        const debitCode = isSale ? costCode : adjustmentCode;
+        const debitAccount = isSale ? costAccount : adjustmentAccount;
+        const amountUsd = totalCostUsd;
+        const makeLine = (code:string, debitBs:number, creditBs:number, debitUsd:number, creditUsd:number, description:string): JournalEntryItem => ({
+          accountCode: code, accountName: accounts.find(a => a.code === code)?.name || code,
+          debitBs, creditBs, debitUsd, creditUsd, description
+        });
+        const lines: JournalEntryItem[] = positiveAdjustment
+          ? [makeLine(inventoryCode,totalCostBs,0,amountUsd,0,'Entrada por sobrante de inventario'),makeLine(adjustmentCode,0,totalCostBs,0,amountUsd,'Contrapartida por sobrante de inventario')]
+          : [makeLine(debitCode,totalCostBs,0,amountUsd,0,isSale?'Costo de ventas por movimiento importado':'Merma/ajuste de inventario importado'),makeLine(inventoryCode,0,totalCostBs,0,amountUsd,'Descargo de inventario importado')];
+        const entry: JournalEntry = {
+          id: 'entry-inventory-import-' + Date.now() + '-' + index, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
+          date: row.date, description: (isSale?'Costo de venta':positiveAdjustment?'Sobrante':'Merma/ajuste') + ' importado · ' + product.code + ' · ' + row.documentRef,
+          type: 'INVENTARIO', bcvRate: rate, referenceDoc: row.documentRef, items: lines, createdAt: new Date().toISOString()
+        };
+        movement.journalEntryId = entry.id;
+        importedEntries.push(entry);
+      }
+      importedMovements.push(movement);
+      virtualMovements.push(movement);
+      virtualProducts.set(product.id, {
+        ...product, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
+        lastCostBs: row.type === 'ENTRADA' ? requestedCost : product.lastCostBs,
+        lastCostUsd: row.type === 'ENTRADA' ? requestedCost / rate : product.lastCostUsd
+      });
+    }
+    consumeDemoAction('inventario');
+    setProducts(prev => prev.map(product => virtualProducts.get(product.id) || product));
+    setMovements(prev => [...prev, ...importedMovements]);
+    if (importedEntries.length) setJournalEntries(prev => [...prev, ...importedEntries]);
+    return importedMovements.length;
+  };
+
   const updateProduct = (updated: InventoryProduct) => {
     consumeDemoAction('inventario');
     if (!products.some(p => p.id === updated.id && p.companyId === currentCompany.id)) {
@@ -1927,6 +2060,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         importInventoryProducts,
+        importInventoryMovements,
         executeProduction,
         updateProduct,
         movements: movements.filter(m => m.companyId === currentCompany.id),
