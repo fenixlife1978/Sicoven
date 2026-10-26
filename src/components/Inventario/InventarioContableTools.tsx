@@ -82,7 +82,9 @@ export const InventarioContableTools: React.FC = () => {
         if (!sheet) throw new Error('El archivo Excel no contiene hojas de cálculo.');
         matrix = [];
         sheet.eachRow({ includeEmpty: false }, row => {
-          matrix.push(row.values.slice(1).map(value => value === null || value === undefined ? '' : value instanceof Date ? value.toISOString().slice(0,10) : value && typeof value === 'object' && 'result' in value ? String((value as { result: unknown }).result ?? '').trim() : String(value).trim()));
+          const rawValues: unknown = row.values;
+          const values: unknown[] = Array.isArray(rawValues) ? rawValues : [];
+          matrix.push(values.slice(1).map((value: unknown) => value === null || value === undefined ? '' : value instanceof Date ? value.toISOString().slice(0,10) : value && typeof value === 'object' && 'result' in value ? String((value as { result: unknown }).result ?? '').trim() : String(value).trim()));
         });
       } else {
         const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
