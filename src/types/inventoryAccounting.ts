@@ -55,7 +55,7 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
   const layers = layersInput
     .map(layer => ({ ...layer }))
     .filter(layer => validPositive(layer.quantity) && validNonNegative(layer.unitCostBs) && validNonNegative(layer.unitCostUsd))
-    .sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.documentRef || '').localeCompare(b.documentRef || ''));
+    .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const available = layers.reduce((sum, layer) => sum + layer.quantity, 0);
   if (quantityToIssue - available > 1e-8) {
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
