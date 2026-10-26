@@ -1157,7 +1157,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
       openingEntry = {
         id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
-        date: new Date().toISOString().slice(0, 10), description: `Asiento de apertura de inventario · ${newProd.code} · ${newProd.name}`,
+        date: openingDateValue, description: `Asiento de apertura de inventario · ${newProd.code} · ${newProd.name}`,
         type: 'APERTURA', bcvRate: rate, referenceDoc: `APERTURA-${newProd.code}`,
         items: [
           { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: openingValueBs, creditBs: 0, debitUsd: openingValueUsd, creditUsd: 0, description: `Existencia inicial de ${initialQuantity} ${newProd.unit}` },
