@@ -255,8 +255,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
         .developer-credit {
           position: absolute;
-          left: 28px;
-          bottom: 20px;
+          right: 24px;
+          bottom: 18px;
+          left: auto;
           z-index: 12;
           display: flex;
           align-items: center;
@@ -519,6 +520,15 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
           </div>
 
+          <div style={{ marginTop: 12, display: 'grid', gap: 7, textAlign: 'center' }}>
+            <a href="https://crm-sicoven.vercel.app/comprar" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '10px 14px', borderRadius: 10, background: '#e0f2fe', border: '1px solid #7dd3fc', color: '#0c4a6e', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
+              Ver Planes y Pagos
+            </a>
+            <p style={{ margin: 0, color: '#e2e8f0', fontSize: 11, lineHeight: 1.45 }}>
+              Dispone de 24 horas de prueba. Si desea continuar usando SICOVEN sin interrupciones, puede adquirir su licencia desde Planes y Pagos.
+            </p>
+          </div>
+
           {statusMessage && (
             <p className={`status-message ${statusMessage.type}`} role="status" aria-live="polite">
               {statusMessage.text}
@@ -527,7 +537,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
         </form>
         <div className="developer-credit" aria-label="Empresa desarrolladora: EFASfreelancer">
           <img src="/efas-logo-horizontal.png" alt="EFASfreelancer" draggable={false} />
-          <span className="developer-credit-label">Desarrollado por</span>
+          <span className="developer-credit-label">Desarrollador de software SICOVEN</span>
         </div>
       </main>
     </>
