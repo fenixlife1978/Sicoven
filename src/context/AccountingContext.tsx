@@ -1904,8 +1904,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const resetFactoryData = () => {
-    // Borra registros operativos, conservando empresas y parámetros fiscales.
-    // La licencia/prueba y los usuarios administrativos se almacenan fuera de este contexto.
+    // Reset de fábrica completo de los datos del negocio: elimina TODAS las empresas
+    // y todos sus registros. Conserva el usuario administrador y la licencia/prueba,
+    // gestionados fuera de este contexto, para permitir volver a configurar SICOVEN.
+    setCompanies([]);
+    setCurrentCompanyId('');
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
     setJournalEntries([]);
     setPurchases([]);
