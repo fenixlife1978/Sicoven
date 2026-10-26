@@ -70,7 +70,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const data=JSON.parse(await file.text());
      const array=Array.isArray(data)?data:Array.isArray(data.records)?data.records:Array.isArray(data.data)?data.data:Array.isArray(data.items)?data.items:null;
      if(!array) throw new Error(file.name+': el JSON debe ser un arreglo de registros o contener records, data o items.');
-     parsed=array.filter((x):x is Row=>!!x&&typeof x==='object'&&!Array.isArray(x));
+     parsed=(array as unknown[]).filter((x: unknown): x is Row => !!x && typeof x === 'object' && !Array.isArray(x));
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      const matrix=parseCsv(await file.text()); parsed=toRows(matrix);
     }else if(ext==='xlsx'||ext==='xlsm'){
