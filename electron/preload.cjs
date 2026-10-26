@@ -11,7 +11,5 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   createAdmin: (token, input) => ipcRenderer.invoke('sicoven:auth-create-admin', token, input),
   deleteSeedAdmin: (token) => ipcRenderer.invoke('sicoven:auth-delete-seed', token),
   load: (token) => ipcRenderer.invoke('sicoven:load-state', token),
-  save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
-  getDemoUsage: () => ipcRenderer.sendSync('sicoven:demo-get-usage'),
-  consumeDemoAction: (moduleKey) => ipcRenderer.sendSync('sicoven:demo-consume-action', moduleKey)
+  save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state)
 }));
