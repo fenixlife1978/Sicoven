@@ -1438,6 +1438,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     if (movData.type === 'ENTRADA') {
       unitCostBs = effectiveUnitCost;
+      unitCostUsd = unitCostBs / rate;
       const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
