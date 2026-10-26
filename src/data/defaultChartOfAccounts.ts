@@ -26,6 +26,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.1.4', name: 'Inventarios', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.4.01', name: 'Inventario de Mercancías para la Venta', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
   { code: '1.1.4.02', name: 'Inventario de Materias Primas e Insumos', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
+  { code: '1.1.4.03', name: 'Provisión por Desvalorización de Inventarios (Cuenta Correctora)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
 
   { code: '1.2', name: 'ACTIVO NO CORRIENTE', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' },
   { code: '1.2.1', name: 'Propiedades, Planta y Equipos', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.2' },
@@ -91,6 +92,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '5.1.1.01', name: 'Costo de Ventas de Mercancías', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
   { code: '5.1.2', name: 'Mermas, Faltantes y Ajustes de Inventario', type: 'COSTOS', level: 3, isMovement: false, parentCode: '5.1' },
   { code: '5.1.2.01', name: 'Pérdidas por Mermas y Ajustes de Inventario', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1.2' },
+  { code: '5.1.2.02', name: 'Pérdida por Desvalorización de Inventarios (VNR)', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1.2' },
   { code: '5.1.1.02', name: 'Costo de Servicios Prestados', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
   { code: '5.1.1.03', name: 'Fletes y Acarreos en Compras de Mercancías', type: 'COSTOS', level: 4, isMovement: true, parentCode: '5.1' },
 
