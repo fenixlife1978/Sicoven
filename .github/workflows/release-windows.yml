@@ -1,4 +1,4 @@
-name: SICOVEN Windows and Demo Releases
+name: SICOVEN Windows Release
 on:
   pull_request:
     branches:
@@ -72,30 +72,6 @@ jobs:
           $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
           if (-not $installer) { throw 'No se generó el instalador completo .exe de SICOVEN.' }
           Get-FileHash $installer.FullName -Algorithm SHA256 | Format-List
-      - name: Build demo edition with sample data and limits
-        shell: pwsh
-        run: |
-          $env:VITE_SICOVEN_DEMO = 'true'
-          npm run build
-          $bundles = Get-ChildItem -Path dist/assets -Filter '*.js' -File
-          if (-not $bundles) { throw 'No se generaron bundles JavaScript para SICOVEN DEMO.' }
-          if (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'administracion@losandesdist.com.ve' -Quiet) {
-            throw 'La edición DEMO no debe contener datos de ejemplo ficticios.'
-          }
-          if (-not (Select-String -Path $bundles.FullName -SimpleMatch -Pattern 'Máximo 10 acciones por módulo' -Quiet)) {
-            throw 'No se encontró el cintillo de límites comerciales en la edición DEMO.'
-          }
-      - name: Package separate demo installer
-        run: npx electron-builder --win nsis --config electron-builder-demo.json --publish never
-      - name: Verify both installers
-        shell: pwsh
-        run: |
-          $full = Get-ChildItem -Path release -Filter '*.exe' -File
-          $demo = Get-ChildItem -Path release-demo -Filter '*.exe' -File
-          if (-not $full) { throw 'Falta el instalador completo de SICOVEN.' }
-          if (-not $demo) { throw 'Falta el instalador DEMO de SICOVEN.' }
-          Get-FileHash $full.FullName -Algorithm SHA256 | Format-List
-          Get-FileHash $demo.FullName -Algorithm SHA256 | Format-List
       - name: Publish GitHub Release
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/sqlite-desktop-release' || startsWith(github.ref, 'refs/tags/v')
         env:
@@ -104,15 +80,15 @@ jobs:
           GITHUB_SHA: ${{ github.sha }}
         shell: pwsh
         run: |
-          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File).FullName)
+          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File).FullName)
           if ($env:REF_NAME -eq 'main' -or $env:REF_NAME -eq 'sqlite-desktop-release') {
             $tag = 'v1.0.0-sqlite-desktop'
             $title = 'SICOVEN 1.0.0 — instaladores de escritorio (Producción)'
-            $notes = 'Release oficial de SICOVEN para Windows. Incluye instalador completo con base SQLite y soporte de licencias CRM, e instalador DEMO.'
+            $notes = 'Release oficial de SICOVEN para Windows. Incluye el instalador completo con base SQLite local y soporte de licencias CRM. El período de prueba se gestiona mediante licenciamiento, no con una edición DEMO separada.'
           } else {
             $tag = $env:REF_NAME
             $title = "SICOVEN $tag"
-            $notes = 'Instaladores de SICOVEN completo y DEMO, compilados por GitHub Actions.'
+            $notes = 'Instalador completo de SICOVEN para Windows, compilado por GitHub Actions.'
           }
           $releaseExists = $false
           try {
@@ -133,17 +109,10 @@ jobs:
           path: release/*.exe
           if-no-files-found: error
           retention-days: 30
-      - name: Upload demo edition installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: SICOVEN-DEMO-Windows-x64
-          path: release-demo/*.exe
-          if-no-files-found: error
-          retention-days: 30
       - name: Publish artifact checksums
         shell: pwsh
         run: |
-          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File)) + @((Get-ChildItem -Path release-demo -Filter '*.exe' -File))
+          $files = @((Get-ChildItem -Path release -Filter '*.exe' -File))
           if (-not $files) { throw 'No hay instaladores para publicar.' }
           'SHA256  Archivo' | Out-File -FilePath checksums-sha256.txt -Encoding utf8
           foreach ($file in $files) {
