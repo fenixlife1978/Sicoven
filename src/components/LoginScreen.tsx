@@ -9,10 +9,9 @@ export type AuthUser = {
 
 interface LoginScreenProps {
   onLogin: (token: string, user: AuthUser) => void;
-  isDemoMode?: boolean;
 }
 
-export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = false }) => {
+export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -517,11 +516,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin, isDemoMode = 
             >
               Completar: admin / Admin123
             </button>
-            {isDemoMode && (
-              <span style={{ fontWeight: 600, color: '#b45309' }}>
-                Versión Demo
-              </span>
-            )}
+
           </div>
 
           {statusMessage && (
