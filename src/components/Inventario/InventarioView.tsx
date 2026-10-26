@@ -277,13 +277,13 @@ export const InventarioView: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-semibold text-emerald-700">
                           {formatBs(prod.salesPriceBs)}
-                          {displayCurrency !== 'BS' && (
+                          {true && (
                             <span className="block text-[10px] text-emerald-600/70">{formatUsd(prod.salesPriceUsd)}</span>
                           )}
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono font-black text-slate-900 bg-slate-50/50">
                           {formatBs(totalValBs)}
-                          {displayCurrency !== 'BS' && (
+                          {true && (
                             <span className="block text-[10px] text-slate-400 font-normal">{formatUsd(totalValUsd)}</span>
                           )}
                         </td>
