@@ -75,7 +75,7 @@ export const MigracionInteligente: React.FC = () => {
   const [files, setFiles] = useState<ParsedFile[]>([]);
   const [busy, setBusy] = useState(false);
   const [confirmed, setConfirmed] = useState(false);
-  const [selected, setSelected] = useState<Set<string>>(new Set(['inventory']));
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState('');
   const [planNote, setPlanNote] = useState('');
 
@@ -105,7 +105,7 @@ export const MigracionInteligente: React.FC = () => {
           return key ? normalize(row[key]) : '';
         }).filter(Boolean);
         const duplicateCount = rowKeys.length - new Set(rowKeys).size;
-        if (duplicateCount) notes.push('Posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+        if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
         if (missing.length) notes.push('Detección parcial: faltan campos obligatorios para este módulo.');
         if (mod.key !== 'journal') notes.push('La detección de columnas no sustituye la validación de relaciones y saldos antes de escribir.');
         all.push({ key: mod.key, name: mod.name, fields, rows, status: missing.length ? 'partial' : 'complete', missing, notes, selected: selected.has(mod.key + '|' + file.name), source: file.name });
@@ -125,11 +125,11 @@ export const MigracionInteligente: React.FC = () => {
   };
   const toggle = (id: string) => { setSelected(prev => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; }); setConfirmed(false); };
   const selectedDetections = detections.filter(d => selected.has(d.key + '|' + d.source));
-  const canPlan = selectedDetections.length > 0 && selectedDetections.every(d => d.status === 'complete' && !d.notes.some(n => n.includes('no cuadran') || n.includes('no numéricos')));
+  const canPlan = selectedDetections.length > 0 && selectedDetections.every(d => d.status === 'complete' && !d.notes.some(n => n.includes('BLOQUEO:') || n.includes('no cuadran') || n.includes('no numéricos')));
   const finalizePlan = () => {
-    if (!canPlan) { setPlanNote('No se puede preparar el plan: hay módulos incompletos o errores de balance. Corrige los archivos o desmarca esos módulos.'); return; }
+    if (!canPlan) { setConfirmed(false); setPlanNote('No se puede preparar el plan: hay módulos incompletos, posibles duplicados o errores de balance. Corrige los archivos o desmarca esos módulos.'); return; }
     setConfirmed(true);
-    setPlanNote('Plan revisado localmente. No se han escrito datos ni se han modificado registros existentes; la ejecución requiere los adaptadores transaccionales de cada módulo.');
+    setPlanNote('Plan revisado localmente. No se han escrito datos ni modificado registros. La ejecución queda bloqueada hasta disponer de adaptadores transaccionales que validen referencias, duplicados y saldos por módulo.');
   };
 
   return <section className="bg-white rounded-2xl border border-slate-200 shadow-sm p-5 sm:p-6 space-y-5">
@@ -162,11 +162,11 @@ export const MigracionInteligente: React.FC = () => {
     {files.length>0 && <div className="rounded-xl border border-slate-200 p-4 space-y-3">
       <h3 className="font-semibold text-slate-800">Revisión previa</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Filas analizadas</p><p className="text-xl font-bold">{files.reduce((n,f)=>n+f.rows.length,0)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Módulos seleccionados</p><p className="text-xl font-bold">{selectedDetections.length}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Archivos con error</p><p className="text-xl font-bold">{files.filter(f=>f.error).length}</p></div></div>
-      <div className="flex gap-2 items-start text-xs text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0"/><p>Protección activa: el análisis no modifica la base de datos. Antes de ejecutar una migración real deben validarse duplicados, relaciones, integridad contable y persistencia transaccional.</p></div>
+      <div className="flex gap-2 items-start text-xs text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0"/><p>Protección activa: el análisis no modifica la base de datos. Los posibles duplicados y los descuadres contables bloquean el plan. Cada asiento debe cuadrar individualmente y las relaciones entre módulos deben validarse antes de cualquier escritura.</p></div>
       <button onClick={finalizePlan} disabled={!selectedDetections.length} className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold text-sm disabled:opacity-40">Validar selección y preparar plan</button>
       {confirmed && <p className="text-sm text-emerald-800 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>{planNote}</p>}
       {!confirmed && planNote && <p className="text-sm text-amber-800">{planNote}</p>}
-      <p className="text-xs text-slate-500">No se permite confirmar la escritura desde esta fase de análisis; así se evita una importación parcial o descoordinada.</p>
+      <p className="text-xs text-slate-500">Esta fase prepara el plan, no ejecuta escrituras. La migración definitiva solo debe habilitarse cuando los adaptadores transaccionales puedan confirmar todos los módulos juntos o revertirlos íntegramente.</p>
     </div>}
   </section>;
 };
