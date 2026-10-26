@@ -80,6 +80,7 @@ interface AccountingContextType {
   products: InventoryProduct[];
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
+  executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => InventoryMovement[];
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
@@ -1411,6 +1412,115 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return newMov;
   };
 
+
+  const executeProduction = (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): InventoryMovement[] => {
+    consumeDemoAction('inventario');
+    const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
+    if (!finished) throw new Error('Seleccione un producto terminado válido.');
+    if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
+    if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
+    if (!date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    const recipe = finished.bomComponents || [];
+    if (!recipe.length) throw new Error('Configure primero la matriz insumo-producto del artículo.');
+    if (recipe.some(line => !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0 || line.productId === finishedProductId)) {
+      throw new Error('La matriz contiene componentes inválidos o una referencia circular directa.');
+    }
+    const rate = bcvRateInput;
+    const wipAccount = accounts.find(a => a.code === '1.1.4.04' && a.isMovement);
+    if (!wipAccount) throw new Error('Falta la cuenta contable de productos en proceso 1.1.4.04.');
+    const movementsToAdd: InventoryMovement[] = [];
+    const journalItems: JournalEntryItem[] = [];
+    const productUpdates = new Map<string, InventoryProduct>();
+    let totalProductionCostBs = 0;
+    for (const line of recipe) {
+      const component = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
+      if (!component) throw new Error('Un componente de la matriz ya no existe en la empresa activa.');
+      if (component.itemType !== 'MATERIA_PRIMA' && component.itemType !== 'PRODUCTO_EN_PROCESO') {
+        throw new Error('Los componentes de producción deben clasificarse como materia prima o producto en proceso: ' + component.code + '.');
+      }
+      const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
+      if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
+      let totalBs = 0;
+      if (component.costingMethod === 'PEPS') {
+        const layers: CostLayer[] = [];
+        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        let runningQuantity = 0;
+        for (const m of history) {
+          if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
+          else if (m.type === 'SALIDA') {
+            let remaining = m.quantity;
+            for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
+            runningQuantity -= m.quantity;
+          } else {
+            const delta = m.balanceQty - runningQuantity;
+            if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
+            else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
+            runningQuantity = m.balanceQty;
+          }
+        }
+        const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
+        if (layerQuantity < component.currentStock - 1e-8) layers.unshift({ quantity: component.currentStock - layerQuantity, unitCostBs: component.avgCostBs, unitCostUsd: component.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
+        if (layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0) < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
+        totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
+      } else {
+        totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
+      }
+      const unitCostBs = totalBs / requiredQuantity;
+      totalProductionCostBs += totalBs;
+      const inventoryCode = component.inventoryAccountCode || '1.1.4.01';
+      const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
+      if (!inventoryAccount) throw new Error('La cuenta de inventario del componente ' + component.code + ' no es válida.');
+      const movementId = 'mov-prod-consume-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
+      const outMovement: InventoryMovement = {
+        id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
+        date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
+        quantity: requiredQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalBs / rate,
+        balanceQty: component.currentStock - requiredQuantity,
+        balanceTotalBs: Math.round((component.currentStock - requiredQuantity) * component.avgCostBs * 100) / 100,
+        balanceTotalUsd: Math.round((component.currentStock - requiredQuantity) * component.avgCostBs / rate * 100) / 100,
+        bcvRate: rate, costingMethod: component.costingMethod
+      };
+      movementsToAdd.push(outMovement);
+      journalItems.push(
+        { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalBs / rate, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
+        { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalBs / rate, description: 'Salida de materia prima: ' + component.code }
+      );
+      productUpdates.set(component.id, { ...component, currentStock: component.currentStock - requiredQuantity });
+    }
+    totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
+    const productionUnitCostBs = totalProductionCostBs / outputQuantity;
+    const weightedFinished = calculateWeightedAverageCost(finished.currentStock, finished.avgCostBs, outputQuantity, productionUnitCostBs, rate);
+    const finishedInventoryCode = finished.inventoryAccountCode || '1.1.4.01';
+    const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
+    if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
+    const totalFinishedBs = Math.round(outputQuantity * productionUnitCostBs * 100) / 100;
+    journalItems.push(
+      { accountCode: finishedInventoryAccount.code, accountName: finishedInventoryAccount.name, debitBs: totalFinishedBs, creditBs: 0, debitUsd: totalFinishedBs / rate, creditUsd: 0, description: 'Entrada de producto terminado: ' + finished.code },
+      { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: 0, creditBs: totalFinishedBs, debitUsd: 0, creditUsd: totalFinishedBs / rate, description: 'Transferencia de producción terminada: ' + finished.code }
+    );
+    const entry = addJournalEntry({
+      entryNumber: 0, date, description: 'Orden de producción ' + (documentRef || '') + ' · ' + finished.code,
+      type: 'INVENTARIO', bcvRate: rate, referenceDoc: documentRef || ('PROD-' + Date.now()), items: journalItems
+    });
+    for (const movement of movementsToAdd) movement.journalEntryId = entry.id;
+    const finishedMovement: InventoryMovement = {
+      id: 'mov-prod-finished-' + Date.now(), companyId: currentCompany.id, productId: finished.id, productName: finished.name, productCode: finished.code,
+      date, type: 'ENTRADA', concept: 'PRODUCCION', documentRef: entry.referenceDoc || '', documentType: 'Orden de producción',
+      quantity: outputQuantity, unitCostBs: productionUnitCostBs, unitCostUsd: productionUnitCostBs / rate,
+      totalCostBs: totalFinishedBs, totalCostUsd: totalFinishedBs / rate, balanceQty: weightedFinished.quantity,
+      balanceTotalBs: weightedFinished.totalCostBs, balanceTotalUsd: weightedFinished.totalCostUsd,
+      bcvRate: rate, costingMethod: finished.costingMethod, journalEntryId: entry.id
+    };
+    movementsToAdd.push(finishedMovement);
+    productUpdates.set(finished.id, {
+      ...finished, currentStock: weightedFinished.quantity, avgCostBs: weightedFinished.unitCostBs,
+      avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostBs / rate
+    });
+    setProducts(prev => prev.map(product => productUpdates.get(product.id) || product));
+    setMovements(prev => [...prev, ...movementsToAdd]);
+    return movementsToAdd;
+  };
+
   const deleteVatVoucher = (id: string) => {
     consumeDemoAction('retenciones');
     setVatVouchers(prev => prev.filter(v => v.id !== id));
@@ -1813,6 +1923,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         importInventoryProducts,
+        executeProduction,
         updateProduct,
         movements: movements.filter(m => m.companyId === currentCompany.id),
         addMovement,
