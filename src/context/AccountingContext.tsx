@@ -1114,7 +1114,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
     const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(openingDateValue) || new Date(openingDateValue + 'T00:00:00Z').toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(openingDateValue) || new Date(openingDateValue + 'T00:00:00Z').toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
     if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
       throw new Error('La existencia y el costo inicial no pueden ser negativos.');
     }
@@ -1202,7 +1202,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const quantity = Number(row.currentStock || 0);
       const unitCostBs = Number(row.avgCostBs || 0);
       const date = row.openingDate || today;
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
       if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
           !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
       const product: InventoryProduct = {
@@ -1583,7 +1583,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
-    if (!date || !/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
+    if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
     const recipe = finished.bomComponents || [];
     if (!recipe.length) throw new Error('Configure primero la matriz insumo-producto del artículo.');
     if (recipe.some(line => !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0 || line.productId === finishedProductId)) {
