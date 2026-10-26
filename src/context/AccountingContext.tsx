@@ -36,8 +36,6 @@ interface AccountingContextType {
   companies: Company[];
   isStorageReady: boolean;
   storageError: string | null;
-  isDemoMode: boolean;
-  demoUsage: Record<string, number>;
   currentCompany: Company;
   setCurrentCompanyId: (id: string) => void;
   addCompany: (comp: Omit<Company, 'id'>) => Company;
@@ -117,7 +115,6 @@ interface AccountingContextType {
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
 
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
-const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
 // En escritorio, SQLite es la única fuente operativa; localStorage se reserva
 // para la vista web de desarrollo y nunca inicializa datos del instalador.
 const readBrowserStorage = (key: string): string | null => {
@@ -238,8 +235,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
-  const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
-  const demoUsageRef = useRef<Record<string, number>>({});
   // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
   // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
   const consumeDemoAction = (_moduleKey: string) => {};
@@ -291,7 +286,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [storageError, setStorageError] = useState<string | null>(null);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult
   };
 
   useEffect(() => {
@@ -358,7 +353,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
             if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
             if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
-            if (saved.demoUsage && typeof saved.demoUsage === 'object') { const usage = saved.demoUsage as Record<string, number>; demoUsageRef.current = usage; setDemoUsage(usage); }
           } else {
             // Arranque limpio sin datos ficticios para ambas ediciones (completa y DEMO)
             setCompanies([]);
@@ -375,11 +369,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setBankStatementMovements([]);
             setCreditSettlements([]);
             await window.sicovenStore.save(token, stateSnapshot);
-          }
-          if (IS_DEMO) {
-            const usage = window.sicovenStore.getDemoUsage();
-            demoUsageRef.current = usage;
-            setDemoUsage(usage);
           }
         }
         initialized = true;
@@ -425,7 +414,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (error) {
       console.error('Error guardando datos locales de desarrollo:', error);
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult, demoUsage]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult]);
 
   const syncBcvRate = async (): Promise<BcvSyncResult> => {
     setIsSyncingBcv(true);
@@ -1927,9 +1916,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const resetToSampleData = () => {
     // SICOVEN opera sin datos ficticios en ninguna edición. Restablece a estado limpio.
-    if (IS_DEMO) {
-      consumeDemoAction('configuracion');
-    }
     setCompanies([]);
     setCurrentCompanyId('');
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
@@ -1966,10 +1952,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const importBackupJson = (jsonData: string): boolean => {
-    if (IS_DEMO) {
-      window.alert('La importación de respaldos está deshabilitada en SICOVEN DEMO. Adquiera la versión completa para importar sus propios datos.');
-      return false;
-    }
     try {
       const data = JSON.parse(jsonData);
       const requiredCollections = [
@@ -2036,8 +2018,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companies,
         isStorageReady: storageReady,
         storageError,
-        isDemoMode: IS_DEMO,
-        demoUsage,
         currentCompany,
         setCurrentCompanyId,
         addCompany,
