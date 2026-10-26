@@ -2,7 +2,7 @@ name: SICOVEN Windows installer
 
 on:
   push:
-    branches: [main]
+    branches: [main, feature/inventario-contable-integral]
   workflow_dispatch:
 
 permissions:
@@ -32,6 +32,9 @@ jobs:
 
       - name: Run automated tests
         run: npm test
+
+      - name: Check TypeScript types
+        run: npm run check:types
 
       - name: Build renderer
         run: npm run build
