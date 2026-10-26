@@ -29,6 +29,7 @@ export const validateOpeningInventoryRow = (row: ImportRow, line: number, defaul
   if (!row.code?.trim() || !row.name?.trim()) throw new Error(prefix + 'falta code o name.');
   const currentStock = importNumber(row, 'currentstock', prefix + 'currentStock');
   const avgCostBs = importNumber(row, 'avgcostbs', prefix + 'avgCostBs');
+  if (currentStock > 0 && avgCostBs <= 0) throw new Error(prefix + 'avgCostBs debe ser mayor que cero cuando hay existencias.');
   const minStock = importNumber(row, 'minstock', prefix + 'minStock', { optional: true });
   const salesPriceBs = importNumber(row, 'salespricebs', prefix + 'salesPriceBs', { optional: true });
   const salesPriceUsd = importNumber(row, 'salespriceusd', prefix + 'salesPriceUsd', { optional: true });
@@ -61,5 +62,6 @@ export const validateMovementImportRow = (row: ImportRow, line: number) => {
   const unitCostBs = importNumber(row, 'unitcostbs', prefix + 'unitCostBs');
   const bcvRate = importNumber(row, 'bcvrate', prefix + 'bcvRate', { strictlyPositive: true });
   const additionalLandedCostsBs = importNumber(row, 'additionallandedcostsbs', prefix + 'additionalLandedCostsBs', { optional: true });
-  return { date, type: type as 'ENTRADA' | 'SALIDA' | 'AJUSTE', quantity, unitCostBs, bcvRate, additionalLandedCostsBs };
+  const balanceQty = type === 'AJUSTE' ? importNumber(row, 'balanceqty', prefix + 'balanceQty') : 0;
+  return { date, type: type as 'ENTRADA' | 'SALIDA' | 'AJUSTE', quantity, unitCostBs, bcvRate, additionalLandedCostsBs, balanceQty };
 };
