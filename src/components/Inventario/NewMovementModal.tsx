@@ -25,6 +25,12 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [documentRef, setDocumentRef] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [unitCostBs, setUnitCostBs] = useState<number>(0);
+  const [additionalLandedCostsBs, setAdditionalLandedCostsBs] = useState<number>(0);
+  const [bcvRateInput, setBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
+  const [documentType, setDocumentType] = useState('Factura de compra');
+  const [counterpartyRif, setCounterpartyRif] = useState('');
+  const [counterpartyName, setCounterpartyName] = useState('');
+  const [error, setError] = useState('');
 
   const selectedProduct = products.find(p => p.id === productId) || products[0];
 
@@ -37,9 +43,13 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   if (!isOpen || !selectedProduct) return null;
 
-  const bcvRate = currentCompany.bcvRate || 68.50;
+  const bcvRate = Number(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
-  const totalCostBs = quantity * unitCostBs;
+  const totalCostBs = type === 'ENTRADA'
+    ? quantity * unitCostBs + additionalLandedCostsBs
+    : type === 'SALIDA'
+      ? quantity * selectedProduct.avgCostBs
+      : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
   const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
@@ -53,8 +63,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quantity <= 0) return;
-
+    setError('');
+    if ((type !== 'AJUSTE' && quantity <= 0) || (type === 'AJUSTE' && quantity < 0) || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean válidas.'); return; }
+    try {
     addMovement({
       productId: selectedProduct.id,
       productName: selectedProduct.name,
@@ -63,6 +74,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       type,
       concept,
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
+      documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate,
+      additionalLandedCostsBs: type === 'ENTRADA' ? additionalLandedCostsBs : 0,
       quantity,
       unitCostBs,
       unitCostUsd: Number(unitCostUsd.toFixed(2)),
@@ -74,6 +87,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     });
 
     onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento.');
+    }
   };
 
   return (
@@ -142,12 +158,15 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 {type === 'ENTRADA' && (
                   <>
                     <option value="COMPRA">Compra Nacional</option>
+                    <option value="DEVOLUCION_CLIENTE">Devolución de cliente</option>
                     <option value="INVENTARIO_INICIAL">Inventario Inicial</option>
                   </>
                 )}
                 {type === 'SALIDA' && (
                   <>
                     <option value="VENTA">Venta de Mercancía</option>
+                    <option value="DEVOLUCION_COMPRA">Devolución a proveedor</option>
+                    <option value="AUTOCONSUMO">Autoconsumo</option>
                     <option value="MERMA">Merma / Deterioro</option>
                   </>
                 )}
@@ -157,6 +176,27 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                   </>
                 )}
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tipo y número de documento</label>
+              <select value={documentType} onChange={e => setDocumentType(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
+                <option>Factura de compra</option><option>Factura de venta</option><option>Nota de débito</option><option>Nota de crédito</option><option>Guía de despacho</option><option>Acta de ajuste</option><option>Inventario inicial</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+              <input type="number" min="0.000001" step="0.000001" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
+              <input value={counterpartyRif} onChange={e => setCounterpartyRif(e.target.value)} maxLength={20} placeholder="J-12345678-9" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Proveedor / cliente</label>
+              <input value={counterpartyName} onChange={e => setCounterpartyName(e.target.value)} maxLength={180} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
           </div>
 
@@ -190,7 +230,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </label>
               <input
                 type="number"
-                min="1"
+                min={type === 'AJUSTE' ? 0 : 0.000001}
+                step="0.000001"
                 required
                 value={quantity}
                 onChange={e => setQuantity(Number(e.target.value))}
@@ -210,11 +251,16 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               />
             </div>
           </div>
+          {type === 'ENTRADA' && <div>
+            <label className="block font-semibold text-slate-700 mb-1">Fletes y gastos de nacionalización asignados a esta entrada (Bs.)</label>
+            <input type="number" min="0" step="0.01" value={additionalLandedCostsBs || ''} onChange={e => setAdditionalLandedCostsBs(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <p className="mt-1 text-[11px] text-slate-500">Estos costos se distribuyen sobre la cantidad recibida y se capitalizan en el costo unitario del artículo.</p>
+          </div>}
 
           {/* Movement summary pill */}
           <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
             <div>
-              <span className="text-[11px] text-slate-400 block">Total Movimiento:</span>
+              <span className="text-[11px] text-slate-400 block">Total estimado del movimiento:</span>
               <span className="font-mono font-bold text-emerald-400 text-sm">
                 {formatBs(totalCostBs)}
               </span>
@@ -226,6 +272,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </span>
             </div>
           </div>
+
+          {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</p>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
             <button
