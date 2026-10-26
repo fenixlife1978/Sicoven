@@ -324,10 +324,15 @@ export const InventarioContableTools: React.FC = () => {
         const closingMovement = atEnd.length ? atEnd[atEnd.length - 1] : null;
         const opening = openingMovement ? Number(openingMovement.balanceTotalBs || 0) : 0;
         const closing = closingMovement ? Number(closingMovement.balanceTotalBs || 0) : 0;
-        const purchasesInPeriod = history.filter(m => m.date >= periodStart && m.date <= periodEnd && m.type === 'ENTRADA' && ['COMPRA','DEVOLUCION_CLIENTE','INVENTARIO_INICIAL'].includes(m.concept))
-          .reduce((sum,m) => sum + Number(m.totalCostBs || 0), 0)
-          - history.filter(m => m.date >= periodStart && m.date <= periodEnd && m.type === 'SALIDA' && m.concept === 'DEVOLUCION_COMPRA')
+        const periodIncoming = history.filter(m => m.date >= periodStart && m.date <= periodEnd && m.type === 'ENTRADA' && ['COMPRA','DEVOLUCION_CLIENTE','INVENTARIO_INICIAL','PRODUCCION'].includes(m.concept))
           .reduce((sum,m) => sum + Number(m.totalCostBs || 0), 0);
+        const nonSaleReductions = history.reduce((sum,m,index) => {
+          if (m.date < periodStart || m.date > periodEnd) return sum;
+          if (m.type === 'SALIDA' && ['DEVOLUCION_COMPRA','PRODUCCION','MERMA','AUTOCONSUMO'].includes(m.concept)) return sum + Number(m.totalCostBs || 0);
+          if (m.type === 'AJUSTE' && index > 0 && m.balanceQty < history[index - 1].balanceQty) return sum + Number(m.totalCostBs || 0);
+          return sum;
+        }, 0);
+        const purchasesInPeriod = periodIncoming - nonSaleReductions;
         const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
         const costCode = product.costOfSalesAccountCode || '5.1.1.01';
         const key = inventoryCode + '|' + costCode;
