@@ -108,6 +108,7 @@ interface AccountingContextType {
 
   // Respaldo
   resetToSampleData: () => void;
+  resetFactoryData: () => void;
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
 }
