@@ -16,11 +16,12 @@ import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
+import { InventarioContableTools } from './InventarioContableTools';
 
 export const InventarioView: React.FC = () => {
   const { currentCompany, products, movements, displayCurrency } = useAccounting();
 
-  const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX'>('EXISTENCIAS');
+  const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -57,11 +58,11 @@ export const InventarioView: React.FC = () => {
 
   // Valuations
   const totalInventoryValueBs = products.reduce(
-    (sum, p) => sum + p.currentStock * p.avgCostBs,
+    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostBs - Number(p.vnrProvisionBs || 0)),
     0
   );
   const totalInventoryValueUsd = products.reduce(
-    (sum, p) => sum + p.currentStock * p.avgCostUsd,
+    (sum, p) => sum + Math.max(0, p.currentStock * p.avgCostUsd - Number(p.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001)),
     0
   );
   const lowStockCount = products.filter(p => p.currentStock <= p.minStock).length;
@@ -198,6 +199,8 @@ export const InventarioView: React.FC = () => {
               />
             </div>
 
+            <button onClick={() => setActiveTab('CONTABILIDAD')} className="px-3 py-1.5 rounded-lg text-xs font-bold bg-indigo-50 text-indigo-700 hover:bg-indigo-100">Herramientas contables</button>
+
             {activeTab === 'KARDEX' && (
               <select
                 value={selectedProductId}
@@ -215,6 +218,8 @@ export const InventarioView: React.FC = () => {
           </div>
         </div>
       </div>
+
+      {activeTab === 'CONTABILIDAD' && <InventarioContableTools />}
 
       {/* 1. Existencias Table */}
       {activeTab === 'EXISTENCIAS' && (
@@ -243,8 +248,8 @@ export const InventarioView: React.FC = () => {
                   </tr>
                 ) : (
                   filteredProducts.map(prod => {
-                    const totalValBs = prod.currentStock * prod.avgCostBs;
-                    const totalValUsd = prod.currentStock * prod.avgCostUsd;
+                    const totalValBs = Math.max(0, prod.currentStock * prod.avgCostBs - Number(prod.vnrProvisionBs || 0));
+                    const totalValUsd = Math.max(0, prod.currentStock * prod.avgCostUsd - Number(prod.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001));
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
