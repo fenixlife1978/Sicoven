@@ -9,6 +9,7 @@ import {
   AlertTriangle,
   CheckCircle2,
   Boxes,
+  FileSpreadsheet,
   ArrowUpRight,
   ArrowDownRight
 } from 'lucide-react';
@@ -17,6 +18,7 @@ import { NewProductModal } from './NewProductModal';
 import { NewMovementModal } from './NewMovementModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { InventarioContableTools } from './InventarioContableTools';
+import { IntelligentMigrationWizard } from '../Migracion/IntelligentMigrationWizard';
 
 export const InventarioView: React.FC = () => {
   const { currentCompany, products, movements } = useAccounting();
@@ -24,6 +26,7 @@ export const InventarioView: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
   const [isMovementModalOpen, setIsMovementModalOpen] = useState(false);
+  const [isMigrationWizardOpen, setIsMigrationWizardOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedProductId, setSelectedProductId] = useState<string>('ALL');
 
@@ -87,6 +90,7 @@ export const InventarioView: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2.5">
+            <button onClick={() => setIsMigrationWizardOpen(true)} className="flex items-center gap-1.5 rounded-xl border border-indigo-200 bg-indigo-50 px-3.5 py-2 text-xs font-semibold text-indigo-800 transition hover:bg-indigo-100"><FileSpreadsheet className="h-3.5 w-3.5" />Migración inteligente</button>
             <button
               onClick={() => window.print()}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
@@ -401,6 +405,7 @@ export const InventarioView: React.FC = () => {
       {/* Modals */}
       <NewProductModal isOpen={isProductModalOpen} onClose={() => setIsProductModalOpen(false)} />
       <NewMovementModal isOpen={isMovementModalOpen} onClose={() => setIsMovementModalOpen(false)} />
+      {isMigrationWizardOpen && <IntelligentMigrationWizard onClose={() => setIsMigrationWizardOpen(false)} />}
     </div>
   );
 };
