@@ -19,7 +19,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { InventarioContableTools } from './InventarioContableTools';
 
 export const InventarioView: React.FC = () => {
-  const { currentCompany, products, movements, displayCurrency } = useAccounting();
+  const { currentCompany, products, movements } = useAccounting();
 
   const [activeTab, setActiveTab] = useState<'EXISTENCIAS' | 'KARDEX' | 'CONTABILIDAD'>('EXISTENCIAS');
   const [isProductModalOpen, setIsProductModalOpen] = useState(false);
@@ -233,9 +233,9 @@ export const InventarioView: React.FC = () => {
                   <th className="py-2.5 px-4 w-32">Categoría</th>
                   <th className="py-2.5 px-3 w-20 text-center">Unidad</th>
                   <th className="py-2.5 px-4 text-right w-24">Existencia</th>
-                  <th className="py-2.5 px-4 text-right w-32">Costo Promedio (Bs.)</th>
-                  <th className="py-2.5 px-4 text-right w-32">Precio Venta (Bs.)</th>
-                  <th className="py-2.5 px-4 text-right w-36">Valoración Total</th>
+                  <th className="py-2.5 px-4 text-right w-32">Costo Promedio (Bs. / USD)</th>
+                  <th className="py-2.5 px-4 text-right w-32">Precio Venta (Bs. / USD)</th>
+                  <th className="py-2.5 px-4 text-right w-36">Valoración Total (Bs. / USD)</th>
                   <th className="py-2.5 px-3 text-center w-28">Estado Stock</th>
                 </tr>
               </thead>
@@ -271,7 +271,7 @@ export const InventarioView: React.FC = () => {
                         </td>
                         <td className="py-2.5 px-4 text-right font-mono text-slate-800">
                           {formatBs(prod.avgCostBs)}
-                          {displayCurrency !== 'BS' && (
+                          {true && (
                             <span className="block text-[10px] text-slate-400">{formatUsd(prod.avgCostUsd)}</span>
                           )}
                         </td>
