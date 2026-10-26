@@ -18,6 +18,7 @@ import { TaxpayerType } from '../../types/accounting';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
 import { formatBs } from '../../utils/formatters';
+import { MigracionInteligente } from './MigracionInteligente';
 
 export const ConfiguracionView: React.FC = () => {
   const {
@@ -322,6 +323,8 @@ export const ConfiguracionView: React.FC = () => {
           </div>
         </form>
       </div>
+
+      <MigracionInteligente />
 
       {/* Normativas Legales y Respaldo de Información */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
