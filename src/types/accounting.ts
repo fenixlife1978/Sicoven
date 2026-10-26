@@ -169,6 +169,7 @@ export interface InventoryProduct {
   costOfSalesAccountCode?: string;
   /** Cuenta para mermas, faltantes, sobrantes y ajustes. */
   adjustmentAccountCode?: string;
+  openingBalanceAccountCode?: string;
   costingMethod?: InventoryCostingMethod;
   vatTreatment?: InventoryVatTreatment;
   itemType?: InventoryItemType;
