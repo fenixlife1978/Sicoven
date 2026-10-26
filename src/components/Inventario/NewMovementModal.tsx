@@ -158,12 +158,14 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 {type === 'ENTRADA' && (
                   <>
                     <option value="COMPRA">Compra Nacional</option>
+                    <option value="DEVOLUCION_CLIENTE">Devolución de cliente</option>
                     <option value="INVENTARIO_INICIAL">Inventario Inicial</option>
                   </>
                 )}
                 {type === 'SALIDA' && (
                   <>
                     <option value="VENTA">Venta de Mercancía</option>
+                    <option value="DEVOLUCION_COMPRA">Devolución a proveedor</option>
                     <option value="AUTOCONSUMO">Autoconsumo</option>
                     <option value="MERMA">Merma / Deterioro</option>
                   </>
