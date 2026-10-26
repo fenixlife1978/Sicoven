@@ -29,8 +29,9 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, updateProduct, addJournalEntry, executeProduction } = useAccounting();
+  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction } = useAccounting();
   const [importing, setImporting] = useState(false);
+  const [importMode, setImportMode] = useState<'INVENTARIO_INICIAL' | 'MOVIMIENTOS'>('INVENTARIO_INICIAL');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
   const [productId, setProductId] = useState(products[0]?.id || '');
@@ -58,37 +59,65 @@ export const InventarioContableTools: React.FC = () => {
     if (!file) return;
     setError(''); setMessage(''); setImporting(true);
     try {
-      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
+      const lines = (await file.text()).replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(line => line.trim());
       if (lines.length < 2) throw new Error('El CSV debe contener encabezados y al menos una fila.');
       const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
-      const required = ['code', 'name', 'currentstock', 'avgcostbs'];
-      if (required.some(h => !headers.includes(h))) {
-        throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
-      }
-      const rows = lines.slice(1).map((line, index) => {
+      const records = lines.slice(1).map((line, index) => {
         const cells = parseCsvLine(line);
         const row: Record<string, string> = {};
         headers.forEach((header, i) => { row[header] = cells[i] ?? ''; });
-        const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
-        const method = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
-        const vat = ['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(row.vattreatment || '') ? row.vattreatment as InventoryProduct['vatTreatment'] : 'GENERAL_16';
-        const type = ['MERCANCIA', 'MATERIA_PRIMA', 'PRODUCTO_EN_PROCESO', 'PRODUCTO_TERMINADO', 'SUBPRODUCTO'].includes(row.itemtype || '') ? row.itemtype as InventoryProduct['itemType'] : 'MERCANCIA';
-        if (!row.code?.trim() || !row.name?.trim()) throw new Error('Fila ' + (index + 2) + ': falta code o name.');
-        return {
-          code: row.code, name: row.name, category: row.category || 'General', unit: row.unit || 'Unidad',
-          minStock: numeric('minstock'), currentStock: numeric('currentstock'), avgCostBs: numeric('avgcostbs'),
-          avgCostUsd: 0, lastCostBs: numeric('avgcostbs'), lastCostUsd: 0, salesPriceBs: numeric('salespricebs'),
-          salesPriceUsd: numeric('salespriceusd'), inventoryAccountCode: row.inventoryaccountcode || '1.1.4.01',
-          costOfSalesAccountCode: row.costofsalesaccountcode || '5.1.1.01',
-          adjustmentAccountCode: row.adjustmentaccountcode || '5.1.2.01',
-          openingBalanceAccountCode: row.openingbalanceaccountcode || '3.3.1.01',
-          costingMethod: method, vatTreatment: vat, itemType: type,
-          openingDate: row.openingdate || new Date().toISOString().slice(0, 10),
-          openingBcvRate: numeric('openingbcvrate', currentCompany.bcvRate)
-        };
+        return { row, sourceLine: index + 2 };
       });
-      const imported = importInventoryProducts(rows);
-      setMessage('Importación completada: ' + imported + ' artículos. Las existencias iniciales se registraron en Kardex y Libro Diario.');
+      if (importMode === 'INVENTARIO_INICIAL') {
+        const required = ['code', 'name', 'currentstock', 'avgcostbs'];
+        if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
+        const rows = records.map(({row,index:unused,sourceLine}) => {
+          const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
+          const method = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
+          const vat = ['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(row.vattreatment || '') ? row.vattreatment as InventoryProduct['vatTreatment'] : 'GENERAL_16';
+          const type = ['MERCANCIA', 'MATERIA_PRIMA', 'PRODUCTO_EN_PROCESO', 'PRODUCTO_TERMINADO', 'SUBPRODUCTO'].includes(row.itemtype || '') ? row.itemtype as InventoryProduct['itemType'] : 'MERCANCIA';
+          if (!row.code?.trim() || !row.name?.trim()) throw new Error('Fila ' + sourceLine + ': falta code o name.');
+          return {
+            code: row.code, name: row.name, category: row.category || 'General', unit: row.unit || 'Unidad',
+            minStock: numeric('minstock'), currentStock: numeric('currentstock'), avgCostBs: numeric('avgcostbs'),
+            avgCostUsd: 0, lastCostBs: numeric('avgcostbs'), lastCostUsd: 0, salesPriceBs: numeric('salespricebs'),
+            salesPriceUsd: numeric('salespriceusd'), inventoryAccountCode: row.inventoryaccountcode || '1.1.4.01',
+            costOfSalesAccountCode: row.costofsalesaccountcode || '5.1.1.01',
+            adjustmentAccountCode: row.adjustmentaccountcode || '5.1.2.01',
+            openingBalanceAccountCode: row.openingbalanceaccountcode || '3.3.1.01',
+            costingMethod: method, vatTreatment: vat, itemType: type,
+            openingDate: row.openingdate || new Date().toISOString().slice(0, 10),
+            openingBcvRate: numeric('openingbcvrate', currentCompany.bcvRate)
+          };
+        });
+        const imported = importInventoryProducts(rows);
+        setMessage('Importación completada: ' + imported + ' artículos. Las existencias iniciales se registraron en Kardex y Libro Diario.');
+      } else {
+        const required = ['date','type','concept','productcode','quantity','unitcostbs','bcvrate','documentref'];
+        if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias para movimientos: date,type,concept,productCode,quantity,unitCostBs,bcvRate,documentRef.');
+        const rows = records.map(({row,sourceLine}) => {
+          const product = products.find(p => p.code.trim().toUpperCase() === String(row.productcode || '').trim().toUpperCase());
+          if (!product) throw new Error('Fila ' + sourceLine + ': no existe el artículo ' + row.productcode + ' en SICOVEN.');
+          const type = String(row.type || '').trim().toUpperCase();
+          if (!['ENTRADA','SALIDA','AJUSTE'].includes(type)) throw new Error('Fila ' + sourceLine + ': tipo debe ser ENTRADA, SALIDA o AJUSTE.');
+          const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
+          const quantity = numeric('quantity');
+          const cost = numeric('unitcostbs');
+          const rate = numeric('bcvrate');
+          return {
+            productId: product.id, productName: product.name, productCode: product.code,
+            date: row.date, type: type as 'ENTRADA' | 'SALIDA' | 'AJUSTE', concept: String(row.concept || '').trim().toUpperCase(),
+            documentRef: String(row.documentref || '').trim(), documentType: row.documenttype || 'Resumen importado',
+            counterpartyRif: row.counterpartyrif || '', counterpartyName: row.counterpartyname || '',
+            quantity, unitCostBs: cost, unitCostUsd: rate > 0 ? cost / rate : 0,
+            totalCostBs: quantity * cost, totalCostUsd: rate > 0 ? quantity * cost / rate : 0,
+            balanceQty: numeric('balanceqty'), balanceTotalBs: numeric('balancetotalbs'), balanceTotalUsd: numeric('balancetotalusd'),
+            bcvRate: rate
+          };
+        }).sort((a,b) => a.date.localeCompare(b.date));
+        const imported = importInventoryMovements(rows);
+        setMessage('Importación completada: ' + imported + ' movimientos de Kardex. Las salidas de venta, mermas y ajustes aplicables generaron sus asientos contables.');
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo importar el CSV.');
     } finally { setImporting(false); }
@@ -98,6 +127,10 @@ export const InventarioContableTools: React.FC = () => {
     'code','name','category','unit','currentStock','avgCostBs','minStock','salesPriceBs','salesPriceUsd',
     'inventoryAccountCode','costOfSalesAccountCode','adjustmentAccountCode','openingBalanceAccountCode',
     'costingMethod','vatTreatment','itemType','openingDate','openingBcvRate'
+  ], []);
+
+  const exportMovementTemplate = () => downloadCsv('SICOVEN_Plantilla_Movimientos.csv', [
+    'date','type','concept','productCode','quantity','unitCostBs','bcvRate','documentRef','documentType','counterpartyRif','counterpartyName','balanceQty'
   ], []);
 
   const exportInventory = () => downloadCsv('SICOVEN_Inventario_Valorado.csv', [
@@ -259,16 +292,21 @@ export const InventarioContableTools: React.FC = () => {
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-3">
       <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-emerald-700" /><h2 className="font-bold text-slate-900">Importación y exportación contable</h2></div>
       <p className="text-sm text-slate-600">Importe el inventario inicial desde CSV guardado por Excel. La importación valida códigos duplicados, tasas, costos y cuentas; si hay existencias iniciales, crea movimientos de apertura y sus asientos contables.</p>
+      <label className="block max-w-sm text-sm font-medium text-slate-700">Tipo de archivo a importar
+        <select value={importMode} onChange={e => setImportMode(e.target.value as typeof importMode)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
+          <option value="INVENTARIO_INICIAL">Maestro e inventario inicial</option><option value="MOVIMIENTOS">Resumen periódico de movimientos</option>
+        </select>
+      </label>
       <div className="flex flex-wrap gap-2">
         <label className={'inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white ' + (importing ? 'bg-slate-400' : 'bg-emerald-700 hover:bg-emerald-800')}>
-          <FileUp className="h-4 w-4" />{importing ? 'Importando…' : 'Importar inventario CSV'}
+          <FileUp className="h-4 w-4" />{importing ? 'Importando…' : 'Importar CSV'}
           <input type="file" accept=".csv,.txt,text/csv" disabled={importing} className="hidden" onChange={e => { void handleImport(e.target.files?.[0]); e.currentTarget.value = ''; }} />
         </label>
-        <button onClick={exportTemplate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Descargar plantilla CSV</button>
+        <button onClick={importMode === 'INVENTARIO_INICIAL' ? exportTemplate : exportMovementTemplate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Descargar plantilla CSV</button>
         <button onClick={exportInventory} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar inventario valorado</button>
         <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro de entradas/salidas</button>
       </div>
-      <p className="text-xs text-slate-500">La exportación contiene cantidades, costos, valores en Bs./USD, cuenta contable y tasa histórica del movimiento. El archivo CSV puede abrirse en Excel; la importación directa de archivos XLSX y conectores API se incorporarán en la siguiente fase.</p>
+      <p className="text-xs text-slate-500">La importación de movimientos debe hacerse en orden cronológico, desde los períodos más antiguos a los más recientes, para conservar saldos y costos históricos. CSV puede generarse desde Excel; lectura directa XLSX y conectores API siguen pendientes.</p>
     </section>
 
 
