@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
-import { calculateVnrWriteDown } from '../../types/inventoryAccounting';
+import { calculateVnrWriteDown, calculatePeriodicCostOfSales } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
@@ -100,7 +100,7 @@ export const InventarioContableTools: React.FC = () => {
         if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
         const rows = records.map(({row,sourceLine}) => {
           const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
-          const method = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
+          const method: NonNullable<InventoryProduct['costingMethod']> = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
           const vat = ['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(row.vattreatment || '') ? row.vattreatment as InventoryProduct['vatTreatment'] : 'GENERAL_16';
           const type = ['MERCANCIA', 'MATERIA_PRIMA', 'PRODUCTO_EN_PROCESO', 'PRODUCTO_TERMINADO', 'SUBPRODUCTO'].includes(row.itemtype || '') ? row.itemtype as InventoryProduct['itemType'] : 'MERCANCIA';
           if (!row.code?.trim() || !row.name?.trim()) throw new Error('Fila ' + sourceLine + ': falta code o name.');
@@ -198,7 +198,7 @@ export const InventarioContableTools: React.FC = () => {
       margin: { left: 10, right: 10, bottom: 12 },
       didDrawPage: () => {
         doc.setFontSize(8);
-        doc.text('Folio ' + doc.internal.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+        doc.text('Folio ' + doc.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
       }
     });
     const safeName = String(currentCompany.rif || currentCompany.name || 'empresa').replace(/[^A-Za-z0-9-]/g, '_');
@@ -246,7 +246,7 @@ export const InventarioContableTools: React.FC = () => {
       margin: { left: 10, right: 10, bottom: 12 },
       didDrawPage: () => {
         doc.setFontSize(8);
-        doc.text('Folio ' + doc.internal.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+        doc.text('Folio ' + doc.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
       }
     });
     const safeName = String(currentCompany.rif || currentCompany.name || 'empresa').replace(/[^A-Za-z0-9-]/g, '_');
