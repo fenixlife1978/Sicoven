@@ -157,6 +157,41 @@ export const InventarioContableTools: React.FC = () => {
     p.inventoryAccountCode || '1.1.4.01',p.costOfSalesAccountCode || '5.1.1.01',p.vatTreatment || 'GENERAL_16',p.openingBcvRate || currentCompany.bcvRate
   ]));
 
+  const exportInventoryBalancePdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(13);
+    doc.text(currentCompany.name || 'Empresa', 14, 12);
+    doc.setFontSize(8);
+    doc.text('RIF: ' + currentCompany.rif + ' · Fecha de corte: ' + new Date().toISOString().slice(0,10), 14, 18);
+    doc.setFontSize(11);
+    doc.text('RESUMEN CONSOLIDADO DE INVENTARIO PARA LIBRO DE INVENTARIOS Y BALANCES', 14, 25);
+    doc.setFontSize(7);
+    doc.text('Valores en libros antes de provisión y valor neto luego de la provisión VNR registrada. Verificar conciliación con el Libro Mayor.', 14, 30);
+    const rows = products.slice().sort((a,b) => String(a.inventoryAccountCode || '').localeCompare(String(b.inventoryAccountCode || '')) || a.code.localeCompare(b.code)).map(p => [
+      p.inventoryAccountCode || '1.1.4.01', p.code, p.name, p.itemType || 'MERCANCIA', p.unit,
+      Number(p.currentStock).toFixed(3), Number(p.avgCostBs).toFixed(2),
+      Number(p.currentStock * p.avgCostBs).toFixed(2), Number(p.vnrProvisionBs || 0).toFixed(2),
+      Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)).toFixed(2),
+      Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)).toFixed(6)
+    ]);
+    autoTable(doc, {
+      startY: 34,
+      head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
+      body: rows,
+      foot: [['TOTAL','','','','',products.reduce((sum,p)=>sum+p.currentStock,0).toFixed(3),'',products.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),products.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
+      styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
+      headStyles: { fontSize: 7 },
+      footStyles: { fontStyle: 'bold' },
+      margin: { left: 10, right: 10, bottom: 12 },
+      didDrawPage: () => {
+        doc.setFontSize(8);
+        doc.text('Folio ' + doc.internal.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+      }
+    });
+    const safeName = String(currentCompany.rif || currentCompany.name || 'empresa').replace(/[^A-Za-z0-9-]/g, '_');
+    doc.save('SICOVEN_Inventario_Balances_' + safeName + '.pdf');
+  };
+
   const exportBook = () => downloadCsv('SICOVEN_Libro_Entradas_Salidas.csv', [
     'fecha','tipo_documento','documento','rif_contraparte','contraparte','codigo','descripcion','concepto','tipo_movimiento',
     'entrada_cantidad','entrada_costo_unitario_bs','salida_cantidad','salida_costo_unitario_bs','existencia_final','valor_final_bs',
@@ -353,7 +388,8 @@ export const InventarioContableTools: React.FC = () => {
           <input type="file" accept=".csv,.txt,text/csv" disabled={importing} className="hidden" onChange={e => { void handleImport(e.target.files?.[0]); e.currentTarget.value = ''; }} />
         </label>
         <button onClick={importMode === 'INVENTARIO_INICIAL' ? exportTemplate : exportMovementTemplate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Descargar plantilla CSV</button>
-        <button onClick={exportInventory} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar inventario valorado</button>
+        <button onClick={exportInventory} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar inventario CSV</button>
+        <button onClick={exportInventoryBalancePdf} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Inventario y balances PDF</button>
         <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro CSV</button>
         <button onClick={exportBookPdf} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Libro legal PDF foliado</button>
       </div>
