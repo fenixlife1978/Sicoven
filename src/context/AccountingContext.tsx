@@ -1347,7 +1347,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         newAverageUsd = weighted.unitCostUsd;
       }
       totalCostBs = Math.round(actualQuantity * (targetStock < prod.currentStock ? prod.avgCostBs : requestedCost) * 100) / 100;
-      totalCostUsd = Math.round(totalCostBs / rate * 100) / 100;
+      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
       unitCostBs = actualQuantity > 0 ? totalCostBs / actualQuantity : 0;
       unitCostUsd = unitCostBs / rate;
     }
@@ -1360,7 +1360,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       unitCostBs, unitCostUsd, totalCostBs, totalCostUsd,
       balanceQty: newStock,
       balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
-      balanceTotalUsd: Math.round(newStock * newAverageUsd * 100) / 100,
+      balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
       bcvRate: rate,
       costingMethod: prod.costingMethod || 'PROMEDIO_PONDERADO'
     };
