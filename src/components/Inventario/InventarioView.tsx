@@ -248,8 +248,8 @@ export const InventarioView: React.FC = () => {
                   </tr>
                 ) : (
                   filteredProducts.map(prod => {
-                    const totalValBs = prod.currentStock * prod.avgCostBs;
-                    const totalValUsd = prod.currentStock * prod.avgCostUsd;
+                    const totalValBs = Math.max(0, prod.currentStock * prod.avgCostBs - Number(prod.vnrProvisionBs || 0));
+                    const totalValUsd = Math.max(0, prod.currentStock * prod.avgCostUsd - Number(prod.vnrProvisionBs || 0) / Math.max(Number(currentCompany.bcvRate || 0), 0.000001));
                     const isLow = prod.currentStock <= prod.minStock;
 
                     return (
