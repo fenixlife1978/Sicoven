@@ -5,6 +5,7 @@ import { calculateVnrWriteDown } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import ExcelJS from 'exceljs';
 
 const parseCsvLine = (line: string): string[] => {
   const fields: string[] = [];
@@ -73,11 +74,23 @@ export const InventarioContableTools: React.FC = () => {
     if (!file) return;
     setError(''); setMessage(''); setImporting(true);
     try {
-      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
-      if (lines.length < 2) throw new Error('El CSV debe contener encabezados y al menos una fila.');
-      const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
-      const records = lines.slice(1).map((line, index) => {
-        const cells = parseCsvLine(line);
+      let matrix: string[][];
+      if (file.name.toLowerCase().endsWith('.xlsx')) {
+        const workbook = new ExcelJS.Workbook();
+        await workbook.xlsx.load(await file.arrayBuffer());
+        const sheet = workbook.worksheets[0];
+        if (!sheet) throw new Error('El archivo Excel no contiene hojas de cálculo.');
+        matrix = [];
+        sheet.eachRow({ includeEmpty: false }, row => {
+          matrix.push(row.values.slice(1).map(value => value === null || value === undefined ? '' : String(value).trim()));
+        });
+      } else {
+        const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
+        matrix = lines.map(parseCsvLine);
+      }
+      if (matrix.length < 2) throw new Error('El archivo debe contener encabezados y al menos una fila.');
+      const headers = matrix[0].map(h => h.trim().toLowerCase());
+      const records = matrix.slice(1).map((cells, index) => {
         const row: Record<string, string> = {};
         headers.forEach((header, i) => { row[header] = cells[i] ?? ''; });
         return { row, sourceLine: index + 2 };
@@ -392,7 +405,7 @@ export const InventarioContableTools: React.FC = () => {
       <div className="flex flex-wrap gap-2">
         <label className={'inline-flex cursor-pointer items-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold text-white ' + (importing ? 'bg-slate-400' : 'bg-emerald-700 hover:bg-emerald-800')}>
           <FileUp className="h-4 w-4" />{importing ? 'Importando…' : 'Importar CSV'}
-          <input type="file" accept=".csv,.txt,text/csv" disabled={importing} className="hidden" onChange={e => { void handleImport(e.target.files?.[0]); e.currentTarget.value = ''; }} />
+          <input type="file" accept=".csv,.txt,.xlsx,text/csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" disabled={importing} className="hidden" onChange={e => { void handleImport(e.target.files?.[0]); e.currentTarget.value = ''; }} />
         </label>
         <button onClick={importMode === 'INVENTARIO_INICIAL' ? exportTemplate : exportMovementTemplate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Descargar plantilla CSV</button>
         <button onClick={exportInventory} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar inventario CSV</button>
@@ -400,7 +413,7 @@ export const InventarioContableTools: React.FC = () => {
         <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro CSV</button>
         <button onClick={exportBookPdf} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Libro legal PDF foliado</button>
       </div>
-      <p className="text-xs text-slate-500">La importación de movimientos debe hacerse en orden cronológico, desde los períodos más antiguos a los más recientes, para conservar saldos y costos históricos. CSV puede generarse desde Excel; lectura directa XLSX y conectores API siguen pendientes.</p>
+      <p className="text-xs text-slate-500">La importación de movimientos debe hacerse en orden cronológico, desde los períodos más antiguos a los más recientes, para conservar saldos y costos históricos. Se admiten archivos CSV y Excel XLSX. La conexión directa a API requiere definir el formato y la autenticación de cada software administrativo/POS.</p>
     </section>
 
 
