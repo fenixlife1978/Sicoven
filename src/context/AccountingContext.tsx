@@ -1275,12 +1275,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (priorProductMovements.length && row.date < priorProductMovements[priorProductMovements.length - 1].date) throw new Error('Fila ' + (index + 2) + ': importe los períodos históricos en orden cronológico; esta fecha es anterior al último movimiento de ' + product.code + '.');
       const rate = Number(row.bcvRate ?? currentCompany.bcvRate);
       const requestedCost = Number(row.unitCostBs);
+      const landedCostsBs = Number(row.additionalLandedCostsBs || 0);
+      if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Fila ' + (index + 2) + ': los fletes/gastos asociados no pueden ser negativos.');
+      const effectiveUnitCost = row.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(row.quantity), 1e-8) : requestedCost;
       const isAdjustment = row.type === 'AJUSTE';
       const targetStock = Number(row.balanceQty);
       const quantity = isAdjustment ? Math.abs(targetStock - product.currentStock) : Number(row.quantity);
       const validation = validateInventoryMovement({
         date: row.date, quantity: isAdjustment ? Math.max(quantity,0.00000001) : Number(row.quantity),
-        bcvRate: rate, unitCostBs: requestedCost, availableQuantity: product.currentStock,
+        bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: product.currentStock,
         type: isAdjustment ? 'AJUSTE' : row.type
       });
       if (validation) throw new Error('Fila ' + (index + 2) + ': ' + validation);
@@ -1293,9 +1296,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let newAverageBs = product.avgCostBs;
       let movementQuantity = Number(row.quantity);
       if (row.type === 'ENTRADA') {
-        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), requestedCost, rate);
+        const weighted = calculateWeightedAverageCost(product.currentStock, product.avgCostBs, Number(row.quantity), effectiveUnitCost, rate);
         newStock = weighted.quantity; newAverageBs = weighted.unitCostBs;
-        totalCostBs = Math.round(Number(row.quantity) * requestedCost * 100) / 100;
+        totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
           const layers: CostLayer[] = [];
@@ -1338,7 +1341,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const newAverageUsd = newAverageBs / rate;
       const movement: InventoryMovement = {
         ...row, id: 'mov-import-' + Date.now() + '-' + index + '-' + Math.floor(Math.random()*100000),
-        companyId: currentCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate,
+        companyId: currentCompany.id, quantity: movementQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, additionalLandedCostsBs: landedCostsBs,
         totalCostBs, totalCostUsd, balanceQty: newStock,
         balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
@@ -1378,8 +1381,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       virtualMovements.push(movement);
       virtualProducts.set(product.id, {
         ...product, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
-        lastCostBs: row.type === 'ENTRADA' ? requestedCost : product.lastCostBs,
-        lastCostUsd: row.type === 'ENTRADA' ? requestedCost / rate : product.lastCostUsd
+        lastCostBs: row.type === 'ENTRADA' ? effectiveUnitCost : product.lastCostBs,
+        lastCostUsd: row.type === 'ENTRADA' ? effectiveUnitCost / rate : product.lastCostUsd
       });
     }
     consumeDemoAction('inventario');
@@ -1408,9 +1411,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const isAdjustment = movData.type === 'AJUSTE';
     const actualQuantity = isAdjustment ? Math.abs(Number(movData.balanceQty) - prod.currentStock) : Number(movData.quantity);
     const requestedCost = Number(movData.unitCostBs);
+    const landedCostsBs = Number(movData.additionalLandedCostsBs || 0);
+    if (!Number.isFinite(landedCostsBs) || landedCostsBs < 0) throw new Error('Los fletes y gastos asociados no pueden ser negativos.');
+    const effectiveUnitCost = movData.type === 'ENTRADA' ? requestedCost + landedCostsBs / Math.max(Number(movData.quantity), 1e-8) : requestedCost;
     const validation = validateInventoryMovement({
       date: movData.date, quantity: isAdjustment ? Math.max(actualQuantity, 0.00000001) : Number(movData.quantity),
-      bcvRate: rate, unitCostBs: requestedCost, availableQuantity: prod.currentStock, type: isAdjustment ? 'AJUSTE' : movData.type
+      bcvRate: rate, unitCostBs: effectiveUnitCost, availableQuantity: prod.currentStock, type: isAdjustment ? 'AJUSTE' : movData.type
     });
     if (validation) throw new Error(validation);
     if (isAdjustment && actualQuantity < 0.00000001) throw new Error('El ajuste no cambia la existencia; no hay movimiento que registrar.');
@@ -1428,11 +1434,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let movementQuantity = Number(movData.quantity);
 
     if (movData.type === 'ENTRADA') {
-      const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), requestedCost, rate);
+      const weighted = calculateWeightedAverageCost(prod.currentStock, prod.avgCostBs, Number(movData.quantity), effectiveUnitCost, rate);
       newStock = weighted.quantity;
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
-      totalCostBs = Math.round(Number(movData.quantity) * requestedCost * 100) / 100;
+      totalCostBs = Math.round(Number(movData.quantity) * effectiveUnitCost * 100) / 100;
       totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
@@ -1513,7 +1519,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       balanceQty: newStock,
       balanceTotalBs: Math.round(newStock * newAverageBs * 100) / 100,
       balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
-      bcvRate: rate,
+      bcvRate: rate, additionalLandedCostsBs: landedCostsBs,
       costingMethod: prod.costingMethod || 'PROMEDIO_PONDERADO'
     };
 
@@ -1559,8 +1565,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setMovements(prev => [...prev, newMov]);
     setProducts(prev => prev.map(p => p.id === prod.id ? {
       ...p, currentStock: newStock, avgCostBs: newAverageBs, avgCostUsd: newAverageUsd,
-      lastCostBs: movData.type === 'ENTRADA' ? requestedCost : p.lastCostBs,
-      lastCostUsd: movData.type === 'ENTRADA' ? requestedCost / rate : p.lastCostUsd
+      lastCostBs: movData.type === 'ENTRADA' ? effectiveUnitCost : p.lastCostBs,
+      lastCostUsd: movData.type === 'ENTRADA' ? effectiveUnitCost / rate : p.lastCostUsd
     } : p));
     if (generatedEntries.length > 0) setJournalEntries(prev => [...prev, ...generatedEntries]);
     return newMov;
