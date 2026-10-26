@@ -215,6 +215,8 @@ export interface InventoryMovement {
   warehouseId?: string;
   /** Costo unitario aplicado por el método del artículo, distinto del costo digitado. */
   costingMethod?: InventoryCostingMethod;
+  /** Fletes y gastos de importación asignados a esta entrada, en Bs. */
+  additionalLandedCostsBs?: number;
 }
 
 export interface VatRetentionVoucher {
