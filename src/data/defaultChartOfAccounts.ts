@@ -27,6 +27,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.1.4.01', name: 'Inventario de Mercancías para la Venta', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
   { code: '1.1.4.02', name: 'Inventario de Materias Primas e Insumos', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
   { code: '1.1.4.03', name: 'Provisión por Desvalorización de Inventarios (Cuenta Correctora)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
+  { code: '1.1.4.04', name: 'Inventario de Productos en Proceso (Producción)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.4' },
 
   { code: '1.2', name: 'ACTIVO NO CORRIENTE', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' },
   { code: '1.2.1', name: 'Propiedades, Planta y Equipos', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.2' },
