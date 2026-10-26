@@ -1145,7 +1145,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no admite movimientos.`);
       if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
       const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
-      const openingValueUsd = Math.round(openingValueBs / rate * 100) / 100;
+      const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
       const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).length + 1;
       openingEntry = {
         id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
@@ -1213,7 +1213,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
         if (!inventoryAccount || !offsetAccount) throw new Error('Cuentas de apertura inválidas para el artículo ' + code + '.');
         const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
-        const totalUsd = Math.round(totalBs / rate * 100) / 100;
+        const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
         const entry: JournalEntry = {
           id: 'entry-inventory-opening-' + product.id, companyId: currentCompany.id, entryNumber: nextEntryNumber++,
           date, description: 'Asiento de apertura de inventario · ' + code + ' · ' + name, type: 'APERTURA',
@@ -1284,7 +1284,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       newAverageBs = weighted.unitCostBs;
       newAverageUsd = weighted.unitCostUsd;
       totalCostBs = Math.round(Number(movData.quantity) * requestedCost * 100) / 100;
-      totalCostUsd = Math.round(totalCostBs / rate * 100) / 100;
+      totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
         const layers: CostLayer[] = [];
@@ -1325,7 +1325,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
-        totalCostUsd = fifo.totalCostUsd;
+        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
         unitCostBs = fifo.unitCostBs;
         unitCostUsd = fifo.unitCostUsd;
         newStock = prod.currentStock - Number(movData.quantity);
@@ -1333,7 +1333,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         unitCostBs = prod.avgCostBs;
         unitCostUsd = unitCostBs / rate;
         totalCostBs = Math.round(Number(movData.quantity) * unitCostBs * 100) / 100;
-        totalCostUsd = Math.round(totalCostBs / rate * 100) / 100;
+        totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
         newStock = prod.currentStock - Number(movData.quantity);
       }
     } else {
