@@ -91,7 +91,7 @@ export const MigracionInteligente: React.FC = () => {
         const rows = file.rows;
         const notes: string[] = [];
         if (mod.key === 'journal') {
-          const sums = rows.reduce((acc,row) => {
+          const sums = rows.reduce<{ debit: number; credit: number; invalid: boolean }>((acc,row) => {
             const find = (aliases: string[]) => { const key = Object.keys(row).find(k => aliases.includes(normalize(k))); const raw = key ? row[key] : 0; const n = Number(String(raw ?? '0').replace(',','.')); return Number.isFinite(n) ? n : NaN; };
             const d=find(mod.aliases.debit); const c=find(mod.aliases.credit);
             return { debit: acc.debit + (Number.isFinite(d)?d:0), credit: acc.credit + (Number.isFinite(c)?c:0), invalid: acc.invalid || !Number.isFinite(d) || !Number.isFinite(c) };
