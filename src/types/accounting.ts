@@ -144,6 +144,15 @@ export interface SaleRecord {
   fiscalAdjustmentMode?: 'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR';
 }
 
+export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';
+export type InventoryVatTreatment = 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO';
+export type InventoryItemType = 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO';
+
+export interface InventoryBomComponent {
+  productId: string;
+  quantityPerUnit: number;
+}
+
 export interface InventoryProduct {
   id: string;
   companyId: string;
@@ -159,6 +168,24 @@ export interface InventoryProduct {
   lastCostUsd: number;
   salesPriceBs: number;
   salesPriceUsd: number;
+  /** Cuenta de movimiento asociada al valor del inventario. */
+  inventoryAccountCode?: string;
+  /** Cuenta de costo de ventas o consumo asociada al artículo. */
+  costOfSalesAccountCode?: string;
+  /** Cuenta para mermas, faltantes, sobrantes y ajustes. */
+  adjustmentAccountCode?: string;
+  openingBalanceAccountCode?: string;
+  costingMethod?: InventoryCostingMethod;
+  vatTreatment?: InventoryVatTreatment;
+  itemType?: InventoryItemType;
+  openingDate?: string;
+  openingBcvRate?: number;
+  vnrProvisionBs?: number;
+  vnrEstimatedSellingPriceBs?: number;
+  vnrCompletionCostBs?: number;
+  vnrSellingCostBs?: number;
+  vnrLastTestDate?: string;
+  bomComponents?: InventoryBomComponent[];
 }
 
 export interface InventoryMovement {
@@ -180,6 +207,16 @@ export interface InventoryMovement {
   balanceTotalBs: number;
   balanceTotalUsd: number;
   journalEntryId?: string;
+  /** Tasa BCV aplicable a la fecha del movimiento, conservada como dato histórico. */
+  bcvRate?: number;
+  documentType?: string;
+  counterpartyRif?: string;
+  counterpartyName?: string;
+  warehouseId?: string;
+  /** Costo unitario aplicado por el método del artículo, distinto del costo digitado. */
+  costingMethod?: InventoryCostingMethod;
+  /** Fletes y gastos de importación asignados a esta entrada, en Bs. */
+  additionalLandedCostsBs?: number;
 }
 
 export interface VatRetentionVoucher {
