@@ -1118,26 +1118,46 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       inventoryAccountCode: prodData.inventoryAccountCode || '1.1.4.01',
       costOfSalesAccountCode: prodData.costOfSalesAccountCode || '5.1.1.01',
       adjustmentAccountCode: prodData.adjustmentAccountCode || '5.1.2.01',
+      openingBalanceAccountCode: prodData.openingBalanceAccountCode || '3.3.1.01',
       costingMethod: prodData.costingMethod || 'PROMEDIO_PONDERADO',
       vatTreatment: prodData.vatTreatment || 'GENERAL_16',
       itemType: prodData.itemType || 'MERCANCIA',
       id: `prod-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id
     };
-    setProducts(prev => [...prev, newProd]);
+    let opening: InventoryMovement | null = null;
+    let openingEntry: JournalEntry | null = null;
     if (initialQuantity > 0) {
-      const opening: InventoryMovement = {
+      const inventoryAccount = accounts.find(a => a.code === newProd.inventoryAccountCode && a.isMovement);
+      const offsetAccount = accounts.find(a => a.code === newProd.openingBalanceAccountCode && a.isMovement);
+      if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no admite movimientos.`);
+      if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
+      const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
+      const openingValueUsd = Math.round(openingValueBs / rate * 100) / 100;
+      const entryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).length + 1;
+      openingEntry = {
+        id: `entry-inventory-opening-${newProd.id}`, companyId: currentCompany.id, entryNumber,
+        date: new Date().toISOString().slice(0, 10), description: `Asiento de apertura de inventario · ${newProd.code} · ${newProd.name}`,
+        type: 'APERTURA', bcvRate: rate, referenceDoc: `APERTURA-${newProd.code}`,
+        items: [
+          { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: openingValueBs, creditBs: 0, debitUsd: openingValueUsd, creditUsd: 0, description: `Existencia inicial de ${initialQuantity} ${newProd.unit}` },
+          { accountCode: offsetAccount.code, accountName: offsetAccount.name, debitBs: 0, creditBs: openingValueBs, debitUsd: 0, creditUsd: openingValueUsd, description: `Contrapartida de apertura de inventario ${newProd.code}` }
+        ], createdAt: new Date().toISOString()
+      };
+      opening = {
         id: `mov-opening-${newProd.id}`, companyId: currentCompany.id,
         productId: newProd.id, productName: newProd.name, productCode: newProd.code,
-        date: new Date().toISOString().slice(0, 10), type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
-        documentRef: 'APERTURA-INVENTARIO', quantity: initialQuantity, unitCostBs: initialCostBs,
-        unitCostUsd: initialCostBs / rate, totalCostBs: initialQuantity * initialCostBs,
-        totalCostUsd: (initialQuantity * initialCostBs) / rate, balanceQty: initialQuantity,
-        balanceTotalBs: initialQuantity * initialCostBs, balanceTotalUsd: (initialQuantity * initialCostBs) / rate,
-        bcvRate: rate, costingMethod: newProd.costingMethod
+        date: openingEntry.date, type: 'ENTRADA', concept: 'INVENTARIO_INICIAL',
+        documentRef: openingEntry.referenceDoc || 'APERTURA-INVENTARIO', quantity: initialQuantity, unitCostBs: initialCostBs,
+        unitCostUsd: initialCostBs / rate, totalCostBs: openingValueBs,
+        totalCostUsd: openingValueUsd, balanceQty: initialQuantity,
+        balanceTotalBs: openingValueBs, balanceTotalUsd: openingValueUsd,
+        bcvRate: rate, costingMethod: newProd.costingMethod, journalEntryId: openingEntry.id
       };
-      setMovements(prev => [...prev, opening]);
     }
+    setProducts(prev => [...prev, newProd]);
+    if (opening) setMovements(prev => [...prev, opening!]);
+    if (openingEntry) setJournalEntries(prev => [...prev, openingEntry!]);
     return newProd;
   };
 
