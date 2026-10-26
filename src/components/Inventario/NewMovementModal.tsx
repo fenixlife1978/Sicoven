@@ -25,6 +25,10 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [documentRef, setDocumentRef] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [unitCostBs, setUnitCostBs] = useState<number>(0);
+  const [bcvRateInput, setBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
+  const [documentType, setDocumentType] = useState('Factura de compra');
+  const [counterpartyRif, setCounterpartyRif] = useState('');
+  const [counterpartyName, setCounterpartyName] = useState('');
 
   const selectedProduct = products.find(p => p.id === productId) || products[0];
 
@@ -37,7 +41,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   if (!isOpen || !selectedProduct) return null;
 
-  const bcvRate = currentCompany.bcvRate || 68.50;
+  const bcvRate = Number(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
   const totalCostBs = quantity * unitCostBs;
   const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
@@ -53,7 +57,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quantity <= 0) return;
+    if (quantity <= 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) return;
 
     addMovement({
       productId: selectedProduct.id,
@@ -63,6 +67,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       type,
       concept,
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
+      documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate,
       quantity,
       unitCostBs,
       unitCostUsd: Number(unitCostUsd.toFixed(2)),
@@ -157,6 +162,27 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                   </>
                 )}
               </select>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tipo y número de documento</label>
+              <select value={documentType} onChange={e => setDocumentType(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
+                <option>Factura de compra</option><option>Factura de venta</option><option>Nota de débito</option><option>Nota de crédito</option><option>Guía de despacho</option><option>Acta de ajuste</option><option>Inventario inicial</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tasa BCV histórica (Bs./USD) *</label>
+              <input type="number" min="0.000001" step="0.000001" required value={bcvRateInput} onChange={e => setBcvRateInput(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">RIF proveedor / cliente</label>
+              <input value={counterpartyRif} onChange={e => setCounterpartyRif(e.target.value)} maxLength={20} placeholder="J-12345678-9" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Proveedor / cliente</label>
+              <input value={counterpartyName} onChange={e => setCounterpartyName(e.target.value)} maxLength={180} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
             </div>
           </div>
 
