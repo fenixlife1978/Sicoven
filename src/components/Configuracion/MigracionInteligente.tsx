@@ -91,14 +91,35 @@ export const MigracionInteligente: React.FC = () => {
         const rows = file.rows;
         const notes: string[] = [];
         if (mod.key === 'journal') {
-          const sums = rows.reduce<{ debit: number; credit: number; invalid: boolean }>((acc,row) => {
-            const find = (aliases: string[]) => { const key = Object.keys(row).find(k => aliases.includes(normalize(k))); const raw = key ? row[key] : 0; const n = Number(String(raw ?? '0').replace(',','.')); return Number.isFinite(n) ? n : NaN; };
-            const d=find(mod.aliases.debit); const c=find(mod.aliases.credit);
-            return { debit: acc.debit + (Number.isFinite(d)?d:0), credit: acc.credit + (Number.isFinite(c)?c:0), invalid: acc.invalid || !Number.isFinite(d) || !Number.isFinite(c) };
-          }, { debit:0, credit:0, invalid:false });
-          if (sums.invalid) notes.push('Hay importes contables no numéricos; requiere corrección.');
-          else if (Math.abs(sums.debit-sums.credit)>0.01) notes.push('Débitos y créditos no cuadran (diferencia ' + (sums.debit-sums.credit).toFixed(2) + ').');
-          else notes.push('Débitos y créditos globales cuadran; falta validar cada asiento y sus cuentas.');
+          const findValue = (row: Row, aliases: string[]) => {
+            const key = Object.keys(row).find(k => aliases.includes(normalize(k)));
+            const raw = key ? row[key] : 0;
+            const parsed = Number(String(raw ?? '0').replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
+            return Number.isFinite(parsed) ? parsed : NaN;
+          };
+          const referenceAliases = ['referencia','comprobante','numeroasiento','entrynumber','asiento','journalid','id'];
+          const grouped = new Map<string, { debit: number; credit: number; invalid: boolean; rows: number }>();
+          rows.forEach((row, index) => {
+            const referenceKey = Object.keys(row).find(k => referenceAliases.includes(normalize(k)));
+            const reference = referenceKey ? String(row[referenceKey] ?? '').trim() : '';
+            const groupKey = reference || '__fila_' + (index + 1);
+            const group = grouped.get(groupKey) || { debit: 0, credit: 0, invalid: false, rows: 0 };
+            const debit = findValue(row, mod.aliases.debit);
+            const credit = findValue(row, mod.aliases.credit);
+            group.debit += Number.isFinite(debit) ? debit : 0;
+            group.credit += Number.isFinite(credit) ? credit : 0;
+            group.invalid = group.invalid || !Number.isFinite(debit) || !Number.isFinite(credit);
+            group.rows += 1;
+            grouped.set(groupKey, group);
+          });
+          const invalidGroups = [...grouped.values()].filter(group => group.invalid).length;
+          const unbalanced = [...grouped.entries()].filter(([, group]) => !group.invalid && Math.abs(group.debit - group.credit) > 0.01);
+          if (invalidGroups) notes.push('BLOQUEO: hay importes contables no numéricos en ' + invalidGroups + ' grupo(s).');
+          if (unbalanced.length) notes.push('BLOQUEO: ' + unbalanced.length + ' asiento(s) no cuadran individualmente. Diferencias: ' + unbalanced.slice(0, 5).map(([ref, group]) => ref + ': ' + (group.debit - group.credit).toFixed(2)).join('; ') + (unbalanced.length > 5 ? '; …' : ''));
+          if (!invalidGroups && !unbalanced.length) notes.push('Cada grupo identificado cuadra en débitos/créditos; aún deben validarse las cuentas de movimiento, fechas, referencias y duplicados.');
+          if (!rows.some(row => Object.keys(row).some(k => referenceAliases.includes(normalize(k))))) {
+            notes.push('ADVERTENCIA: no se detectó identificador de asiento; se validó cada fila por separado y no se puede confirmar integridad por asiento.');
+          }
         }
         const rowKeys = rows.map(row => {
           const key = Object.keys(row).find(k => ['invoice','invoicenumber','factura','documento','code','codigo','sku','rif','taxid','reference','referencia'].includes(normalize(k)));
