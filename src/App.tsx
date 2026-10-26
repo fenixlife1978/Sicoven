@@ -26,7 +26,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
   const [activeTab, setActiveTab] = useState<string>('diario');
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
-  const { currentCompany, companies, isStorageReady, storageError, isDemoMode, demoUsage } = useAccounting();
+  const { currentCompany, companies, isStorageReady, storageError } = useAccounting();
 
   useEffect(() => {
     if (isStorageReady && companies.length === 0) setIsCompanyModalOpen(true);
@@ -81,21 +81,6 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
 
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col selection:bg-emerald-500 selection:text-white">
-      {isDemoMode && (
-        <div role="status" aria-live="polite" className="sticky top-0 z-[100] w-full bg-amber-300 text-slate-950 border-b-2 border-amber-500 shadow-md no-print">
-          <div className="mx-auto max-w-7xl px-3 py-2 text-center text-xs sm:text-sm font-bold leading-relaxed">
-            <div className="flex flex-col items-center gap-2">
-              <div className="flex flex-wrap items-center justify-center gap-3">
-                <img src="./sicoven-logo-horizontal.svg" alt="Sicoven · Sistema contable" className="h-10 sm:h-12 w-auto max-w-[min(70vw,280px)] object-contain" />
-                <span className="inline-flex items-center rounded-md border border-amber-700 bg-slate-950 px-3 py-1.5 text-[11px] sm:text-xs font-extrabold tracking-wider text-amber-300">VERSIÓN DEMO</span>
-              </div>
-              <p>Máximo 10 acciones por módulo. Uso por módulo: Empresas {demoUsage.empresa || 0}/10 · Diario {demoUsage.diario || 0}/10 · Compras {demoUsage.compras || 0}/10 · Ventas {demoUsage.ventas || 0}/10 · Inventario {demoUsage.inventario || 0}/10 · Catálogo {demoUsage.catalogo || 0}/10 · Retenciones {demoUsage.retenciones || 0}/10 · Configuración {demoUsage.configuracion || 0}/10 · Conciliación {demoUsage.conciliacion || 0}/10.</p>
-              <p className="font-extrabold">ADQUIERE SICOVEN COMPLETO POR €250 EUR A LA TASA OFICIAL DEL DÍA SEGÚN EL BCV, O POR $200 USD EN EFECTIVO. · Compra la versión completa para trabajar sin límites.</p>
-            </div>
-          </div>
-        </div>
-      )}
-
       {auth && <div className="flex items-center justify-end gap-3 bg-slate-800 px-4 py-2 text-xs text-white no-print"><span>Sesión: <strong>{auth.user.username}</strong></span><button onClick={()=>setShowAdmins(true)} className="rounded-lg border border-slate-600 px-3 py-1.5 hover:bg-slate-700">Administradores</button><button onClick={logout} className="rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold hover:bg-emerald-700">Cerrar sesión</button></div>}
       {/* Navigation Header */}
       <Navbar
@@ -215,7 +200,6 @@ export default function App() {
         try { localStorage.setItem('sicoven_auth_token', token); } catch {}
         setAuth({ token, user });
       }}
-      isDemoMode={import.meta.env.VITE_SICOVEN_DEMO === 'true'}
     />
   );
 
