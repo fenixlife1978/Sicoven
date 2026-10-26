@@ -178,7 +178,7 @@ export const InventarioContableTools: React.FC = () => {
       startY: 34,
       head: [['Cuenta inventario','Código','Descripción','Clasificación','Unidad','Cantidad','Costo unit. Bs.','Valor bruto Bs.','Provisión VNR Bs.','Valor neto Bs.','Valor neto USD']],
       body: rows,
-      foot: [['TOTAL','','','','',products.reduce((sum,p)=>sum+p.currentStock,0).toFixed(3),'',products.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),products.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
+      foot: [['TOTAL','','','','','','',products.reduce((sum,p)=>sum+p.currentStock*p.avgCostBs,0).toFixed(2),products.reduce((sum,p)=>sum+Number(p.vnrProvisionBs || 0),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostBs-Number(p.vnrProvisionBs || 0)),0).toFixed(2),products.reduce((sum,p)=>sum+Math.max(0,p.currentStock*p.avgCostUsd-Number(p.vnrProvisionBs || 0)/Math.max(Number(currentCompany.bcvRate || 0),0.000001)),0).toFixed(6)]],
       styles: { fontSize: 7, cellPadding: 1, overflow: 'linebreak' },
       headStyles: { fontSize: 7 },
       footStyles: { fontStyle: 'bold' },
