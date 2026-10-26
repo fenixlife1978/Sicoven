@@ -18,7 +18,7 @@ const MODULES: ModuleInfo[] = [
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const parseCsv = (text: string): string[][] => {
- const lines = text.replace(/^\uFEFF/,'').split(/\r?\n/).filter(x=>x.trim());
+ const lines = text.replace(/^\uFEFF/,'').split(/\r?\n/).filter((x: string)=>x.trim());
  return lines.map(line=>{ const out:string[]=[]; let v=''; let q=false; for(let i=0;i<line.length;i++){const c=line[i]; if(c==='"'&&q&&line[i+1]==='"'){v+='"';i++;} else if(c==='"') q=!q; else if((c===','||c===';'||c==='\t')&&!q){out.push(v.trim());v='';} else v+=c;} out.push(v.trim()); return out; });
 };
 const scalar = (v: unknown): unknown => {
