@@ -19,6 +19,7 @@ describe('validación de importaciones de inventario', () => {
     assert.throws(() => validateOpeningInventoryRow({ ...base, openingbcvrate: '0' }, 2, 100), /mayor que cero/);
     assert.throws(() => validateOpeningInventoryRow({ ...base, openingdate: '2026-02-30' }, 2, 100), /fecha real/);
     assert.throws(() => validateOpeningInventoryRow({ ...base, currentstock: '-2' }, 2, 100), /negativo/);
+    assert.throws(() => validateOpeningInventoryRow({ ...base, avgcostbs: '0' }, 2, 100), /mayor que cero cuando hay existencias/);
     assert.throws(() => validateOpeningInventoryRow({ ...base, costingmethod: 'OTRO' }, 2, 100), /costingMethod inválido/);
   });
   it('valida campos y cantidades de movimientos antes de importarlos', () => {
@@ -28,5 +29,7 @@ describe('validación de importaciones de inventario', () => {
     assert.throws(() => validateMovementImportRow({ ...base, date: '2026-02-30' }, 2), /fecha real/);
     assert.throws(() => validateMovementImportRow({ ...base, bcvrate: '0' }, 2), /mayor que cero/);
     assert.throws(() => validateMovementImportRow({ ...base, documentref: '' }, 2), /documentRef es obligatorio/);
+    assert.throws(() => validateMovementImportRow({ ...base, type: 'AJUSTE' }, 2), /balanceQty: valor obligatorio/);
+    assert.equal(validateMovementImportRow({ ...base, type: 'AJUSTE', balanceqty: '0' }, 2).balanceQty, 0);
   });
 });
