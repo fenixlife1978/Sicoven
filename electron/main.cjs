@@ -21,12 +21,6 @@ const verifyPassword = (password, salt, expected) => {
 };
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
-const {
-  ensureDemoUsageSchema,
-  getDemoUsage,
-  consumeDemoAction,
-  migrateLegacyDemoUsage
-} = require('./demo-usage.cjs');
 
 let db;
 function openDatabase() {
@@ -65,8 +59,6 @@ function openDatabase() {
     db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)').run('admin', credential.hash, credential.salt, 'admin');
     db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_created', JSON.stringify({ username: 'admin' }));
   }
-  ensureDemoUsageSchema(db);
-  migrateLegacyDemoUsage(db);
 }
 
 function readLicenseRow() {
@@ -379,23 +371,6 @@ app.whenReady().then(async () => {
     return { ok: true, savedAt: new Date().toISOString() };
   });
 
-  ipcMain.on('sicoven:demo-get-usage', (event) => {
-    try {
-      event.returnValue = getDemoUsage(db);
-    } catch {
-      event.returnValue = {};
-    }
-  });
-
-  ipcMain.on('sicoven:demo-consume-action', (event, moduleKey) => {
-    try {
-      if (!licenseView().authorized) throw new Error('Licencia no autorizada.');
-      // El límite comercial se fija en el proceso principal; el renderer no puede elevarlo.
-      event.returnValue = consumeDemoAction(db, moduleKey, 10);
-    } catch {
-      event.returnValue = { ok: false, error: 'No se pudo registrar la acción demo en SQLite' };
-    }
-  });
 
   await revalidateLicense();
   createWindow();
