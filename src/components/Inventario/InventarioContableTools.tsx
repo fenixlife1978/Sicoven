@@ -313,7 +313,7 @@ export const InventarioContableTools: React.FC = () => {
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Introduzca la tasa BCV histórica correspondiente al cierre.');
       const reference = 'CIERRE-INVENTARIO-' + periodStart + '-' + periodEnd;
       if (journalEntries.some(entry => entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
-      const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number }>();
+      const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number; nonSaleReductions: number }>();
       const entriesInPeriod = journalEntries.filter(entry => entry.date >= periodStart && entry.date <= periodEnd);
       for (const product of products) {
         const history = movements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
@@ -332,21 +332,23 @@ export const InventarioContableTools: React.FC = () => {
           if (m.type === 'AJUSTE' && index > 0 && m.balanceQty < history[index - 1].balanceQty) return sum + Number(m.totalCostBs || 0);
           return sum;
         }, 0);
-        const purchasesInPeriod = periodIncoming - nonSaleReductions;
+        const purchasesInPeriod = periodIncoming;
         const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
         const costCode = product.costOfSalesAccountCode || '5.1.1.01';
         const key = inventoryCode + '|' + costCode;
-        const group = groups.get(key) || { inventoryCode, costCode, opening: 0, purchases: 0, closing: 0 };
-        group.opening += opening; group.purchases += purchasesInPeriod; group.closing += closing;
+        const group = groups.get(key) || { inventoryCode, costCode, opening: 0, purchases: 0, closing: 0, nonSaleReductions: 0 };
+        group.opening += opening; group.purchases += purchasesInPeriod; group.closing += closing; group.nonSaleReductions += nonSaleReductions;
         groups.set(key, group);
       }
       const items: Array<{accountCode:string;accountName:string;debitBs:number;creditBs:number;debitUsd:number;creditUsd:number;description:string}> = [];
       for (const group of groups.values()) {
-        const expectedCogs = calculatePeriodicCostOfSales({
+        const grossCogs = calculatePeriodicCostOfSales({
           openingInventoryBs: group.opening,
           purchasesAndLandedCostsBs: group.purchases,
           closingInventoryBs: group.closing
         });
+        const expectedCogs = Math.round((grossCogs - group.nonSaleReductions) * 100) / 100;
+        if (expectedCogs < -0.01) throw new Error('La conciliación de inventario produce un costo de ventas negativo. Revise movimientos de producción, mermas y ajustes de ' + group.inventoryCode + '.');
         const costAccount = accounts.find(a => a.code === group.costCode && a.isMovement);
         const inventoryAccount = accounts.find(a => a.code === group.inventoryCode && a.isMovement);
         if (!costAccount || !inventoryAccount) throw new Error('Falta una cuenta contable válida para el par ' + group.inventoryCode + ' / ' + group.costCode + '.');
