@@ -1305,7 +1305,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
           const layers: CostLayer[] = [];
-          const history = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+          const history = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
           let runningQuantity = 0;
           for (const m of history) {
             if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
@@ -1610,7 +1610,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let componentNewAverageUsd = component.avgCostUsd;
       if (component.costingMethod === 'PEPS') {
         const layers: CostLayer[] = [];
-        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date));
         let runningQuantity = 0;
         for (const m of history) {
           if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
