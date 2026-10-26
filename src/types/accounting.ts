@@ -173,6 +173,13 @@ export interface InventoryProduct {
   costingMethod?: InventoryCostingMethod;
   vatTreatment?: InventoryVatTreatment;
   itemType?: InventoryItemType;
+  openingDate?: string;
+  openingBcvRate?: number;
+  vnrProvisionBs?: number;
+  vnrEstimatedSellingPriceBs?: number;
+  vnrCompletionCostBs?: number;
+  vnrSellingCostBs?: number;
+  vnrLastTestDate?: string;
 }
 
 export interface InventoryMovement {
