@@ -1317,10 +1317,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const layerQty = layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0);
           if (layerQty < product.currentStock - 1e-8) layers.unshift({ quantity: product.currentStock - layerQty, unitCostBs: product.avgCostBs, unitCostUsd: product.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
           if (layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0) > product.currentStock + 1e-8) throw new Error('Fila ' + (index + 2) + ': el Kardex PEPS no concilia para ' + product.code + '.');
+          const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
           totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
+          newStock = Math.max(0, product.currentStock - Number(row.quantity));
+          newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
         } else totalCostBs = Math.round(Number(row.quantity) * product.avgCostBs * 100) / 100;
         unitCostBs = totalCostBs / Number(row.quantity);
-        newStock = product.currentStock - Number(row.quantity);
+        newStock = Math.max(0, product.currentStock - Number(row.quantity));
       } else {
         movementQuantity = quantity;
         newStock = targetStock;
@@ -1469,12 +1472,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         } else if (layerQuantity > prod.currentStock + 1e-8) {
           throw new Error('El Kardex PEPS no concilia con la existencia actual. Reconstruya el Kardex antes de registrar salidas.');
         }
+        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
         totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
         unitCostBs = fifo.unitCostBs;
-        unitCostUsd = fifo.unitCostUsd;
-        newStock = prod.currentStock - Number(movData.quantity);
+        unitCostUsd = unitCostBs / rate;
+        newStock = Math.max(0, prod.currentStock - Number(movData.quantity));
+        newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
+        newAverageUsd = newAverageBs / rate;
       } else {
         unitCostBs = prod.avgCostBs;
         unitCostUsd = unitCostBs / rate;
@@ -1589,6 +1595,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
       if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
       let totalBs = 0;
+      let componentNewAverageBs = component.avgCostBs;
+      let componentNewAverageUsd = component.avgCostUsd;
       if (component.costingMethod === 'PEPS') {
         const layers: CostLayer[] = [];
         const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
@@ -1635,7 +1643,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         { accountCode: wipAccount.code, accountName: wipAccount.name, debitBs: totalBs, creditBs: 0, debitUsd: totalBs / rate, creditUsd: 0, description: 'Consumo en producción: ' + component.code },
         { accountCode: inventoryAccount.code, accountName: inventoryAccount.name, debitBs: 0, creditBs: totalBs, debitUsd: 0, creditUsd: totalBs / rate, description: 'Salida de materia prima: ' + component.code }
       );
-      productUpdates.set(component.id, { ...component, currentStock: component.currentStock - requiredQuantity });
+      productUpdates.set(component.id, { ...component, currentStock: Math.max(0, component.currentStock - requiredQuantity), avgCostBs: componentNewAverageBs, avgCostUsd: componentNewAverageUsd });
     }
     totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
     const productionUnitCostBs = totalProductionCostBs / outputQuantity;
