@@ -4,6 +4,7 @@ const fs = require('node:fs');
 const crypto = require('node:crypto');
 const sessions = new Map();
 const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
+const LICENSE_PRODUCT_CODE = 'SICOVEN_DESKTOP';
 let licenseRecheckTimer = null;
 let trialExpiryTimer = null;
 
@@ -137,6 +138,7 @@ async function callLicenseServer(key, installationId) {
     headers: { 'content-type': 'application/json', 'accept': 'application/json' },
     body: JSON.stringify({
       licenseKey: key,
+      productCode: LICENSE_PRODUCT_CODE,
       installationId,
       deviceLabel: (process.env.COMPUTERNAME || process.env.HOSTNAME || 'Equipo SICOVEN').slice(0, 120)
     }),
