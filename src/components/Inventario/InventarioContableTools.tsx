@@ -122,8 +122,8 @@ export const InventarioContableTools: React.FC = () => {
 
   const recordVnr = () => {
     setError(''); setMessage('');
-    if (!selectedProduct || !vnr || !vnr.required) {
-      setError('El VNR no está por debajo del costo o faltan datos válidos; no se requiere una provisión adicional.');
+    if (!selectedProduct || !vnr) {
+      setError('Seleccione un artículo e introduzca valores válidos para evaluar el VNR.');
       return;
     }
     try {
@@ -202,7 +202,7 @@ export const InventarioContableTools: React.FC = () => {
         <div className="rounded-lg bg-slate-50 p-3"><span className="text-xs text-slate-500">Provisión calculada</span><strong className="block">{vnr.writeDownBs.toLocaleString('es-VE',{minimumFractionDigits:2})} Bs.</strong></div>
       </div>}
       {vnr?.required && <p className="flex items-center gap-2 rounded-lg bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="h-4 w-4" />El VNR está por debajo del costo. Debe registrarse una provisión por desvalorización.</p>}
-      <button disabled={!selectedProduct || !vnr?.required} onClick={recordVnr} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Registrar provisión VNR</button>
+      <button disabled={!selectedProduct || !vnr || Math.abs(vnr.writeDownBs - Number(selectedProduct.vnrProvisionBs || 0)) < 0.01} onClick={recordVnr} className="rounded-lg bg-indigo-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Registrar / actualizar provisión VNR</button>
     </section>
     {(message || error) && <p role={error ? 'alert' : 'status'} className={'rounded-lg p-3 text-sm ' + (error ? 'bg-rose-50 text-rose-800' : 'bg-emerald-50 text-emerald-800')}>{error || message}</p>}
   </div>;
