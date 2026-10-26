@@ -196,7 +196,7 @@ export const InventarioContableTools: React.FC = () => {
     'fecha','tipo_documento','documento','rif_contraparte','contraparte','codigo','descripcion','concepto','tipo_movimiento',
     'entrada_cantidad','entrada_costo_unitario_bs','salida_cantidad','salida_costo_unitario_bs','existencia_final','valor_final_bs',
     'tasa_bcv_historica','entrada_usd','salida_usd','saldo_usd','cuenta_inventario'
-  ], movements.slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map(m => [
+  ], movements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
     m.date,m.documentType || '',m.documentRef,m.counterpartyRif || '',m.counterpartyName || '',m.productCode,m.productName,m.concept,m.type,
     m.type === 'ENTRADA' ? m.quantity : 0,m.type === 'ENTRADA' ? m.unitCostBs : 0,
     m.type === 'SALIDA' ? m.quantity : 0,m.type === 'SALIDA' ? m.unitCostBs : 0,m.balanceQty,m.balanceTotalBs,
@@ -214,7 +214,7 @@ export const InventarioContableTools: React.FC = () => {
     doc.text('LIBRO DE ENTRADAS Y SALIDAS DE INVENTARIO', 14, 25);
     doc.setFontSize(7);
     doc.text('Libro contable valorizado en bolívares y referencia USD a la tasa BCV histórica de cada operación. Revisar requisitos de foliado/autorización aplicables antes de su presentación oficial.', 14, 30);
-    const rows = movements.slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map(m => [
+    const rows = movements.slice().sort((a,b) => a.date.localeCompare(b.date)).map(m => [
       m.date, m.documentType || '', m.documentRef, m.counterpartyRif || '', m.counterpartyName || '',
       m.productCode, m.productName, m.concept, m.type,
       m.type === 'ENTRADA' ? String(m.quantity) : '—',
@@ -316,7 +316,7 @@ export const InventarioContableTools: React.FC = () => {
       const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number; nonSaleReductions: number }>();
       const entriesInPeriod = journalEntries.filter(entry => entry.date >= periodStart && entry.date <= periodEnd);
       for (const product of products) {
-        const history = movements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
+        const history = movements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
         if (product.currentStock > 0 && history.length === 0) throw new Error('El artículo ' + product.code + ' tiene existencia sin Kardex. Registre o importe su inventario inicial antes del cierre.');
         const before = history.filter(m => m.date < periodStart);
         const atEnd = history.filter(m => m.date <= periodEnd);
