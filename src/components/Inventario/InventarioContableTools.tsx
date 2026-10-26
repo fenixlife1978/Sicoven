@@ -3,6 +3,8 @@ import { FileUp, Scale, FileSpreadsheet, AlertTriangle } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
 import { calculateVnrWriteDown } from '../../types/inventoryAccounting';
 import type { InventoryProduct } from '../../types/accounting';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const parseCsvLine = (line: string): string[] => {
   const fields: string[] = [];
@@ -167,6 +169,42 @@ export const InventarioContableTools: React.FC = () => {
     products.find(p => p.id === m.productId)?.inventoryAccountCode || '1.1.4.01'
   ]));
 
+  const exportBookPdf = () => {
+    const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    doc.setFontSize(13);
+    doc.text(currentCompany.name || 'Empresa', 14, 12);
+    doc.setFontSize(8);
+    doc.text('RIF: ' + currentCompany.rif + ' · Período de movimientos: ' + (movements.length ? movements.slice().sort((a,b) => a.date.localeCompare(b.date))[0].date + ' a ' + movements.slice().sort((a,b) => b.date.localeCompare(a.date))[0].date : 'Sin movimientos'), 14, 18);
+    doc.setFontSize(11);
+    doc.text('LIBRO DE ENTRADAS Y SALIDAS DE INVENTARIO', 14, 25);
+    doc.setFontSize(7);
+    doc.text('Libro contable valorizado en bolívares y referencia USD a la tasa BCV histórica de cada operación. Revisar requisitos de foliado/autorización aplicables antes de su presentación oficial.', 14, 30);
+    const rows = movements.slice().sort((a,b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id)).map(m => [
+      m.date, m.documentType || '', m.documentRef, m.counterpartyRif || '', m.counterpartyName || '',
+      m.productCode, m.productName, m.concept, m.type,
+      m.type === 'ENTRADA' ? String(m.quantity) : '—',
+      m.type === 'ENTRADA' ? Number(m.unitCostBs).toFixed(2) : '—',
+      m.type === 'SALIDA' ? String(m.quantity) : '—',
+      m.type === 'SALIDA' ? Number(m.unitCostBs).toFixed(2) : '—',
+      Number(m.balanceQty).toFixed(3), Number(m.balanceTotalBs).toFixed(2),
+      Number(m.bcvRate || currentCompany.bcvRate).toFixed(6), Number(m.balanceTotalUsd).toFixed(6)
+    ]);
+    autoTable(doc, {
+      startY: 34,
+      head: [['Fecha','Tipo doc.','N° documento','RIF','Proveedor/cliente','Código','Descripción','Concepto','Mov.','Entrada qty.','Costo entrada Bs.','Salida qty.','Costo salida Bs.','Existencia','Saldo Bs.','Tasa BCV','Saldo USD']],
+      body: rows,
+      styles: { fontSize: 6, cellPadding: 1, overflow: 'linebreak' },
+      headStyles: { fontSize: 6 },
+      margin: { left: 10, right: 10, bottom: 12 },
+      didDrawPage: () => {
+        doc.setFontSize(8);
+        doc.text('Folio ' + doc.internal.getNumberOfPages(), doc.internal.pageSize.getWidth() - 12, doc.internal.pageSize.getHeight() - 5, { align: 'right' });
+      }
+    });
+    const safeName = String(currentCompany.rif || currentCompany.name || 'empresa').replace(/[^A-Za-z0-9-]/g, '_');
+    doc.save('SICOVEN_Libro_Inventario_' + safeName + '.pdf');
+  };
+
   const recordVnr = () => {
     setError(''); setMessage('');
     if (!selectedProduct || !vnr) {
@@ -316,7 +354,8 @@ export const InventarioContableTools: React.FC = () => {
         </label>
         <button onClick={importMode === 'INVENTARIO_INICIAL' ? exportTemplate : exportMovementTemplate} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Descargar plantilla CSV</button>
         <button onClick={exportInventory} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar inventario valorado</button>
-        <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro de entradas/salidas</button>
+        <button onClick={exportBook} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold hover:bg-slate-50">Exportar libro CSV</button>
+        <button onClick={exportBookPdf} className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2 text-sm font-semibold text-emerald-800 hover:bg-emerald-100">Libro legal PDF foliado</button>
       </div>
       <p className="text-xs text-slate-500">La importación de movimientos debe hacerse en orden cronológico, desde los períodos más antiguos a los más recientes, para conservar saldos y costos históricos. CSV puede generarse desde Excel; lectura directa XLSX y conectores API siguen pendientes.</p>
     </section>
