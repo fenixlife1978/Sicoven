@@ -1887,9 +1887,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const resetToSampleData = () => {
-    // Reset de fábrica: conserva empresas/configuración fiscal, plan contable base,
-    // usuarios administrativos y estado de licencia (almacenados fuera de este estado).
-    // Elimina exclusivamente los registros operativos de todas las empresas.
+    // Mantiene el comportamiento anterior del restablecimiento de datos de muestra.
+    setCompanies([]);
+    setCurrentCompanyId('');
+    setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
+    setJournalEntries([]);
+    setPurchases([]);
+    setSales([]);
+    setProducts([]);
+    setMovements([]);
+    setVatVouchers([]);
+    setIslrVouchers([]);
+    setBankAccounts([]);
+    setBankStatementMovements([]);
+    setCreditSettlements([]);
+  };
+
+  const resetFactoryData = () => {
+    // Borra registros operativos, conservando empresas y parámetros fiscales.
+    // La licencia/prueba y los usuarios administrativos se almacenan fuera de este contexto.
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
     setJournalEntries([]);
     setPurchases([]);
@@ -2040,6 +2056,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         displayCurrency,
         setDisplayCurrency,
         resetToSampleData,
+        resetFactoryData,
         exportBackupJson,
         importBackupJson
       }}
