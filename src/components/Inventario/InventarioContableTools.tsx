@@ -286,7 +286,7 @@ export const InventarioContableTools: React.FC = () => {
   const saveRecipe = () => {
     setError(''); setMessage('');
     if (!selectedFinishedProduct) { setError('Seleccione el producto terminado.'); return; }
-    if (selectedFinishedProduct.itemType !== 'PRODUCTO_TERMINADO') { setError('Clasifique primero el artículo como Producto terminado en su ficha.'); return; }
+    if (selectedFinishedProduct.itemType !== 'PRODUCTO_TERMINADO' && selectedFinishedProduct.itemType !== 'PRODUCTO_EN_PROCESO') { setError('Clasifique primero el artículo como Producto terminado o Producto en proceso en su ficha.'); return; }
     if (!recipeLines.length) { setError('Agregue al menos una materia prima o componente en proceso a la matriz.'); return; }
     if (recipeLines.some(line => !products.some(p => p.id === line.productId && (p.itemType === 'MATERIA_PRIMA' || p.itemType === 'PRODUCTO_EN_PROCESO')) || line.productId === finishedProductId || !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0)) {
       setError('La matriz contiene componentes inválidos. Use materias primas/productos en proceso y cantidades positivas.'); return;
@@ -422,7 +422,7 @@ export const InventarioContableTools: React.FC = () => {
       <label className="block text-sm font-medium text-slate-700">Producto terminado
         <select value={finishedProductId} onChange={e => setFinishedProductId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
           <option value="">Seleccione…</option>
-          {products.filter(p => p.itemType === 'PRODUCTO_TERMINADO').map(p => <option key={p.id} value={p.id}>{p.code} · {p.name}</option>)}
+          {products.filter(p => p.itemType === 'PRODUCTO_TERMINADO' || p.itemType === 'PRODUCTO_EN_PROCESO').map(p => <option key={p.id} value={p.id}>{p.code} · {p.name} ({p.itemType === 'PRODUCTO_EN_PROCESO' ? 'En proceso' : 'Terminado'})</option>)}
         </select>
       </label>
       <div className="space-y-2">
