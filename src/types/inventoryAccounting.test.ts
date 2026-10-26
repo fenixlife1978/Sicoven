@@ -22,9 +22,9 @@ describe('motor de inventario contable', () => {
       { quantity: 5, unitCostBs: 20, unitCostUsd: 2, date: '2026-02-01' },
       { quantity: 4, unitCostBs: 30, unitCostUsd: 3, date: '2026-01-01' }
     ], 6);
-    assert.equal(result.totalCostBs, 140);
-    assert.equal(result.totalCostUsd, 14);
-    assert.equal(result.unitCostBs, 140 / 6);
+    assert.equal(result.totalCostBs, 160);
+    assert.equal(result.totalCostUsd, 16);
+    assert.equal(result.unitCostBs, 160 / 6);
   });
 
   it('rechaza salidas superiores a la existencia', () => {
