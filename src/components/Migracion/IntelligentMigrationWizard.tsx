@@ -79,6 +79,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const matrix:unknown[][]=[];sheet.eachRow({includeEmpty:false},row=>{const vals:unknown[]=[];for(let c=1;c<=row.cellCount;c++)vals.push(scalar(row.getCell(c).value));matrix.push(vals);});
      parsed=toRows(matrix);
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
+    parsed=parsed.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row);
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     if(!firstHeaders.length)firstHeaders=Object.keys(parsed[0]);
     combined.push(...parsed);
