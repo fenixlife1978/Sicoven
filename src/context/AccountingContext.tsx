@@ -1539,32 +1539,39 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       accountCode: code, accountName: accounts.find(a => a.code === code)?.name || code,
       debitBs, creditBs, debitUsd, creditUsd, description
     });
-    if (movData.type === 'SALIDA' || movData.type === 'AJUSTE') {
-      const isSale = movData.type === 'SALIDA' && movData.concept === 'VENTA';
-      const isLoss = movData.type === 'SALIDA' && (movData.concept === 'MERMA' || movData.concept === 'AUTOCONSUMO');
-      const adjustmentDelta = Number(movData.balanceQty) - prod.currentStock;
-      const isPositiveAdjustment = movData.type === 'AJUSTE' && adjustmentDelta > 0;
-      const shouldPost = isSale || isLoss || movData.type === 'AJUSTE';
-      if (shouldPost) {
-        if (!inventoryAccount || !inventoryAccount.isMovement) throw new Error(`La cuenta de inventario ${inventoryAccountCode} no existe o no admite movimientos.`);
-        const debitCode = isSale ? costAccountCode : adjustmentAccountCode;
-        const debitAccount = isSale ? costAccount : adjustmentAccount;
-        if (!isPositiveAdjustment && (!debitAccount || !debitAccount.isMovement)) throw new Error(`La cuenta de costo/ajuste ${debitCode} no existe o no admite movimientos.`);
-        if (isPositiveAdjustment && (!adjustmentAccount || !adjustmentAccount.isMovement)) throw new Error(`La cuenta de contrapartida de ajuste ${adjustmentAccountCode} no existe o no admite movimientos.`);
-        const amountBs = totalCostBs;
-        const amountUsd = totalCostUsd;
-        const items: JournalEntryItem[] = isPositiveAdjustment
-          ? [makeLine(inventoryAccountCode, amountBs, 0, amountUsd, 0, 'Entrada por sobrante de inventario'), makeLine(adjustmentAccountCode, 0, amountBs, 0, amountUsd, 'Contrapartida por sobrante de inventario')]
-          : [makeLine(debitCode, amountBs, 0, amountUsd, 0, isSale ? 'Costo de ventas según método de costeo' : 'Merma, faltante o ajuste de inventario'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Descargo de inventario')];
-        const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-        generatedEntries.push({
-          id: `entry-inventory-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
-          companyId: currentCompany.id, entryNumber: companyEntries.length + 1 + generatedEntries.length,
-          date: movData.date, description: `${isSale ? 'Costo de venta' : isPositiveAdjustment ? 'Sobrante de inventario' : 'Ajuste/merma de inventario'}: ${prod.name} · ${movData.documentRef}`,
-          type: 'INVENTARIO', bcvRate: rate, referenceDoc: movData.documentRef,
-          items, createdAt: new Date().toISOString()
-        });
-      }
+    const isSale = movData.type === 'SALIDA' && movData.concept === 'VENTA';
+    const isLoss = movData.type === 'SALIDA' && (movData.concept === 'MERMA' || movData.concept === 'AUTOCONSUMO');
+    const isCustomerReturn = movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE';
+    const isSupplierReturn = movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
+    const adjustmentDelta = Number(movData.balanceQty) - prod.currentStock;
+    const isPositiveAdjustment = movData.type === 'AJUSTE' && adjustmentDelta > 0;
+    const shouldPost = isSale || isLoss || isCustomerReturn || isSupplierReturn || movData.type === 'AJUSTE';
+    if (shouldPost) {
+      if (!inventoryAccount || !inventoryAccount.isMovement) throw new Error(`La cuenta de inventario ${inventoryAccountCode} no existe o no admite movimientos.`);
+      const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
+      const debitCode = isSale ? costAccountCode : isSupplierReturn ? '2.1.1.01' : adjustmentAccountCode;
+      const debitAccount = isSale || isCustomerReturn ? costAccount : isSupplierReturn ? payableAccount : adjustmentAccount;
+      if ((isSale || isCustomerReturn) && (!costAccount || !costAccount.isMovement)) throw new Error(`La cuenta de costo de ventas ${costAccountCode} no existe o no admite movimientos.`);
+      if (isSupplierReturn && (!payableAccount || !payableAccount.isMovement)) throw new Error('Falta la cuenta de control de Cuentas por Pagar 2.1.1.01 para registrar la devolución al proveedor.');
+      if (!isPositiveAdjustment && !isCustomerReturn && (!debitAccount || !debitAccount.isMovement)) throw new Error(`La cuenta de costo/ajuste ${debitCode} no existe o no admite movimientos.`);
+      if (isPositiveAdjustment && (!adjustmentAccount || !adjustmentAccount.isMovement)) throw new Error(`La cuenta de contrapartida de ajuste ${adjustmentAccountCode} no existe o no admite movimientos.`);
+      const amountBs = totalCostBs;
+      const amountUsd = totalCostUsd;
+      const items: JournalEntryItem[] = isPositiveAdjustment
+        ? [makeLine(inventoryAccountCode, amountBs, 0, amountUsd, 0, 'Entrada por sobrante de inventario'), makeLine(adjustmentAccountCode, 0, amountBs, 0, amountUsd, 'Contrapartida por sobrante de inventario')]
+        : isCustomerReturn
+          ? [makeLine(inventoryAccountCode, amountBs, 0, amountUsd, 0, 'Entrada por devolución de cliente'), makeLine(costAccountCode, 0, amountBs, 0, amountUsd, 'Reversión del costo de ventas por devolución')]
+          : isSupplierReturn
+            ? [makeLine('2.1.1.01', amountBs, 0, amountUsd, 0, 'Devolución de mercancía al proveedor'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Salida por devolución de compra')]
+            : [makeLine(debitCode, amountBs, 0, amountUsd, 0, isSale ? 'Costo de ventas según método de costeo' : 'Merma, faltante o ajuste de inventario'), makeLine(inventoryAccountCode, 0, amountBs, 0, amountUsd, 'Descargo de inventario')];
+      const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
+      generatedEntries.push({
+        id: `entry-inventory-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
+        companyId: currentCompany.id, entryNumber: companyEntries.reduce((max,e) => Math.max(max,e.entryNumber),0) + generatedEntries.length + 1,
+        date: movData.date, description: `${isSale ? 'Costo de venta' : isCustomerReturn ? 'Devolución de cliente' : isSupplierReturn ? 'Devolución a proveedor' : isPositiveAdjustment ? 'Sobrante de inventario' : 'Ajuste/merma de inventario'}: ${prod.name} · ${movData.documentRef}`,
+        type: 'INVENTARIO', bcvRate: rate, referenceDoc: movData.documentRef,
+        items, createdAt: new Date().toISOString()
+      });
     }
     if (generatedEntries.length > 0) newMov.journalEntryId = generatedEntries[0].id;
     setMovements(prev => [...prev, newMov]);
