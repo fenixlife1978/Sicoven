@@ -17,6 +17,12 @@ describe('motor de inventario contable', () => {
     assert.equal(result.unitCostUsd, 1.5);
   });
 
+  it('capitalizes landed costs into the weighted average', () => {
+    const result = calculateWeightedAverageCost(10, 100, 5, 180, 80);
+    assert.ok(Math.abs(result.unitCostBs - (1900 / 15)) < 1e-8);
+    assert.equal(result.totalCostBs, 1900);
+  });
+
   it('PEPS consume primero las capas más antiguas', () => {
     const result = calculateFifoIssue([
       { quantity: 5, unitCostBs: 20, unitCostUsd: 2, date: '2026-02-01' },
@@ -25,6 +31,12 @@ describe('motor de inventario contable', () => {
     assert.equal(result.totalCostBs, 160);
     assert.equal(result.totalCostUsd, 16);
     assert.equal(result.unitCostBs, 160 / 6);
+  });
+
+  it('rejects PEPS issues when the available layers are insufficient', () => {
+    assert.throws(() => calculateFifoIssue([
+      { quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01' }
+    ], 3), /Existencia insuficiente/);
   });
 
   it('rechaza salidas superiores a la existencia', () => {
