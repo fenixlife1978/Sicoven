@@ -59,7 +59,7 @@ export const InventarioContableTools: React.FC = () => {
     if (!file) return;
     setError(''); setMessage(''); setImporting(true);
     try {
-      const lines = (await file.text()).replace(/^\\uFEFF/, '').split(/\\r?\\n/).filter(line => line.trim());
+      const lines = (await file.text()).replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
       if (lines.length < 2) throw new Error('El CSV debe contener encabezados y al menos una fila.');
       const headers = parseCsvLine(lines[0]).map(h => h.trim().toLowerCase());
       const records = lines.slice(1).map((line, index) => {
