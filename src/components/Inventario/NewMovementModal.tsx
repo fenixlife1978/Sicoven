@@ -29,6 +29,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [documentType, setDocumentType] = useState('Factura de compra');
   const [counterpartyRif, setCounterpartyRif] = useState('');
   const [counterpartyName, setCounterpartyName] = useState('');
+  const [error, setError] = useState('');
 
   const selectedProduct = products.find(p => p.id === productId) || products[0];
 
@@ -57,8 +58,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (quantity <= 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) return;
-
+    setError('');
+    if (quantity <= 0 || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean mayores que cero.'); return; }
+    try {
     addMovement({
       productId: selectedProduct.id,
       productName: selectedProduct.name,
@@ -79,6 +81,9 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     });
 
     onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'No se pudo registrar el movimiento.');
+    }
   };
 
   return (
@@ -153,6 +158,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 {type === 'SALIDA' && (
                   <>
                     <option value="VENTA">Venta de Mercancía</option>
+                    <option value="AUTOCONSUMO">Autoconsumo</option>
                     <option value="MERMA">Merma / Deterioro</option>
                   </>
                 )}
@@ -252,6 +258,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </span>
             </div>
           </div>
+
+          {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-rose-700">{error}</p>}
 
           <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
             <button
