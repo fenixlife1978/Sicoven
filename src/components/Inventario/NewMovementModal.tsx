@@ -45,7 +45,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const bcvRate = Number(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
-  const totalCostBs = quantity * unitCostBs + (type === 'ENTRADA' ? additionalLandedCostsBs : 0);
+  const totalCostBs = type === 'ENTRADA'
+    ? quantity * unitCostBs + additionalLandedCostsBs
+    : type === 'SALIDA'
+      ? quantity * selectedProduct.avgCostBs
+      : Math.abs(quantity - selectedProduct.currentStock) * (quantity < selectedProduct.currentStock ? selectedProduct.avgCostBs : unitCostBs);
   const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
@@ -254,7 +258,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
           {/* Movement summary pill */}
           <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
             <div>
-              <span className="text-[11px] text-slate-400 block">Total Movimiento:</span>
+              <span className="text-[11px] text-slate-400 block">Total estimado del movimiento:</span>
               <span className="font-mono font-bold text-emerald-400 text-sm">
                 {formatBs(totalCostBs)}
               </span>
