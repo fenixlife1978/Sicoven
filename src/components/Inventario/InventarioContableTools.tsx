@@ -352,7 +352,7 @@ export const InventarioContableTools: React.FC = () => {
         const costAccount = accounts.find(a => a.code === group.costCode && a.isMovement);
         const inventoryAccount = accounts.find(a => a.code === group.inventoryCode && a.isMovement);
         if (!costAccount || !inventoryAccount) throw new Error('Falta una cuenta contable válida para el par ' + group.inventoryCode + ' / ' + group.costCode + '.');
-        const alreadyPosted = entriesInPeriod.filter(entry => entry.type === 'INVENTARIO' && entry.description.toLowerCase().includes('costo de venta') && entry.items.some(line => line.accountCode === group.inventoryCode && Number(line.creditBs || 0) > 0))
+        const alreadyPosted = entriesInPeriod.filter(entry => entry.type === 'INVENTARIO' && entry.items.some(line => line.accountCode === group.inventoryCode) && entry.items.some(line => line.accountCode === group.costCode))
           .reduce((sum,entry) => sum + entry.items.filter(line => line.accountCode === group.costCode).reduce((subtotal,line) => subtotal + Number(line.debitBs || 0) - Number(line.creditBs || 0),0),0);
         const delta = Math.round((expectedCogs - alreadyPosted) * 100) / 100;
         if (Math.abs(delta) < 0.01) continue;
