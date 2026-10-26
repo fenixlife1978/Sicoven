@@ -118,19 +118,6 @@ const AccountingContext = createContext<AccountingContextType | undefined>(undef
 
 const STORAGE_KEY = 'sicoven_accounting_data_v1';
 const IS_DEMO = import.meta.env.VITE_SICOVEN_DEMO === 'true';
-const DEMO_LIMIT = 10;
-const DEMO_LABELS: Record<string, string> = {
-  empresa: 'Empresas',
-  diario: 'Libro Diario',
-  compras: 'Compras',
-  ventas: 'Ventas',
-  inventario: 'Inventario',
-  catalogo: 'Catálogo y plan de cuentas',
-  retenciones: 'Retenciones',
-  configuracion: 'Configuración',
-  conciliacion: 'Conciliación bancaria'
-};
-
 // En escritorio, SQLite es la única fuente operativa; localStorage se reserva
 // para la vista web de desarrollo y nunca inicializa datos del instalador.
 const readBrowserStorage = (key: string): string | null => {
@@ -253,48 +240,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   const [demoUsage, setDemoUsage] = useState<Record<string, number>>({});
   const demoUsageRef = useRef<Record<string, number>>({});
-  const consumeDemoAction = (moduleKey: string) => {
-    if (!IS_DEMO) return;
-    const label = DEMO_LABELS[moduleKey] || moduleKey;
-    if (window.sicovenStore) {
-      const result = window.sicovenStore.consumeDemoAction(moduleKey);
-      if (result?.usage && typeof result.usage === 'object') {
-        demoUsageRef.current = result.usage;
-        setDemoUsage(result.usage);
-      }
-      if (!result?.ok) {
-        const message = result?.used !== undefined
-          ? `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`
-          : 'No se pudo registrar la acción demo en SQLite. La operación fue bloqueada para proteger el límite.';
-        window.alert(message);
-        throw new Error(message);
-      }
-      return;
-    }
-
-    // Respaldo para la vista web de desarrollo: el contador se escribe antes
-    // de permitir la mutación y sobrevive a una recarga del navegador.
-    let storedUsage: Record<string, number> = {};
-    try {
-      storedUsage = JSON.parse(localStorage.getItem(`${STORAGE_KEY}_demoUsage`) || '{}');
-    } catch {
-      storedUsage = {};
-    }
-    const used = Number(storedUsage[moduleKey] ?? demoUsageRef.current[moduleKey] ?? 0);
-    if (used >= DEMO_LIMIT) {
-      const message = `La demostración agotó el máximo de ${DEMO_LIMIT} acciones en ${label}. Adquiera SICOVEN completo para continuar sin limitaciones.`;
-      window.alert(message);
-      throw new Error(message);
-    }
-    const nextUsage = { ...storedUsage, [moduleKey]: used + 1 };
-    try {
-      localStorage.setItem(`${STORAGE_KEY}_demoUsage`, JSON.stringify(nextUsage));
-    } catch {
-      throw new Error('No se pudo guardar el contador de la demo; la operación fue bloqueada.');
-    }
-    demoUsageRef.current = nextUsage;
-    setDemoUsage(nextUsage);
-  };
+  // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
+  // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
+  const consumeDemoAction = (_moduleKey: string) => {};
 
   const currentCompany: Company = companies.find(c => c.id === currentCompanyId) || companies[0] || {
     id: '', rif: '', name: 'Registre una empresa para comenzar', address: '', phone: '', email: '',
