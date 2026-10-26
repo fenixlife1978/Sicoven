@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const sessions = new Map();
 const LICENSE_API = 'https://crm-sicoven.vercel.app/api/activations';
 let licenseRecheckTimer = null;
+let trialExpiryTimer = null;
 
 const hashPassword = (password, salt = crypto.randomBytes(16).toString('hex')) => ({
   salt,
@@ -386,6 +387,19 @@ app.whenReady().then(async () => {
   await revalidateLicense();
   createWindow();
 
+  const initialLicenseStatus = licenseView();
+  if (initialLicenseStatus.status === 'trial' && initialLicenseStatus.trialExpiresAt) {
+    const remainingTrialMs = Math.max(0, Date.parse(initialLicenseStatus.trialExpiresAt) - Date.now());
+    trialExpiryTimer = setTimeout(() => {
+      const status = licenseView();
+      if (!status.authorized) {
+        sessions.clear();
+        db.prepare('DELETE FROM auth_sessions').run();
+        BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
+      }
+    }, remainingTrialMs + 25);
+  }
+
   licenseRecheckTimer = setInterval(async () => {
     const status = await revalidateLicense();
     if (!status.authorized) {
@@ -401,6 +415,7 @@ app.whenReady().then(async () => {
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
 app.on('before-quit', () => {
   if (licenseRecheckTimer) clearInterval(licenseRecheckTimer);
+  if (trialExpiryTimer) clearTimeout(trialExpiryTimer);
   if (db) {
     db.pragma('wal_checkpoint(TRUNCATE)');
     db.close();
