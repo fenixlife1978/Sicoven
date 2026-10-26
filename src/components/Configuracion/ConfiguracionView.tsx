@@ -378,15 +378,20 @@ export const ConfiguracionView: React.FC = () => {
 
             <button
               onClick={() => {
-                if (confirm('¿Restablecer el sistema a los datos de muestra iniciales? Se sobrescribirán los datos actuales.')) {
-                  resetToSampleData();
-                  alert('Sistema restablecido a los datos de prueba oficiales.');
+                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe eliminarán asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones y liquidaciones. Se conservarán las empresas y sus parámetros fiscales, el plan contable base, los administradores y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
+                if (!first) return;
+                const confirmation = window.prompt('Para confirmar definitivamente, escribe: RESETEAR SICOVEN');
+                if (confirmation !== 'RESETEAR SICOVEN') {
+                  alert('Reset cancelado. No se modificaron los datos.');
+                  return;
                 }
+                resetToSampleData();
+                alert('Reset de fábrica ejecutado. Se conservaron el acceso administrativo, la configuración de empresas y el estado de licencia/prueba.');
               }}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer"
             >
               <RotateCcw className="w-4 h-4" />
-              Restablecer a Datos de Prueba Oficiales
+              Reset de fábrica: borrar datos operativos
             </button>
           </div>
         </div>
