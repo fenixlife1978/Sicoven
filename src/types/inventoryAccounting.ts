@@ -19,6 +19,7 @@ export interface InventoryCostResult {
 }
 
 const cents = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+const usdPrecision = (value: number): number => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
 const validNonNegative = (value: number): boolean => Number.isFinite(value) && value >= 0;
 
@@ -42,7 +43,7 @@ export function calculateWeightedAverageCost(
   return {
     quantity,
     totalCostBs,
-    totalCostUsd: cents(totalCostBs / exchangeRate),
+    totalCostUsd: usdPrecision(totalCostBs / exchangeRate),
     unitCostBs,
     unitCostUsd
   };
