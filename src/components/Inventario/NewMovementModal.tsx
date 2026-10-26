@@ -25,6 +25,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [documentRef, setDocumentRef] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [unitCostBs, setUnitCostBs] = useState<number>(0);
+  const [additionalLandedCostsBs, setAdditionalLandedCostsBs] = useState<number>(0);
   const [bcvRateInput, setBcvRateInput] = useState(String(currentCompany.bcvRate || ''));
   const [documentType, setDocumentType] = useState('Factura de compra');
   const [counterpartyRif, setCounterpartyRif] = useState('');
@@ -44,7 +45,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
 
   const bcvRate = Number(bcvRateInput);
   const unitCostUsd = bcvRate > 0 ? unitCostBs / bcvRate : 0;
-  const totalCostBs = quantity * unitCostBs;
+  const totalCostBs = quantity * unitCostBs + (type === 'ENTRADA' ? additionalLandedCostsBs : 0);
   const totalCostUsd = bcvRate > 0 ? totalCostBs / bcvRate : 0;
 
   // Compute prospective balance
@@ -70,6 +71,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       concept,
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
       documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate,
+      additionalLandedCostsBs: type === 'ENTRADA' ? additionalLandedCostsBs : 0,
       quantity,
       unitCostBs,
       unitCostUsd: Number(unitCostUsd.toFixed(2)),
@@ -243,6 +245,11 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               />
             </div>
           </div>
+          {type === 'ENTRADA' && <div>
+            <label className="block font-semibold text-slate-700 mb-1">Fletes y gastos de nacionalización asignados a esta entrada (Bs.)</label>
+            <input type="number" min="0" step="0.01" value={additionalLandedCostsBs || ''} onChange={e => setAdditionalLandedCostsBs(parseFloat(e.target.value) || 0)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono" />
+            <p className="mt-1 text-[11px] text-slate-500">Estos costos se distribuyen sobre la cantidad recibida y se capitalizan en el costo unitario del artículo.</p>
+          </div>}
 
           {/* Movement summary pill */}
           <div className="p-3 bg-slate-900 text-white rounded-xl flex items-center justify-between">
