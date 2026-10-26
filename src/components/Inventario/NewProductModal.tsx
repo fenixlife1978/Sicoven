@@ -118,7 +118,7 @@ export const NewProductModal: React.FC<NewProductModalProps> = ({ isOpen, onClos
           <div className="grid grid-cols-3 gap-3">
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tipo de artículo contable</label>
-              <select value={itemType} onChange={e => setItemType(e.target.value as typeof itemType)} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
+              <select value={itemType} onChange={e => { const value = e.target.value as typeof itemType; setItemType(value); setInventoryAccountCode(value === 'MATERIA_PRIMA' ? '1.1.4.02' : value === 'PRODUCTO_EN_PROCESO' ? '1.1.4.04' : '1.1.4.01'); }} className="w-full px-2 py-1.5 border border-slate-300 rounded-lg">
                 <option value="MERCANCIA">Mercancía</option><option value="MATERIA_PRIMA">Materia prima</option><option value="PRODUCTO_EN_PROCESO">Producto en proceso</option><option value="PRODUCTO_TERMINADO">Producto terminado</option><option value="SUBPRODUCTO">Subproducto</option>
               </select>
             </div>
