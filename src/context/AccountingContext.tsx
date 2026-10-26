@@ -1113,6 +1113,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure la tasa BCV histórica válida antes de crear artículos con valoración.');
     const initialQuantity = Number(prodData.currentStock || 0);
     const initialCostBs = Number(prodData.avgCostBs || 0);
+    const openingDateValue = prodData.openingDate || new Date().toISOString().slice(0, 10);
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(openingDateValue) || new Date(openingDateValue + 'T00:00:00Z').toISOString().slice(0,10) !== openingDateValue) throw new Error('La fecha del inventario inicial no es válida.');
     if (!Number.isFinite(initialQuantity) || initialQuantity < 0 || !Number.isFinite(initialCostBs) || initialCostBs < 0) {
       throw new Error('La existencia y el costo inicial no pueden ser negativos.');
     }
@@ -1132,18 +1134,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       costingMethod: prodData.costingMethod || 'PROMEDIO_PONDERADO',
       vatTreatment: prodData.vatTreatment || 'GENERAL_16',
       itemType: prodData.itemType || 'MERCANCIA',
-      openingDate: prodData.openingDate || new Date().toISOString().slice(0, 10),
+      openingDate: openingDateValue,
       openingBcvRate: rate,
       vnrProvisionBs: Number(prodData.vnrProvisionBs || 0),
       id: `prod-${Date.now()}-${Math.floor(Math.random() * 10000)}`,
       companyId: currentCompany.id
     };
+    const inventoryAccount = accounts.find(a => a.code === newProd.inventoryAccountCode && a.isMovement && a.type === 'ACTIVO');
+    const costAccount = accounts.find(a => a.code === newProd.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+    const adjustmentAccount = accounts.find(a => a.code === newProd.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+    if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no es una cuenta de activo de movimiento.`);
+    if (!costAccount) throw new Error(`La cuenta de costo de ventas ${newProd.costOfSalesAccountCode} no existe o no admite movimientos.`);
+    if (!adjustmentAccount) throw new Error(`La cuenta de mermas/ajustes ${newProd.adjustmentAccountCode} no existe o no admite movimientos.`);
     let opening: InventoryMovement | null = null;
     let openingEntry: JournalEntry | null = null;
     if (initialQuantity > 0) {
-      const inventoryAccount = accounts.find(a => a.code === newProd.inventoryAccountCode && a.isMovement);
       const offsetAccount = accounts.find(a => a.code === newProd.openingBalanceAccountCode && a.isMovement);
-      if (!inventoryAccount) throw new Error(`La cuenta de inventario ${newProd.inventoryAccountCode} no existe o no admite movimientos.`);
       if (!offsetAccount) throw new Error(`La cuenta contrapartida de apertura ${newProd.openingBalanceAccountCode} no existe o no admite movimientos.`);
       const openingValueBs = Math.round(initialQuantity * initialCostBs * 100) / 100;
       const openingValueUsd = Math.round(openingValueBs / rate * 1000000) / 1000000;
@@ -1195,6 +1201,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const quantity = Number(row.currentStock || 0);
       const unitCostBs = Number(row.avgCostBs || 0);
       const date = row.openingDate || today;
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(date) || new Date(date + 'T00:00:00Z').toISOString().slice(0,10) !== date) throw new Error('Fecha de apertura inválida para ' + code + '.');
       if (!Number.isFinite(rate) || rate <= 0 || !Number.isFinite(quantity) || quantity < 0 ||
           !Number.isFinite(unitCostBs) || unitCostBs < 0 || (quantity > 0 && unitCostBs <= 0)) throw new Error('Tasa, cantidad o costo inválidos para ' + code + '.');
       const product: InventoryProduct = {
@@ -1209,10 +1216,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         vatTreatment: row.vatTreatment || 'GENERAL_16', itemType: row.itemType || 'MERCANCIA',
         openingDate: date, openingBcvRate: rate, vnrProvisionBs: Number(row.vnrProvisionBs || 0)
       };
+      const inventoryAccount = accounts.find(a => a.code === product.inventoryAccountCode && a.isMovement && a.type === 'ACTIVO');
+      const costAccount = accounts.find(a => a.code === product.costOfSalesAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+      const adjustmentAccount = accounts.find(a => a.code === product.adjustmentAccountCode && a.isMovement && (a.type === 'COSTOS' || a.type === 'GASTOS'));
+      if (!inventoryAccount || !costAccount || !adjustmentAccount) throw new Error('Cuentas contables inválidas para el artículo ' + code + '.');
       if (quantity > 0) {
-        const inventoryAccount = accounts.find(a => a.code === product.inventoryAccountCode && a.isMovement);
         const offsetAccount = accounts.find(a => a.code === product.openingBalanceAccountCode && a.isMovement);
-        if (!inventoryAccount || !offsetAccount) throw new Error('Cuentas de apertura inválidas para el artículo ' + code + '.');
+        if (!offsetAccount) throw new Error('Cuenta de contrapartida de apertura inválida para el artículo ' + code + '.');
         const totalBs = Math.round(quantity * unitCostBs * 100) / 100;
         const totalUsd = Math.round(totalBs / rate * 1000000) / 1000000;
         const entry: JournalEntry = {
