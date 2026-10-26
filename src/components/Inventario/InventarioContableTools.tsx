@@ -71,7 +71,7 @@ export const InventarioContableTools: React.FC = () => {
       if (importMode === 'INVENTARIO_INICIAL') {
         const required = ['code', 'name', 'currentstock', 'avgcostbs'];
         if (required.some(h => !headers.includes(h))) throw new Error('Faltan columnas obligatorias: code, name, currentStock y avgCostBs. Descargue la plantilla CSV.');
-        const rows = records.map(({row,index:unused,sourceLine}) => {
+        const rows = records.map(({row,sourceLine}) => {
           const numeric = (key: string, fallback = 0) => row[key] === '' || row[key] === undefined ? fallback : Number(row[key]);
           const method = row.costingmethod === 'PEPS' ? 'PEPS' : 'PROMEDIO_PONDERADO';
           const vat = ['GENERAL_16', 'REDUCIDA_8', 'EXENTO', 'EXONERADO'].includes(row.vattreatment || '') ? row.vattreatment as InventoryProduct['vatTreatment'] : 'GENERAL_16';
