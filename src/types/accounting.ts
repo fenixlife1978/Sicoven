@@ -148,6 +148,11 @@ export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';
 export type InventoryVatTreatment = 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO';
 export type InventoryItemType = 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO';
 
+export interface InventoryBomComponent {
+  productId: string;
+  quantityPerUnit: number;
+}
+
 export interface InventoryProduct {
   id: string;
   companyId: string;
@@ -180,6 +185,7 @@ export interface InventoryProduct {
   vnrCompletionCostBs?: number;
   vnrSellingCostBs?: number;
   vnrLastTestDate?: string;
+  bomComponents?: InventoryBomComponent[];
 }
 
 export interface InventoryMovement {
