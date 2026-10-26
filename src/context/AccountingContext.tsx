@@ -1619,7 +1619,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const availableLayers = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
         if (availableLayers > component.currentStock + 1e-8) throw new Error('El Kardex PEPS no concilia con la existencia actual de ' + component.code + '.');
         if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
+        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
         totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
+        const remainingQuantity = Math.max(0, component.currentStock - requiredQuantity);
+        componentNewAverageBs = remainingQuantity > 0 ? Math.max(0, fifoLayerValue - totalBs) / remainingQuantity : 0;
+        componentNewAverageUsd = componentNewAverageBs / rate;
       } else {
         totalBs = Math.round(requiredQuantity * component.avgCostBs * 100) / 100;
       }
@@ -1633,9 +1637,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: movementId, companyId: currentCompany.id, productId: component.id, productName: component.name, productCode: component.code,
         date, type: 'SALIDA', concept: 'PRODUCCION', documentRef: documentRef || ('PROD-' + Date.now()), documentType: 'Orden de producción',
         quantity: requiredQuantity, unitCostBs, unitCostUsd: unitCostBs / rate, totalCostBs: totalBs, totalCostUsd: totalBs / rate,
-        balanceQty: component.currentStock - requiredQuantity,
-        balanceTotalBs: Math.round((component.currentStock - requiredQuantity) * component.avgCostBs * 100) / 100,
-        balanceTotalUsd: Math.round((component.currentStock - requiredQuantity) * component.avgCostBs / rate * 100) / 100,
+        balanceQty: Math.max(0, component.currentStock - requiredQuantity),
+        balanceTotalBs: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageBs * 100) / 100,
+        balanceTotalUsd: Math.round(Math.max(0, component.currentStock - requiredQuantity) * componentNewAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: component.costingMethod
       };
       movementsToAdd.push(outMovement);
