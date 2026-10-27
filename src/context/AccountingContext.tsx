@@ -94,7 +94,7 @@ interface AccountingContextType {
   // Conciliación Bancaria
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
-  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId'>) => BankAccount;
+  addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>) => BankAccount;
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   deleteBankStatementMovement: (id: string) => void;
@@ -1672,7 +1672,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
-  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId'>): BankAccount => {
+  const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId' | 'accountCode'>): BankAccount => {
     if (!currentCompany.id) throw new Error('Registre o seleccione una empresa antes de crear cuentas bancarias.');
     const digits = String(bankData.accountNumber || '').replace(/\D/g, '');
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
