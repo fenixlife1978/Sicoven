@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
-import { parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
+import { parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from '../../types/migrationParsing';
 import { useAccounting } from '../../context/AccountingContext';
 
 type Row = Record<string, unknown>;
@@ -27,17 +27,7 @@ const scalar = (v: unknown): unknown => {
 };
 const toRows = (matrix: unknown[][]): Row[] => {
  if(matrix.length<2) return [];
- const headers=matrix[0].map(v=>norm(String(scalar(v)??'')));
- const seen = new Set<string>();
- const duplicates = new Set<string>();
- for (const header of headers) {
-  if (!header) continue;
-  if (seen.has(header)) duplicates.add(header);
-  seen.add(header);
- }
- if (duplicates.size) {
-  throw new Error('La hoja de Excel contiene encabezados duplicados o equivalentes: ' + [...duplicates].join(', ') + '. Renombra las columnas antes de importar.');
- }
+ const headers=validateUniqueMigrationHeaders(matrix[0].map(v=>scalar(v)), 'hoja de Excel');
  return matrix.slice(1).filter(r=>r.some(v=>String(scalar(v)??'').trim())).map(r=>{
   const obj:Row={}; headers.forEach((h,i)=>{if(h)obj[h]=scalar(r[i]);}); return obj;
  });
