@@ -8,35 +8,51 @@ interface NewBankAccountModalProps {
 }
 
 export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen, onClose }) => {
-  const { accounts, addBankAccount } = useAccounting();
+  const { currentCompany, addBankAccount } = useAccounting();
 
   const [bankName, setBankName] = useState('');
-  const [accountCode, setAccountCode] = useState('1.1.1.03');
+  const [accountType, setAccountType] = useState<'CORRIENTE' | 'AHORRO'>('CORRIENTE');
+  const [checkbookNumber, setCheckbookNumber] = useState('');
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USD'>('BS');
   const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
 
   if (!isOpen) return null;
 
-  // Filter bank asset accounts
-  const bankAccountsList = accounts.filter(
-    a => a.code.startsWith('1.1.1') && a.isMovement
-  );
-
+  const normalizedAccountNumber = accountNumber.replace(/\D/g, '');
+  const parsedOpeningBalance = Number(initialBalanceBs) || 0;
+  const bcvRate = Number(currentCompany.bcvRate || 0);
+  const openingBalanceBs = currency === 'USD' ? parsedOpeningBalance * bcvRate : parsedOpeningBalance;
+  const openingBalanceUsd = currency === 'USD' ? parsedOpeningBalance : (bcvRate > 0 ? parsedOpeningBalance / bcvRate : 0);
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!bankName.trim()) return;
-
-    addBankAccount({
-      bankName: bankName.trim(),
-      accountCode,
-      accountNumber: accountNumber.trim() || '0000-0000-00-0000000000',
-      currency,
-      initialBalanceBs: Number(initialBalanceBs) || 0,
-      initialBalanceUsd: currency === 'USD' ? (Number(initialBalanceBs) || 0) : 0
-    });
-
-    onClose();
+    if (normalizedAccountNumber.length !== 20) {
+      window.alert('El número de cuenta debe contener exactamente 20 dígitos.');
+      return;
+    }
+    if (parsedOpeningBalance < 0 || !Number.isFinite(parsedOpeningBalance)) {
+      window.alert('El saldo inicial debe ser cero o positivo.');
+      return;
+    }
+    if (parsedOpeningBalance > 0 && bcvRate <= 0) {
+      window.alert('Configure una tasa BCV válida antes de registrar el saldo inicial.');
+      return;
+    }
+    try {
+      addBankAccount({
+        bankName: bankName.trim(),
+        accountNumber: normalizedAccountNumber,
+        currency,
+        initialBalanceBs: Math.round(openingBalanceBs * 100) / 100,
+        initialBalanceUsd: Math.round(openingBalanceUsd * 1000000) / 1000000,
+        accountType,
+        checkbookNumber: checkbookNumber.trim() || undefined
+      });
+      onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo registrar la cuenta bancaria.');
+    }
   };
 
   return (
@@ -49,7 +65,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             </div>
             <div>
               <h3 className="font-semibold text-base">Registrar Cuenta Bancaria</h3>
-              <p className="text-xs text-slate-400">Vincular cuenta de banco para conciliación</p>
+              <p className="text-xs text-slate-400">Alta de cuenta y auxiliar contable automático</p>
             </div>
           </div>
           <button
@@ -75,30 +91,31 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             />
           </div>
 
-          <div>
-            <label className="block font-semibold text-slate-700 mb-1">Cuenta Contable en Plan VEN-NIF *</label>
-            <select
-              value={accountCode}
-              onChange={e => setAccountCode(e.target.value)}
-              className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
-            >
-              {bankAccountsList.map(a => (
-                <option key={a.code} value={a.code}>
-                  {a.code} - {a.name}
-                </option>
-              ))}
-            </select>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Tipo de cuenta *</label>
+              <select value={accountType} onChange={e => setAccountType(e.target.value as 'CORRIENTE' | 'AHORRO')} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
+                <option value="CORRIENTE">Corriente</option>
+                <option value="AHORRO">Ahorro</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Chequera (opcional)</label>
+              <input value={checkbookNumber} onChange={e => setCheckbookNumber(e.target.value)} placeholder="N.º / serie" className="w-full px-3 py-1.5 border border-slate-300 rounded-lg" />
+            </div>
           </div>
-
           <div>
             <label className="block font-semibold text-slate-700 mb-1">
-              Número de Cuenta Bancaria (20 dígitos)
+              Número de Cuenta Bancaria (20 dígitos) *
             </label>
             <input
               type="text"
-              placeholder="0102-0000-00-0000000000"
+              placeholder="20 dígitos numéricos"
+              inputMode="numeric"
+              maxLength={24}
+              required
               value={accountNumber}
-              onChange={e => setAccountNumber(e.target.value)}
+              onChange={e => setAccountNumber(e.target.value.replace(/[^0-9-\s]/g, '').slice(0, 24))}
               className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
@@ -116,7 +133,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Saldo Inicial en Libros</label>
+              <label className="block font-semibold text-slate-700 mb-1">Saldo Inicial en Libros ({currency === 'USD' ? '$ USD' : 'Bs.'})</label>
               <input
                 type="number"
                 step="0.01"
@@ -139,11 +156,11 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             </button>
             <button
               type="submit"
-              disabled={!bankName.trim()}
+              disabled={!bankName.trim() || normalizedAccountNumber.length !== 20 || (parsedOpeningBalance > 0 && bcvRate <= 0)}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
-              Guardar Cuenta
+              Guardar y Crear Auxiliar
             </button>
           </div>
         </form>
