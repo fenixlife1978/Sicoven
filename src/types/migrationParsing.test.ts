@@ -55,14 +55,14 @@ test('valida encabezados compartidos para hojas Excel y archivos delimitados', (
 
 
 test('detecta TSV y conserva separadores dentro de campos entrecomillados', () => {
-  const rows = parseDelimitedRecords('codigo\\tnombre\\tnota\\r\\nA1\\t"Tuerca | acero"\\t"medida\\tM8"\\r\\n');
+  const rows = parseDelimitedRecords('codigo\tnombre\tnota\r\nA1\t"Tuerca | acero"\t"medida\tM8"\r\n');
   assert.equal(rows.length, 1);
   assert.equal(rows[0].nombre, 'Tuerca | acero');
-  assert.equal(rows[0].nota, 'medida\\tM8');
+  assert.equal(rows[0].nota, 'medida\tM8');
 });
 
 test('detecta archivo separado por barras verticales y mantiene campos vacíos finales', () => {
-  const rows = parseDelimitedRecords('codigo|nombre|precio\\nA1|Arandela|\\nA2|Tornillo|2,50');
+  const rows = parseDelimitedRecords('codigo|nombre|precio\nA1|Arandela|\nA2|Tornillo|2,50');
   assert.equal(rows.length, 2);
   assert.equal(rows[0].precio, '');
   assert.equal(rows[1].precio, '2,50');
