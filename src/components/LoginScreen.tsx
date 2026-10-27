@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import loginReferenceImg from '../assets/sicoven-login-reference.png';
+import efasLogo from '../assets/efas-logo-horizontal.png';
+import efasLogoWhite from '../assets/efas-logo-horizontal-white.png';
 
 export type AuthUser = {
   username: string;
@@ -266,37 +268,47 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
         .developer-credit {
           position: absolute;
-          right: 24px;
-          bottom: 18px;
-          left: auto;
-          z-index: 12;
+          left: 50%;
+          bottom: 12px;
+          transform: translateX(-50%);
+          z-index: 20;
           display: flex;
+          flex-direction: column;
           align-items: center;
-          gap: 12px;
-          max-width: min(36vw, 390px);
-          padding: 8px 12px;
-          border: 1px solid rgba(255, 255, 255, 0.22);
-          border-radius: 12px;
-          background: rgba(7, 31, 61, 0.58);
-          backdrop-filter: blur(5px);
-          color: rgba(255, 255, 255, 0.9);
-          font: 500 10px/1.35 "Segoe UI", Arial, sans-serif;
-          letter-spacing: 0.06em;
-          text-transform: uppercase;
+          justify-content: center;
+          gap: 4px;
+          background: transparent;
+          border: none;
+          padding: 0;
+          margin: 0;
+          text-align: center;
+          pointer-events: auto;
           box-sizing: border-box;
         }
 
         .developer-credit img {
           display: block;
-          width: clamp(112px, 12vw, 168px);
-          max-height: 42px;
+          height: clamp(24px, 3.4vh, 34px);
+          width: auto;
+          max-width: 220px;
           object-fit: contain;
-          flex: 0 0 auto;
+          filter: drop-shadow(0 2px 5px rgba(0, 0, 0, 0.75));
         }
 
-        .developer-credit-label {
+        .developer-credit img.logo-dark {
+          display: none;
+        }
+
+        .developer-credit img.logo-white {
           display: block;
-          max-width: 105px;
+        }
+
+        .developer-credit-text {
+          color: rgba(255, 255, 255, 0.95);
+          font: 500 clamp(10px, 0.85vw, 12px)/1.35 "Segoe UI", Arial, sans-serif;
+          letter-spacing: 0.02em;
+          text-shadow: 0 1px 4px rgba(0, 0, 0, 0.95), 0 2px 8px rgba(0, 0, 0, 0.7);
+          white-space: nowrap;
         }
 
         .quick-credentials-hint {
@@ -367,25 +379,29 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             position: relative;
             left: auto;
             bottom: auto;
-            z-index: 2;
-            max-width: min(100%, 430px);
-            width: min(100%, 430px);
-            justify-content: center;
-            margin: 14px auto 0;
-            padding: 9px 12px;
-            background: #102b4b;
-            border-color: #102b4b;
-            border-radius: 10px;
+            transform: none;
+            margin: 18px auto 8px;
+            width: 100%;
+            background: transparent;
+            border: none;
+            padding: 0;
           }
 
-          .developer-credit img {
-            width: 138px;
-            max-height: 36px;
+          .developer-credit img.logo-white {
+            display: none;
           }
 
-          .developer-credit-label {
-            max-width: 100px;
-            font-size: 9px;
+          .developer-credit img.logo-dark {
+            display: block;
+            filter: none;
+            margin: 0 auto;
+          }
+
+          .developer-credit-text {
+            color: #1e3a5f;
+            text-shadow: none;
+            white-space: normal;
+            font-size: 11px;
           }
 
           .login-form::before {
@@ -548,9 +564,12 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </p>
           )}
         </form>
-        <div className="developer-credit" aria-label="Empresa desarrolladora: EFASfreelancer">
-          <img src="/efas-logo-horizontal.png" alt="EFASfreelancer" draggable={false} />
-          <span className="developer-credit-label">Software desarrollado por</span>
+        <div className="developer-credit" aria-label="Software desarrollado por EFASfreelancer">
+          <img src={efasLogoWhite} alt="EFASfreelancer" className="logo-white" draggable={false} />
+          <img src={efasLogo} alt="EFASfreelancer" className="logo-dark" draggable={false} />
+          <span className="developer-credit-text">
+            Software desarrollado por <strong>EFASfreelancer</strong>, Rif. V-13313521-5, WhatsApp: +584125773996
+          </span>
         </div>
       </main>
     </>
