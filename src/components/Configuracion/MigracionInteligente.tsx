@@ -96,7 +96,24 @@ export const MigracionInteligente: React.FC = () => {
       const fields = [...new Set(file.rows.flatMap(row => Object.keys(row).map(normalize)))];
       for (const mod of MODULES) {
         const matches = mod.required.map(group => group.some(alias => fields.includes(normalize(alias))));
-        if (!matches.some(Boolean)) continue;
+        // No clasificar módulos por encabezados genéricos compartidos como "nombre", "fecha" o "monto".
+        // Se requieren al menos dos grupos de campos o una señal específica del módulo.
+        const strongSignals: Partial<Record<ModuleKey, string[]>> = {
+          inventory: ['sku','itemcode','codarticulo','existencia','currentstock'],
+          customers: ['customerid','clienterif','rifcliente','identificacion','taxid'],
+          suppliers: ['supplierid','suppliername','supplierif','supplierRif','rifproveedor','proveedorrif'],
+          receivables: ['clienterif','rifcliente','customername','customer'],
+          payables: ['suppliername','supplierrif','rifproveedor','proveedorrif'],
+          sales: ['invoicenumber','numerofactura','customerrif','customername'],
+          purchases: ['invoicenumber','numerofactura','supplierrif','suppliername'],
+          accounts: ['accountcode','accountname','clasificacion'],
+          journal: ['accountcode','codigocuenta','debitbs','creditbs','debe','haber'],
+          banks: ['bank','banco','bankaccount','referencia','reference'],
+          retentions: ['vouchernumber','numerocomprobante','montoretencion','withheldamountbs'],
+          assets: ['assetid','fechaadquisicion','valorhistorico']
+        };
+        const hasStrongSignal = (strongSignals[mod.key] || []).some(alias => fields.includes(normalize(alias)));
+        if (matches.filter(Boolean).length < 2 && !hasStrongSignal) continue;
         const missing = mod.required.filter((group,i) => !matches[i]).map(group => group[0]);
         const rows = file.rows;
         const notes: string[] = [];
