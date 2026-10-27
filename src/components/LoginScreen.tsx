@@ -547,12 +547,36 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
 
           </div>
 
-          {licenseStatus?.authorized && licenseStatus.status === 'trial' && (
+          {(!licenseStatus || licenseStatus.status === 'trial' || !licenseStatus.authorized) && (
             <div style={{ marginTop: 12, display: 'grid', gap: 7, textAlign: 'center' }}>
-              <a href="https://crm-sicoven.vercel.app/comprar" target="_blank" rel="noopener noreferrer" style={{ display: 'block', padding: '10px 14px', borderRadius: 10, background: '#e0f2fe', border: '1px solid #7dd3fc', color: '#0c4a6e', fontWeight: 700, fontSize: 13, textDecoration: 'none' }}>
-                Ver Planes y Pagos
+              <a
+                href="https://crm-sicoven.vercel.app/comprar"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 8,
+                  padding: '10px 14px',
+                  borderRadius: 10,
+                  background: '#e0f2fe',
+                  border: '1px solid #7dd3fc',
+                  color: '#0c4a6e',
+                  fontWeight: 700,
+                  fontSize: 13,
+                  textDecoration: 'none',
+                  boxShadow: '0 2px 8px rgba(12, 74, 110, 0.15)',
+                }}
+              >
+                <span>Ver Planes y Pagos</span>
+                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"></path>
+                  <polyline points="15 3 21 3 21 9"></polyline>
+                  <line x1="10" y1="14" x2="21" y2="3"></line>
+                </svg>
               </a>
-              <p style={{ margin: 0, color: '#e2e8f0', fontSize: 11, lineHeight: 1.45 }}>
+              <p style={{ margin: 0, color: '#e2e8f0', fontSize: 11, lineHeight: 1.45, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
                 Dispone de 24 horas de prueba. Si desea adquirir su licencia antes de que termine ese período, seleccione «Ver Planes y Pagos».
               </p>
             </div>
