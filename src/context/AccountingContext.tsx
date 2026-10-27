@@ -236,6 +236,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
+  // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
+  // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
+  const saleSequenceRef = useRef<Record<string, number>>({});
+  const purchaseSequenceRef = useRef<Record<string, number>>({});
+  const journalSequenceRef = useRef<Record<string, number>>({});
+  const vatVoucherSequenceRef = useRef<Record<string, number>>({});
+  const islrVoucherSequenceRef = useRef<Record<string, number>>({});
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
   // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
@@ -715,8 +722,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
-    const nextOp = companyPurchases.length + 1;
-    const purchaseId = `pur-${Date.now()}`;
+    const companyKey = currentCompany.id;
+    const nextOp = Math.max(companyPurchases.reduce((max, p) => Math.max(max, p.opNumber || 0), 0), purchaseSequenceRef.current[companyKey] || 0) + 1;
+    purchaseSequenceRef.current[companyKey] = nextOp;
+    const purchaseId = `pur-${companyKey}-${nextOp}-${Date.now()}`;
     const rate = purchaseData.bcvRate || currentCompany.bcvRate;
 
     // Generar correlativo comprobante IVA si retiene
@@ -725,8 +734,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (purchaseData.vatWithheldBs > 0 && !voucherNum) {
       const year = parseInt(purchaseData.invoiceDate.slice(0, 4), 10);
       const month = parseInt(purchaseData.invoiceDate.slice(5, 7), 10);
-      const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id).length;
-      voucherNum = formatVoucherNumber(year, month, companyVouchersCount + 1);
+      const voucherKey = `${companyKey}:${period}`;
+      const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id && v.period === period).length;
+      const voucherSequence = Math.max(companyVouchersCount, vatVoucherSequenceRef.current[voucherKey] || 0) + 1;
+      vatVoucherSequenceRef.current[voucherKey] = voucherSequence;
+      voucherNum = formatVoucherNumber(year, month, voucherSequence);
     }
 
     // 1. Generar Asiento Contable Automático en Libro Diario
@@ -816,10 +828,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     });
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-    const nextEntryNum = companyEntries.length + 1;
+    const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
+    journalSequenceRef.current[companyKey] = nextEntryNum;
 
     const createdJournalEntry: JournalEntry = {
-      id: `entry-pur-${Date.now()}`,
+      id: `entry-pur-${companyKey}-${nextEntryNum}-${Date.now()}`,
       companyId: currentCompany.id,
       entryNumber: nextEntryNum,
       date: purchaseData.invoiceDate,
@@ -847,7 +860,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // 2. Si retuvo IVA, crear el comprobante oficial de retención de IVA
     if (purchaseData.vatWithheldBs > 0 && voucherNum) {
       const vatVoucher: VatRetentionVoucher = {
-        id: `vouch-iva-${Date.now()}`,
+        id: `vouch-iva-${purchaseId}`,
         companyId: currentCompany.id,
         voucherNumber: voucherNum,
         date: purchaseData.invoiceDate,
@@ -876,9 +889,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // 3. Si retuvo ISLR, crear comprobante oficial de retención de ISLR
     if (purchaseData.islrWithheldBs && purchaseData.islrWithheldBs > 0) {
       const islrVoucher: IslrRetentionVoucher = {
-        id: `vouch-islr-${Date.now()}`,
+        id: `vouch-islr-${purchaseId}`,
         companyId: currentCompany.id,
-        voucherNumber: `ISLR-${period}-${String(islrVouchers.filter(v => v.companyId === currentCompany.id).length + 1).padStart(6, '0')}`,
+        voucherNumber: (() => {
+          const voucherKey = `${companyKey}:${period}`;
+          const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === period).length;
+          const sequence = Math.max(existingCount, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
+          islrVoucherSequenceRef.current[voucherKey] = sequence;
+          return `ISLR-${period}-${String(sequence).padStart(6, '0')}`;
+        })(),
         date: purchaseData.invoiceDate,
         period,
         supplierRif: purchaseData.supplierRif,
@@ -918,8 +937,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
     const companySales = sales.filter(s => s.companyId === currentCompany.id);
-    const nextOp = companySales.length + 1;
-    const saleId = `sale-${Date.now()}`;
+    const companyKey = currentCompany.id;
+    const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
+    saleSequenceRef.current[companyKey] = nextOp;
+    const saleId = `sale-${companyKey}-${nextOp}-${Date.now()}`;
     const rate = saleData.bcvRate || currentCompany.bcvRate;
 
     // Asiento contable
@@ -989,10 +1010,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-    const nextEntryNum = companyEntries.length + 1;
+    const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
+    journalSequenceRef.current[companyKey] = nextEntryNum;
 
     const createdJournalEntry: JournalEntry = {
-      id: `entry-sale-${Date.now()}`,
+      id: `entry-sale-${companyKey}-${nextEntryNum}-${Date.now()}`,
       companyId: currentCompany.id,
       entryNumber: nextEntryNum,
       date: saleData.invoiceDate,
