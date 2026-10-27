@@ -80,7 +80,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
             <select
               value={accountCode}
               onChange={e => setAccountCode(e.target.value)}
-              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
               {bankAccountsList.map(a => (
                 <option key={a.code} value={a.code}>
@@ -99,7 +99,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               placeholder="0102-0000-00-0000000000"
               value={accountNumber}
               onChange={e => setAccountNumber(e.target.value)}
-              className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+              className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             />
           </div>
 
@@ -109,7 +109,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               <select
                 value={currency}
                 onChange={e => setCurrency(e.target.value as 'BS' | 'USD')}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
                 <option value="BS">Bolívares (Bs.)</option>
                 <option value="USD">Dólares ($ USD)</option>
@@ -124,7 +124,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
                 value={initialBalanceBs || ''}
                 placeholder="0.00"
                 onChange={e => setInitialBalanceBs(parseFloat(e.target.value) || 0)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
           </div>
