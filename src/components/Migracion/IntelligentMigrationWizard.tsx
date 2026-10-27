@@ -38,7 +38,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -47,6 +47,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [error,setError]=useState('');
  const [notice,setNotice]=useState('');
  const [confirmed,setConfirmed]=useState(false);
+ const [backupPayload,setBackupPayload]=useState<string|null>(null);
+ const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
  const analysis = useMemo(()=>{
   const sources = new Map<string, Row[]>();
   rows.forEach(row=>{
@@ -94,9 +96,20 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setFiles(list);
+  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setFiles(list);
   if(!list.length)return;
   try{
+   if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
+    const raw=await list[0].text();
+    const data=JSON.parse(raw);
+    const collections=['companies','accounts','journalEntries','purchases','sales','products','movements','vatVouchers','islrVouchers','bankAccounts','bankStatementMovements'];
+    if(data && typeof data==='object' && !Array.isArray(data) && collections.every(key=>Array.isArray((data as Record<string,unknown>)[key]))){
+     if(!(data as Record<string,unknown>).companies || ((data as {companies:unknown[]}).companies.length===0)) throw new Error('El respaldo no contiene empresas. No se modificó la información actual.');
+     setBackupPayload(raw);
+     setBackupCounts(Object.fromEntries(collections.map(key=>[key,((data as Record<string,unknown>)[key] as unknown[]).length])));
+     return;
+    }
+   }
    const combined:Row[]=[]; const allHeaders = new Set<string>();
    for(const file of list){
     const ext=file.name.toLowerCase().split('.').pop();
@@ -136,6 +149,18 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    });
    setSelected(inventoryReadyInOneSource && detected.includes('inventory') ? ['inventory'] : []);
   }catch(e){setError(e instanceof Error?e.message:'No se pudieron leer los archivos.');}
+ };
+ const runBackupImport=()=>{
+  setError('');setNotice('');
+  if(!backupPayload){setError('No hay un respaldo válido seleccionado.');return;}
+  if(!confirmed){setError('Confirma que deseas reemplazar los datos actuales por el contenido del respaldo.');return;}
+  setBusy(true);
+  try{
+   const imported=importBackupJson(backupPayload);
+   if(!imported) throw new Error('SICOVEN rechazó el respaldo por estructura inválida, referencias rotas o inconsistencias contables. Los datos actuales se conservan.');
+   setNotice('Respaldo restaurado y validado. Revisa empresa activa, saldos, inventario y asientos antes de continuar.');
+  }catch(e){setError(e instanceof Error?e.message:'No se pudo restaurar el respaldo.');}
+  finally{setBusy(false);}
  };
  const runMigration=()=>{
   setError('');setNotice('');
@@ -189,15 +214,16 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    <header className="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-900 px-5 py-4 text-white"><div><h2 id="migration-title" className="text-lg font-bold">Asistente Inteligente de Migración</h2><p className="mt-1 text-sm text-slate-300">Multiarchivo · detección de módulos · validación antes de escribir</p></div><button onClick={onClose} aria-label="Cerrar" className="rounded-lg p-2 hover:bg-slate-700"><X size={20}/></button></header>
    <div className="space-y-5 overflow-y-auto p-5">
     <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500"><FileUp size={30} className="mb-2 text-emerald-700"/><strong>Selecciona uno o varios archivos</strong><span className="mt-1 text-sm text-slate-500">JSON, CSV, TSV, TXT, XLSX o XLSM · los archivos se analizan localmente</span><input className="mt-3 block max-w-full text-sm" type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={e=>void readFiles(Array.from(e.target.files||[]))}/></label>
-    {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {rows.length} registros detectados</p>}
+    {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {backupPayload?'respaldo contable completo detectado':rows.length+' registros detectados'}</p>}
+    {backupPayload&&<section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h3 className="font-bold">Respaldo completo de SICOVEN</h3><p className="mt-1">Se detectó un respaldo estructurado. Al confirmarlo, se reemplazarán los datos actuales por los del archivo, tras validar referencias y estructura.</p><ul className="mt-2 grid grid-cols-2 gap-1 md:grid-cols-3">{Object.entries(backupCounts??{}).map(([name,count])=><li key={name}>{name}: <strong>{count}</strong></li>)}</ul></section>}
     {analysis.length>0&&<section><h3 className="mb-2 font-bold text-slate-800">Módulos detectados automáticamente</h3><div className="grid gap-2 md:grid-cols-2">{analysis.map(m=><label key={m.id} className={'flex items-start gap-3 rounded-xl border p-3 '+(m.ready?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50')}><input type="checkbox" className="mt-1" checked={selected.includes(m.id)} disabled={!m.ready||m.id!=='inventory'} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span className="min-w-0"><span className="block font-semibold text-slate-800">{m.name}</span><span className="block text-xs text-slate-600">{m.ready?'Detectado · importador disponible':'Detectado parcialmente · requiere validar campos y dependencias'}</span>{m.missing.length>0&&<span className="block text-xs text-amber-800">Campos no detectados: {m.missing.join(', ')}</span>}</span></label>)}</div></section>}
     {rows.length>0&&<section className="rounded-xl border border-slate-200 p-3"><div className="mb-2 flex items-center gap-2 font-semibold"><FileSpreadsheet size={17}/> Vista previa (primeros 5 registros)</div><div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{headers.slice(0,8).map(h=><th key={h} className="border-b p-2">{h}</th>)}</tr></thead><tbody>{rows.slice(0,5).map((r,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h} className="max-w-40 truncate border-b p-2">{String(r[h]??'')}</td>)}</tr>)}</tbody></table></div></section>}
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Los módulos contables transaccionales no se importan automáticamente: requieren adaptadores con control de saldos, referencias y duplicidad documental.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
-    {rows.length>0&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.</span></label>}
+    {(rows.length>0||backupPayload)&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{backupPayload?'Confirmo que revisé el respaldo y autorizo reemplazar los datos actuales por los contenidos en este archivo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
    </div>
-   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||!rows.length||!confirmed||!selected.includes('inventory')} onClick={runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':'Confirmar migración'}</button></footer>
+   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||(!backupPayload&&(!rows.length||!confirmed||!selected.includes('inventory')))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':backupPayload?'Restaurar respaldo completo':'Confirmar migración'}</button></footer>
   </div>
  </div>;
 };

@@ -38,7 +38,7 @@ test('no descarta celdas vacías intermedias ni agrega columnas fuera de encabez
 
 test('rechaza encabezados duplicados equivalentes tras normalizar acentos y mayúsculas', () => {
   assert.throws(
-    () => parseDelimitedRecords('Código,nombre,CODIGO\\nA1,Tornillo,A2'),
+    () => parseDelimitedRecords('Código,nombre,CODIGO\nA1,Tornillo,A2'),
     /encabezados duplicados o equivalentes/
   );
 });
