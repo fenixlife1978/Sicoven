@@ -20,7 +20,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
   const [bcvRate, setBcvRate] = useState<string>('');
-  const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
+  const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
 
   if (!isOpen) return null;
 
@@ -37,7 +37,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
-      fiscalYear,
+      fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
       bcvRate: Number(bcvRate) || 0,
       lastRateUpdate: new Date().toISOString().split('T')[0]
     });
@@ -251,7 +251,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 max="2099"
                 required
                 value={fiscalYear}
-                onChange={e => setFiscalYear(Number(e.target.value))}
+                onChange={e => setFiscalYear(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
