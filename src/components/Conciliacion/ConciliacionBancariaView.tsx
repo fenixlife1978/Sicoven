@@ -97,6 +97,7 @@ export const ConciliacionBancariaView: React.FC = () => {
         // Check if there is a reconciled statement movement linked to this entry
         const isMatched = bankStatementMovements.some(
           m =>
+            m.companyId === currentCompany.id &&
             m.bankAccountId === activeBank.id &&
             m.isReconciled &&
             m.reconciledWithJournalEntryId === entry.id
@@ -123,7 +124,7 @@ export const ConciliacionBancariaView: React.FC = () => {
 
   // 2. Extracto Bancario: Movimientos cargados del banco
   const statementMovements = bankStatementMovements
-    .filter(m => m.bankAccountId === activeBank.id && m.date <= cutoffDate)
+    .filter(m => m.companyId === currentCompany.id && m.bankAccountId === activeBank.id && m.date <= cutoffDate)
     .sort((a, b) => a.date.localeCompare(b.date));
 
   // Calculations for Conciliation
