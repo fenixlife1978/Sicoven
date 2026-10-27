@@ -42,6 +42,17 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
   const parsed = scored[0];
   if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
   const headers = parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1));
+  const normalizedHeaders = headers.map(normalizeMigrationValue);
+  const seenHeaders = new Set<string>();
+  const duplicateHeaders = new Set<string>();
+  for (const header of normalizedHeaders) {
+    if (seenHeaders.has(header)) duplicateHeaders.add(header);
+    seenHeaders.add(header);
+  }
+  if (duplicateHeaders.size) {
+    throw new Error('El archivo contiene encabezados duplicados o equivalentes tras normalizar: ' +
+      [...duplicateHeaders].join(', ') + '. Renombra las columnas antes de importar.');
+  }
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
     headers.forEach((header, index) => { record[header] = values[index] ?? ''; });
