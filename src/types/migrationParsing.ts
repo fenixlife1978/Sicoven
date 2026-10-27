@@ -3,6 +3,22 @@ export type MigrationRow = Record<string, unknown>;
 export const normalizeMigrationValue = (value: unknown): string =>
   String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
 
+export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'archivo'): string[] => {
+  const normalized = headers.map(header => normalizeMigrationValue(header));
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const header of normalized) {
+    if (!header) continue;
+    if (seen.has(header)) duplicates.add(header);
+    seen.add(header);
+  }
+  if (duplicates.size) {
+    throw new Error('El ' + context + ' contiene encabezados duplicados o equivalentes tras normalizar: ' +
+      [...duplicates].join(', ') + '. Renombra las columnas antes de importar.');
+  }
+  return normalized;
+};
+
 const splitDelimited = (text: string, delimiter: string): string[][] => {
   const rows: string[][] = [];
   let row: string[] = [];
@@ -42,17 +58,7 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
   const parsed = scored[0];
   if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
   const headers = parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1));
-  const normalizedHeaders = headers.map(normalizeMigrationValue);
-  const seenHeaders = new Set<string>();
-  const duplicateHeaders = new Set<string>();
-  for (const header of normalizedHeaders) {
-    if (seenHeaders.has(header)) duplicateHeaders.add(header);
-    seenHeaders.add(header);
-  }
-  if (duplicateHeaders.size) {
-    throw new Error('El archivo contiene encabezados duplicados o equivalentes tras normalizar: ' +
-      [...duplicateHeaders].join(', ') + '. Renombra las columnas antes de importar.');
-  }
+  validateUniqueMigrationHeaders(headers, 'archivo delimitado');
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
     headers.forEach((header, index) => { record[header] = values[index] ?? ''; });
