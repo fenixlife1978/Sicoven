@@ -53,7 +53,7 @@ export const parseMigrationNumber = (value: unknown): number => {
   if (typeof value === 'number') return Number.isFinite(value) ? value : NaN;
   if (value === null || value === undefined || String(value).trim() === '') return NaN;
   let raw = String(value).trim().replace(/[\s\u00a0]/g, '').replace(/[^0-9,().+\-]/g, '');
-  if (!/\\d/.test(raw)) return NaN;
+  if (!/\d/.test(raw)) return NaN;
   if (raw.startsWith('(') && raw.endsWith(')')) raw = '-' + raw.slice(1, -1);
   const commas = (raw.match(/,/g) || []).length;
   const dots = (raw.match(/\./g) || []).length;
