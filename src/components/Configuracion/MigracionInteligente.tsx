@@ -130,15 +130,32 @@ export const MigracionInteligente: React.FC = () => {
             notes.push('ADVERTENCIA: no se detectó identificador de asiento; se validó cada fila por separado y no se puede confirmar integridad por asiento.');
           }
         }
-        const rowKeys = rows.map(row => {
-          const key = Object.keys(row).find(k => ['invoice','invoicenumber','factura','documento','code','codigo','sku','rif','taxid','reference','referencia'].includes(normalize(k)));
-          return key ? normalize(row[key]) : '';
-        }).filter(Boolean);
-        const duplicateCount = rowKeys.length - new Set(rowKeys).size;
-        if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+        const identityAliases: Partial<Record<ModuleKey, string[]>> = {
+          inventory: ['code','codigo','sku','itemcode','codarticulo'],
+          customers: ['rif','documento','identificacion','taxid','customerid'],
+          suppliers: ['rif','documento','identificacion','taxid','supplierid'],
+          receivables: ['invoice','invoicenumber','factura','documento','referencia'],
+          payables: ['invoice','invoicenumber','factura','documento','referencia'],
+          sales: ['invoice','invoicenumber','factura','numerofactura','documento'],
+          purchases: ['invoice','invoicenumber','factura','numerofactura','documento'],
+          accounts: ['codigo','code','cuenta','accountcode'],
+          banks: ['referencia','reference','numero'],
+          retentions: ['comprobante','numerocomprobante','vouchernumber'],
+          assets: ['codigo','code','assetid']
+        };
+        const identity = identityAliases[mod.key] || [];
+        if (identity.length) {
+          const rowKeys = rows.map(row => {
+            const key = Object.keys(row).find(k => identity.includes(normalize(k)));
+            return key ? normalize(row[key]) : '';
+          }).filter(Boolean);
+          const duplicateCount = rowKeys.length - new Set(rowKeys).size;
+          if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+        }
         if (missing.length) notes.push('Detección parcial: faltan campos obligatorios para este módulo.');
         if (mod.key !== 'journal') notes.push('La detección de columnas no sustituye la validación de relaciones y saldos antes de escribir.');
-        all.push({ key: mod.key, name: mod.name, fields, rows, status: missing.length ? 'partial' : 'complete', missing, notes, selected: selected.has(mod.key + '|' + file.name), source: file.name });
+        const blocked = notes.some(note => note.startsWith('BLOQUEO:'));
+        all.push({ key: mod.key, name: mod.name, fields, rows, status: blocked ? 'blocked' : missing.length ? 'partial' : 'complete', missing, notes, selected: selected.has(mod.key + '|' + file.name), source: file.name });
       }
     }
     return all;
@@ -183,7 +200,7 @@ export const MigracionInteligente: React.FC = () => {
       <p className="text-xs text-slate-500">Marca únicamente los módulos que deseas incluir. Los módulos repetidos por archivo se muestran por separado.</p>
       {detections.map((d,i) => { const id=d.key+'|'+d.source; const checked=selected.has(id); return <label key={id+i} className={'block p-4 rounded-xl border cursor-pointer '+(checked?'border-indigo-300 bg-indigo-50/40':'border-slate-200 hover:bg-slate-50')}>
         <div className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={checked} onChange={()=>toggle(id)}/><div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':'Parcial / requiere revisión'}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':d.status==='blocked'?'Bloqueado por validación':'Parcial / requiere revisión'}</span></div>
           <p className="text-xs text-slate-600 mt-1">{d.rows.length} filas · {d.fields.length} columnas reconocidas</p>
           {d.missing.length>0 && <p className="text-xs text-amber-800 mt-2">Campos faltantes: {d.missing.join(', ')}</p>}
           {d.notes.map((n,j)=><p key={j} className="text-xs text-slate-600 mt-1 flex gap-1"><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5"/>{n}</p>)}
