@@ -138,7 +138,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }
      parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
-    parsed=parsed.map(row=>{const normalized=Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row; return {...normalized, migrationsource:String(normalized.migrationsource??file.name)};});
+    parsed=parsed.map((row,rowIndex)=>{const normalized:Row={};const seenKeys=new Set<string>();for(const [key,value] of Object.entries(row)){const normalizedKey=norm(key);if(!normalizedKey)continue;if(seenKeys.has(normalizedKey))throw new Error(file.name+', registro '+(rowIndex+1)+': hay claves duplicadas tras normalizar acentos, mayúsculas o signos ('+key+').');seenKeys.add(normalizedKey);normalized[normalizedKey]=scalar(value);}return {...normalized,migrationsource:String(normalized.migrationsource??file.name)};});
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
