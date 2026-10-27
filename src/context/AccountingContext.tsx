@@ -1960,6 +1960,44 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (data.journalEntries.some((entry: any) => !entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items))) {
         throw new Error('Hay asientos asociados a empresas inexistentes o con líneas inválidas.');
       }
+      const accountByCode = new Map<string, Account>();
+      for (const account of data.accounts as Account[]) {
+        if (!account || typeof account.code !== 'string' || !account.code.trim() ||
+            typeof account.name !== 'string' || !account.name.trim() ||
+            !['ACTIVO','PASIVO','PATRIMONIO','INGRESOS','COSTOS','GASTOS'].includes(account.type) ||
+            !Number.isInteger(account.level) || account.level < 1 || account.level > 5 ||
+            typeof account.isMovement !== 'boolean' || accountByCode.has(account.code.toLowerCase())) {
+          throw new Error('El plan de cuentas contiene códigos duplicados o cuentas con campos inválidos.');
+        }
+        accountByCode.set(account.code.toLowerCase(), account);
+      }
+      for (const account of data.accounts as Account[]) {
+        if (account.parentCode && !accountByCode.has(account.parentCode.toLowerCase())) {
+          throw new Error('La cuenta ' + account.code + ' referencia una cuenta padre inexistente.');
+        }
+      }
+      for (const entry of data.journalEntries as JournalEntry[]) {
+        if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
+            !/^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date) ||
+            !Number.isFinite(entry.bcvRate) || entry.bcvRate <= 0 || entry.items.length < 2) {
+          throw new Error('Hay asientos con empresa, fecha, tasa BCV o líneas inválidas.');
+        }
+        let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
+        for (const line of entry.items as JournalEntryItem[]) {
+          const account = accountByCode.get(String(line.accountCode || '').toLowerCase());
+          const amounts = [line.debitBs, line.creditBs, line.debitUsd, line.creditUsd].map(Number);
+          if (!account || !account.isMovement || amounts.some(value => !Number.isFinite(value) || value < 0) ||
+              (Number(line.debitBs) > 0 && Number(line.creditBs) > 0) ||
+              (Number(line.debitUsd) > 0 && Number(line.creditUsd) > 0)) {
+            throw new Error('El asiento ' + entry.entryNumber + ' contiene una cuenta o línea contable inválida.');
+          }
+          debitBs += Number(line.debitBs); creditBs += Number(line.creditBs);
+          debitUsd += Number(line.debitUsd); creditUsd += Number(line.creditUsd);
+        }
+        if (Math.abs(debitBs-creditBs) >= 0.01 || Math.abs(debitUsd-creditUsd) >= 0.01 || debitBs <= 0 || debitUsd <= 0) {
+          throw new Error('El asiento ' + entry.entryNumber + ' no cuadra en ambas monedas. No se restauró el respaldo.');
+        }
+      }
       for (const key of requiredCollections) {
         const rows = data[key] as any[];
         if (rows.some(row => !row || typeof row !== 'object' || (row.companyId && !companyIds.has(row.companyId)))) {
