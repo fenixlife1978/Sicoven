@@ -190,7 +190,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const key=code.toLowerCase();if(seen.has(key)||existing.has(key))throw new Error('Código de cuenta duplicado o ya existente: '+code+'. No se sobrescribieron cuentas.');seen.add(key);
      const rawLevel=pick(r,'level','nivel');const level=rawLevel===undefined?code.split('.').length:parseMigrationNumber(rawLevel);
      if(!Number.isInteger(level)||level<1||level>5)throw new Error('Fila '+(i+1)+': nivel inválido para '+code+'.');
-     const movement=norm(String(pick(r,'isMovement','cuentaMovimiento','movimiento','aceptaMovimientos')??''));
+     const movementRaw=pick(r,'isMovement','cuentaMovimiento','movimiento','aceptaMovimientos');
+     if(movementRaw===undefined)throw new Error('Fila '+(i+1)+': indique explícitamente si la cuenta admite movimientos (isMovement/aceptaMovimientos). No se inferirá por el nivel.');
+     const movement=norm(String(movementRaw));
+     if(!['true','false','si','no','yes','0','1','movimiento','detail','titulo','encabezado'].includes(movement))throw new Error('Fila '+(i+1)+': indicador de cuenta de movimiento inválido.');
      const isMovement=['true','si','yes','1','movimiento','detail'].includes(movement);
      const parentCode=String(pick(r,'parentCode','codigoPadre','cuentaPadre')??'').trim();
      return {code,name,type:type as 'ACTIVO'|'PASIVO'|'PATRIMONIO'|'INGRESOS'|'COSTOS'|'GASTOS',level,isMovement,parentCode:parentCode||undefined};
