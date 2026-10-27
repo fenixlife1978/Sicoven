@@ -38,7 +38,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, sales, purchases, currentCompany } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -92,7 +92,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      ['salespricebs','precioventabs','pricebs','precioventa'].some(k=>keys.has(norm(k)));
     const accountReady=m.id==='accounts'&&['code','accountcode','codigo','codigocuenta'].some(k=>keys.has(norm(k)))&&['name','accountname','nombre','nombrecuenta'].some(k=>keys.has(norm(k)))&&['type','accounttype','tipo','tipocuenta','clasificacion'].some(k=>keys.has(norm(k)));
     const journalReady=m.id==='journal'&&['date','fecha'].some(k=>keys.has(norm(k)))&&['accountcode','codigocuenta','cuenta'].some(k=>keys.has(norm(k)))&&['debitbs','debe','debito'].some(k=>keys.has(norm(k)))&&['creditbs','haber','credito'].some(k=>keys.has(norm(k)));
-    const readyFinal=ready||accountReady||journalReady;
+    const salesReady=m.id==='sales'&&['invoicedate','fecha'].some(k=>keys.has(norm(k)))&&['invoicenumber','factura','documento'].some(k=>keys.has(norm(k)))&&['customerrif','rifcliente','rif'].some(k=>keys.has(norm(k)))&&['customername','cliente','nombrecliente'].some(k=>keys.has(norm(k)))&&['totalamountbs','totalbs','total'].some(k=>keys.has(norm(k)));
+    const purchasesReady=m.id==='purchases'&&['invoicedate','fecha'].some(k=>keys.has(norm(k)))&&['invoicenumber','factura','documento'].some(k=>keys.has(norm(k)))&&['supplierrif','rifproveedor','rif'].some(k=>keys.has(norm(k)))&&['suppliername','proveedor','nombreproveedor'].some(k=>keys.has(norm(k)))&&['totalamountbs','totalbs','total'].some(k=>keys.has(norm(k)));
+    const readyFinal=ready||accountReady||journalReady||salesReady||purchasesReady;
     detected.push({...m,source,matched,missing,detected:true,ready:readyFinal});
    }
   }
@@ -172,9 +174,65 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']];
   const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
   if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
-  if(selected.length!==1 || !['inventory','accounts','journal'].includes(selected[0])){setError('Selecciona un único módulo con importador disponible: Inventario, Plan de cuentas o Asientos contables.');return;}
+  if(selected.length!==1 || !['inventory','accounts','journal','sales','purchases'].includes(selected[0])){setError('Selecciona un único módulo con importador disponible: Inventario, Plan de cuentas, Asientos, Ventas o Compras.');return;}
   setBusy(true);
   try{
+   if(selected[0]==='sales'||selected[0]==='purchases'){
+    const kind=selected[0];
+    const sourceRows=rows.filter(r=>['invoiceNumber','factura','documento'].some(k=>pick(r,k)!==undefined));
+    if(!sourceRows.length)throw new Error('No hay facturas identificables para importar.');
+    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)||Number.isNaN(Date.parse(value+'T00:00:00Z')))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+    const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
+    const seen=new Set<string>();
+    const existingDocs=new Set((kind==='sales'?sales:purchases).map(d=>(d.invoiceNumber||'').trim().toLowerCase()));
+    const prepared=sourceRows.map((r,i)=>{
+     const invoiceNumber=String(pick(r,'invoiceNumber','factura','documento')??'').trim();
+     const partyName=String(pick(r,kind==='sales'?'customerName':'supplierName',kind==='sales'?'cliente':'proveedor',kind==='sales'?'nombreCliente':'nombreProveedor')??'').trim();
+     const partyRif=String(pick(r,kind==='sales'?'customerRif':'supplierRif',kind==='sales'?'rifCliente':'rifProveedor','rif','taxId')??'').trim();
+     const key=invoiceNumber.toLowerCase();
+     if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
+     if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada o ya existente: '+invoiceNumber+'. No se sobrescribieron documentos.');seen.add(key);
+     const invoiceDate=dateValue(r,i);
+     const totalAmountBs=num(r,i,true,'totalAmountBs','totalBs','total');
+     const exemptAmountBs=num(r,i,true,'exemptAmountBs','montoExentoBs','exentoBs');
+     const taxableBaseBs=num(r,i,true,'taxableBaseBs','baseImponibleBs','baseBs');
+     const taxRate=num(r,i,true,'taxRate','alicuota','tasaIva');
+     const vatAmountBs=num(r,i,true,'vatAmountBs','ivaBs','montoIvaBs');
+     const vatWithheldBs=num(r,i,true,'vatWithheldBs','ivaRetenidoBs','retencionIvaBs');
+     const bcvRate=num(r,i,true,'bcvRate','tasaBcv');
+     const totalAmountUsd=num(r,i,true,'totalAmountUsd','totalUsd');
+     const taxableBaseUsd=num(r,i,true,'taxableBaseUsd','baseImponibleUsd','baseUsd');
+     const vatAmountUsd=num(r,i,true,'vatAmountUsd','ivaUsd');
+     const vatWithheldUsd=num(r,i,true,'vatWithheldUsd','ivaRetenidoUsd');
+     const paymentTermRaw=norm(String(pick(r,'paymentTerm','condicionPago','condicion')??''));
+     if(!['contado','credito','cash','credit'].includes(paymentTermRaw))throw new Error('Fila '+(i+1)+': indique expresamente paymentTerm CONTADO o CREDITO; no se supondrá la condición de pago.');
+     const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
+     const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
+     const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
+     if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate||'')))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
+     const rate=bcvRate||currentCompany.bcvRate;
+     if(rate<=0)throw new Error('Fila '+(i+1)+': la tasa BCV debe ser positiva.');
+     const expectedBs=taxableBaseBs+exemptAmountBs+vatAmountBs;
+     const expectedUsd=taxableBaseUsd+(rate>0?exemptAmountBs/rate:0)+vatAmountUsd;
+     if(Math.abs(expectedBs-totalAmountBs)>0.02||Math.abs(expectedUsd-totalAmountUsd)>0.02)throw new Error('Fila '+(i+1)+': el total no cuadra con base imponible, exento e IVA en Bs/USD.');
+     if(vatWithheldBs>totalAmountBs||vatWithheldUsd>totalAmountUsd)throw new Error('Fila '+(i+1)+': la retención supera el total de la factura.');
+     const documentTypeRaw=String(pick(r,'documentType','tipoDocumento')??'01').trim();
+     if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
+     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
+     if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
+     if(kind==='sales')return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
+     const retentionRate=num(r,i,true,'retentionRate','tasaRetencion');
+     const islrWithheldBs=num(r,i,true,'islrWithheldBs','islrRetenidoBs');
+     const islrWithheldUsd=num(r,i,true,'islrWithheldUsd','islrRetenidoUsd');
+     const payable=totalAmountBs-vatWithheldBs-islrWithheldBs;
+     if(islrWithheldBs>payable||islrWithheldUsd>totalAmountUsd-vatWithheldUsd)throw new Error('Fila '+(i+1)+': las retenciones superan el neto a pagar.');
+     return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,vatVoucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
+    });
+    if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
+    else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Verifica documentos, impuestos y saldos antes de operar.');
+    return;
+   }
    if(selected[0]==='accounts'){
     const sourceRows=rows.filter(r=>['code','accountcode','codigo','codigocuenta'].some(k=>pick(r,k)!==undefined)&&['name','accountname','nombre','nombrecuenta'].some(k=>pick(r,k)!==undefined));
     if(!sourceRows.length)throw new Error('No hay filas de plan de cuentas con código y nombre.');
@@ -283,14 +341,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500"><FileUp size={30} className="mb-2 text-emerald-700"/><strong>Selecciona uno o varios archivos</strong><span className="mt-1 text-sm text-slate-500">JSON, CSV, TSV, TXT, XLSX o XLSM · los archivos se analizan localmente</span><input className="mt-3 block max-w-full text-sm" type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={e=>void readFiles(Array.from(e.target.files||[]))}/></label>
     {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {backupPayload?'respaldo contable completo detectado':rows.length+' registros detectados'}</p>}
     {backupPayload&&<section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h3 className="font-bold">Respaldo completo de SICOVEN</h3><p className="mt-1">Se detectó un respaldo estructurado. Al confirmarlo, se reemplazarán los datos actuales por los del archivo, tras validar referencias y estructura.</p><ul className="mt-2 grid grid-cols-2 gap-1 md:grid-cols-3">{Object.entries(backupCounts??{}).map(([name,count])=><li key={name}>{name}: <strong>{count}</strong></li>)}</ul></section>}
-    {analysis.length>0&&<section><h3 className="mb-2 font-bold text-slate-800">Módulos detectados automáticamente</h3><div className="grid gap-2 md:grid-cols-2">{analysis.map(m=><label key={m.id} className={'flex items-start gap-3 rounded-xl border p-3 '+(m.ready?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50')}><input type="checkbox" className="mt-1" checked={selected.includes(m.id)} disabled={!m.ready||!['inventory','accounts','journal'].includes(m.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span className="min-w-0"><span className="block font-semibold text-slate-800">{m.name}</span><span className="block text-xs text-slate-600">{m.ready?'Detectado · importador disponible':'Detectado parcialmente · requiere validar campos y dependencias'}</span>{m.missing.length>0&&<span className="block text-xs text-amber-800">Campos no detectados: {m.missing.join(', ')}</span>}</span></label>)}</div></section>}
+    {analysis.length>0&&<section><h3 className="mb-2 font-bold text-slate-800">Módulos detectados automáticamente</h3><div className="grid gap-2 md:grid-cols-2">{analysis.map(m=><label key={m.id} className={'flex items-start gap-3 rounded-xl border p-3 '+(m.ready?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50')}><input type="checkbox" className="mt-1" checked={selected.includes(m.id)} disabled={!m.ready||!['inventory','accounts','journal','sales','purchases'].includes(m.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span className="min-w-0"><span className="block font-semibold text-slate-800">{m.name}</span><span className="block text-xs text-slate-600">{m.ready?'Detectado · importador disponible':'Detectado parcialmente · requiere validar campos y dependencias'}</span>{m.missing.length>0&&<span className="block text-xs text-amber-800">Campos no detectados: {m.missing.join(', ')}</span>}</span></label>)}</div></section>}
     {rows.length>0&&<section className="rounded-xl border border-slate-200 p-3"><div className="mb-2 flex items-center gap-2 font-semibold"><FileSpreadsheet size={17}/> Vista previa (primeros 5 registros)</div><div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{headers.slice(0,8).map(h=><th key={h} className="border-b p-2">{h}</th>)}</tr></thead><tbody>{rows.slice(0,5).map((r,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h} className="max-w-40 truncate border-b p-2">{String(r[h]??'')}</td>)}</tr>)}</tbody></table></div></section>}
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Los módulos contables transaccionales no se importan automáticamente: requieren adaptadores con control de saldos, referencias y duplicidad documental.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
     {(rows.length>0||backupPayload)&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{backupPayload?'Confirmo que revisé el respaldo y autorizo reemplazar los datos actuales por los contenidos en este archivo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
    </div>
-   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||(!backupPayload&&(!rows.length||!confirmed||selected.length!==1||!['inventory','accounts','journal'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':backupPayload?'Restaurar respaldo completo':'Confirmar migración'}</button></footer>
+   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||(!backupPayload&&(!rows.length||!confirmed||selected.length!==1||!['inventory','accounts','journal','sales','purchases'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':backupPayload?'Restaurar respaldo completo':'Confirmar migración'}</button></footer>
   </div>
  </div>;
 };
