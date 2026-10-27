@@ -75,6 +75,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'diario', label: 'Libro Diario', icon: BookOpen },
     { id: 'mayor', label: 'Libro Mayor', icon: ListTree },
     { id: 'balances', label: 'Balances VEN-NIF', icon: Scale },
+    { id: 'tesoreria', label: 'Tesorería', icon: Wallet },
     { id: 'conciliacion', label: 'Conciliación Bancaria', icon: Landmark },
     { id: 'compras', label: 'Libro de Compras', icon: ShoppingCart },
     { id: 'cxp', label: 'Cuentas por pagar', icon: Wallet },
