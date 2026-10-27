@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from './migrationParsing';
+import { isValidIsoDate, normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from './migrationParsing';
 
 test('normaliza encabezados con acentos, espacios y signos', () => {
   assert.equal(normalizeMigrationValue('Código de artículo'), 'codigodearticulo');
@@ -49,4 +49,15 @@ test('valida encabezados compartidos para hojas Excel y archivos delimitados', (
     () => validateUniqueMigrationHeaders(['Código', 'CODIGO', 'Nombre'], 'hoja de Excel'),
     /hoja de Excel contiene encabezados duplicados o equivalentes/
   );
+});
+
+
+test('valida fechas ISO reales y rechaza fechas imposibles', () => {
+  assert.equal(isValidIsoDate('2026-10-27'), true);
+  assert.equal(isValidIsoDate('2024-02-29'), true);
+  assert.equal(isValidIsoDate('2026-02-29'), false);
+  assert.equal(isValidIsoDate('2026-02-31'), false);
+  assert.equal(isValidIsoDate('2026-13-01'), false);
+  assert.equal(isValidIsoDate('27/10/2026'), false);
+  assert.equal(isValidIsoDate(''), false);
 });
