@@ -101,10 +101,9 @@ export const MigracionInteligente: React.FC = () => {
         const rows = file.rows;
         const notes: string[] = [];
         if (mod.key === 'journal') {
-          const findValue = (row: Row, aliases: string[]) => {
+          const findRaw = (row: Row, aliases: string[]) => {
             const key = Object.keys(row).find(k => aliases.includes(normalize(k)));
-            const raw = key ? row[key] : 0;
-            return parseMigrationNumber(raw ?? '0');
+            return key ? row[key] : undefined;
           };
           const referenceAliases = ['referencia','comprobante','numeroasiento','entrynumber','asiento','journalid','id'];
           const grouped = new Map<string, { debit: number; credit: number; invalid: boolean; rows: number }>();
@@ -113,17 +112,28 @@ export const MigracionInteligente: React.FC = () => {
             const reference = referenceKey ? String(row[referenceKey] ?? '').trim() : '';
             const groupKey = reference || '__fila_' + (index + 1);
             const group = grouped.get(groupKey) || { debit: 0, credit: 0, invalid: false, rows: 0 };
-            const debit = findValue(row, mod.aliases.debit);
-            const credit = findValue(row, mod.aliases.credit);
-            group.debit += Number.isFinite(debit) ? debit : 0;
-            group.credit += Number.isFinite(credit) ? credit : 0;
-            group.invalid = group.invalid || !Number.isFinite(debit) || !Number.isFinite(credit);
+            const debitRaw = findRaw(row, mod.aliases.debit);
+            const creditRaw = findRaw(row, mod.aliases.credit);
+            const hasDebit = debitRaw !== undefined && String(debitRaw).trim() !== '';
+            const hasCredit = creditRaw !== undefined && String(creditRaw).trim() !== '';
+            const parsedDebit = hasDebit ? parseMigrationNumber(debitRaw) : 0;
+            const parsedCredit = hasCredit ? parseMigrationNumber(creditRaw) : 0;
+            const invalidLine = (!hasDebit && !hasCredit) ||
+              (hasDebit && !Number.isFinite(parsedDebit)) ||
+              (hasCredit && !Number.isFinite(parsedCredit)) ||
+              (Number.isFinite(parsedDebit) && parsedDebit < 0) ||
+              (Number.isFinite(parsedCredit) && parsedCredit < 0) ||
+              (parsedDebit > 0 && parsedCredit > 0) ||
+              (parsedDebit === 0 && parsedCredit === 0);
+            group.debit += Number.isFinite(parsedDebit) ? parsedDebit : 0;
+            group.credit += Number.isFinite(parsedCredit) ? parsedCredit : 0;
+            group.invalid = group.invalid || invalidLine;
             group.rows += 1;
             grouped.set(groupKey, group);
           });
           const invalidGroups = [...grouped.values()].filter(group => group.invalid).length;
           const unbalanced = [...grouped.entries()].filter(([, group]) => !group.invalid && Math.abs(group.debit - group.credit) > 0.01);
-          if (invalidGroups) notes.push('BLOQUEO: hay importes contables no numéricos en ' + invalidGroups + ' grupo(s).');
+          if (invalidGroups) notes.push('BLOQUEO: hay líneas contables sin importes, con importes inválidos/negativos o con debe y haber simultáneos en ' + invalidGroups + ' asiento(s)/grupo(s).');
           if (unbalanced.length) notes.push('BLOQUEO: ' + unbalanced.length + ' asiento(s) no cuadran individualmente. Diferencias: ' + unbalanced.slice(0, 5).map(([ref, group]) => ref + ': ' + (group.debit - group.credit).toFixed(2)).join('; ') + (unbalanced.length > 5 ? '; …' : ''));
           if (!invalidGroups && !unbalanced.length) notes.push('Cada grupo identificado cuadra en débitos/créditos; aún deben validarse las cuentas de movimiento, fechas, referencias y duplicados.');
           if (!rows.some(row => Object.keys(row).some(k => referenceAliases.includes(normalize(k))))) {
