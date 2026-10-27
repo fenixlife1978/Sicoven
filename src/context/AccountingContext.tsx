@@ -95,6 +95,7 @@ interface AccountingContextType {
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
   addBankAccount: (bank: Omit<BankAccount, 'id' | 'companyId'>) => BankAccount;
+  registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   deleteBankStatementMovement: (id: string) => void;
   reconcileMovementManual: (statementMovementId: string, journalEntryId?: string) => void;
@@ -1670,15 +1671,94 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setIslrVouchers(prev => prev.filter(v => v.id !== id));
   };
 
-  // Conciliación Bancaria
+  // Tesorería: alta bancaria y creación automática del auxiliar contable.
   const addBankAccount = (bankData: Omit<BankAccount, 'id' | 'companyId'>): BankAccount => {
-    const newBank: BankAccount = {
-      ...bankData,
-      id: `bank-acc-${Date.now()}`,
-      companyId: currentCompany.id
-    };
+    if (!currentCompany.id) throw new Error('Registre o seleccione una empresa antes de crear cuentas bancarias.');
+    const digits = String(bankData.accountNumber || '').replace(/\D/g, '');
+    if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
+    if (!bankData.bankName.trim()) throw new Error('Indique el nombre del banco.');
+    if (bankAccounts.some(b => b.companyId === currentCompany.id && b.accountNumber.replace(/\D/g, '') === digits)) {
+      throw new Error('Ya existe una cuenta bancaria con ese número en la empresa activa.');
+    }
+    const parentCode = bankData.currency === 'USD' ? '1.1.1.05' : '1.1.1.03';
+    const controlName = bankData.currency === 'USD' ? 'Bancos Moneda Extranjera (control)' : 'Bancos Moneda Nacional (control)';
+    const existingParent = accounts.find(a => a.code === parentCode);
+    const parent: Account = existingParent
+      ? { ...existingParent, name: controlName, isMovement: false, level: 4, parentCode: '1.1.1' }
+      : { code: parentCode, name: controlName, type: 'ACTIVO', level: 4, isMovement: false, parentCode: '1.1.1' };
+    const children = accounts.filter(a => a.parentCode === parentCode && /^\d+$/.test(a.code.split('.').at(-1) || ''));
+    const nextAux = children.reduce((max, a) => Math.max(max, Number(a.code.split('.').at(-1) || 0)), 0) + 1;
+    const accountCode = parentCode + '.' + String(nextAux).padStart(2, '0');
+    const auxName = `${bankData.bankName.trim()} - Cta. ${bankData.currency === 'USD' ? 'Corriente USD' : 'Corriente Bs.'}`;
+    const newAux: Account = { code: accountCode, name: auxName, type: 'ACTIVO', level: 5, isMovement: true, parentCode };
+    if (accounts.some(a => a.code === accountCode)) throw new Error('No se pudo generar un código auxiliar único. Actualice el catálogo e intente nuevamente.');
+    const newBank: BankAccount = { ...bankData, accountCode, accountNumber: digits, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    setAccounts(prev => [...prev.filter(a => a.code !== parentCode), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
     setBankAccounts(prev => [...prev, newBank]);
+    const amountBs = Number(bankData.initialBalanceBs || 0);
+    const amountUsd = Number(bankData.initialBalanceUsd || 0);
+    if (amountBs > 0 || amountUsd > 0) {
+      const rate = Number(currentCompany.bcvRate);
+      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
+      const equity = accounts.find(a => a.code === '3.3.1.01' && a.isMovement);
+      if (!equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
+      const bs = Math.round(amountBs * 100) / 100;
+      const usd = Math.round((amountUsd || bs / rate) * 1000000) / 1000000;
+      addJournalEntry({
+        entryNumber: 0, date: new Date().toISOString().slice(0,10),
+        description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,
+        referenceDoc: `APERTURA-${digits}`,
+        items: [
+          { accountCode, accountName: auxName, debitBs: bs, creditBs: 0, debitUsd: usd, creditUsd: 0, description: 'Saldo inicial de tesorería' },
+          { accountCode: equity.code, accountName: equity.name, debitBs: 0, creditBs: bs, debitUsd: 0, creditUsd: usd, description: 'Contrapartida saldo inicial de tesorería' }
+        ]
+      });
+    }
     return newBank;
+  };
+
+  const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
+    const source = bankAccounts.find(b => b.id === draft.bankAccountId && b.companyId === currentCompany.id);
+    if (!source) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !Number.isFinite(new Date(draft.date + 'T00:00:00Z').getTime())) throw new Error('La fecha del movimiento no es válida.');
+    if (!draft.reference.trim() || !draft.description.trim()) throw new Error('La referencia y el concepto son obligatorios.');
+    if (!Number.isFinite(draft.amount) || draft.amount <= 0) throw new Error('El importe debe ser mayor que cero.');
+    const rate = Number(currentCompany.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida para registrar movimientos.');
+    const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
+    const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : Math.round(amountBs / rate * 1000000) / 1000000;
+    const bankAccount = accounts.find(a => a.code === source.accountCode && a.isMovement);
+    if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
+    let items: JournalEntryItem[];
+    if (draft.type === 'TRANSFER') {
+      const destination = bankAccounts.find(b => b.id === draft.destinationBankAccountId && b.companyId === currentCompany.id);
+      if (!destination || destination.id === source.id) throw new Error('Seleccione otra cuenta bancaria propia como destino.');
+      const destAccount = accounts.find(a => a.code === destination.accountCode && a.isMovement);
+      if (!destAccount) throw new Error('La cuenta auxiliar bancaria de destino no es válida.');
+      const destBs = destination.currency === 'USD' ? Math.round(amountUsd * rate * 100) / 100 : amountBs;
+      const destUsd = destination.currency === 'USD' ? amountUsd : Math.round(destBs / rate * 1000000) / 1000000;
+      items = [
+        { accountCode: destAccount.code, accountName: destAccount.name, debitBs: destBs, creditBs: 0, debitUsd: destUsd, creditUsd: 0, description: 'Entrada por transferencia entre cuentas propias' },
+        { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Salida por transferencia entre cuentas propias' }
+      ];
+    } else {
+      const counterpart = accounts.find(a => a.code === draft.counterpartAccountCode && a.isMovement && a.code !== bankAccount.code);
+      if (!counterpart) throw new Error('Seleccione una cuenta contable de contrapartida válida.');
+      items = draft.type === 'INCOME'
+        ? [
+            { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: draft.description.trim() },
+            { accountCode: counterpart.code, accountName: counterpart.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: draft.description.trim() }
+          ]
+        : [
+            { accountCode: counterpart.code, accountName: counterpart.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: draft.description.trim() },
+            { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: draft.description.trim() }
+          ];
+    }
+    const entry = addJournalEntry({
+      entryNumber: 0, date: draft.date, description: draft.description.trim(), type: 'MANUAL', bcvRate: rate,
+      referenceDoc: draft.reference.trim(), items
+    });
+    return entry;
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
@@ -2136,6 +2216,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
         bankStatementMovements: bankStatementMovements.filter(m => m.companyId === currentCompany.id),
         addBankAccount,
+        registerTreasuryMovement,
         addBankStatementMovement,
         deleteBankStatementMovement,
         reconcileMovementManual,
