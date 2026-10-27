@@ -50,6 +50,26 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   const [companyDropdownOpen, setCompanyDropdownOpen] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [licenseStatus, setLicenseStatus] = useState<{ authorized: boolean; status: string } | null>(null);
+
+  useEffect(() => {
+    let mounted = true;
+    const refreshLicenseStatus = () => {
+      window.sicovenStore?.getLicenseStatus().then((result) => {
+        if (mounted) setLicenseStatus(result);
+      }).catch(() => {
+        if (mounted) setLicenseStatus(null);
+      });
+    };
+    refreshLicenseStatus();
+    window.addEventListener('focus', refreshLicenseStatus);
+    window.addEventListener('online', refreshLicenseStatus);
+    return () => {
+      mounted = false;
+      window.removeEventListener('focus', refreshLicenseStatus);
+      window.removeEventListener('online', refreshLicenseStatus);
+    };
+  }, []);
 
   const tabs = [
     { id: 'diario', label: 'Libro Diario', icon: BookOpen },
@@ -99,6 +119,21 @@ export const Navbar: React.FC<NavbarProps> = ({
 
   return (
     <header className="bg-slate-900 text-white border-b border-slate-800 sticky top-0 z-40 shadow-md no-print w-full">
+      {licenseStatus?.authorized && licenseStatus.status === 'trial' && (
+        <div className="flex flex-col sm:flex-row items-center justify-center gap-2 sm:gap-4 border-b border-amber-300/20 bg-amber-500/10 px-3 py-2 text-center">
+          <p className="text-xs sm:text-sm text-amber-100">
+            Prueba gratuita de 24 horas activa. Si desea adquirir su licencia antes de que termine, seleccione «Ver Planes».
+          </p>
+          <a
+            href="https://crm-sicoven.vercel.app/comprar"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex shrink-0 items-center justify-center rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-sky-500"
+          >
+            Ver Planes y Pagos
+          </a>
+        </div>
+      )}
       {/* Top Header Bar */}
       <div className="max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-between h-14 sm:h-16 gap-2">
