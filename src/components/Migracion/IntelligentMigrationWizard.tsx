@@ -172,8 +172,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   const available = new Set(headers.map(norm));
   const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']];
-  const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
-  if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
+  if(selected.includes('inventory')){
+   const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
+   if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
+  }
   if(selected.length!==1 || !['inventory','accounts','journal','sales','purchases'].includes(selected[0])){setError('Selecciona un único módulo con importador disponible: Inventario, Plan de cuentas, Asientos, Ventas o Compras.');return;}
   setBusy(true);
   try{
