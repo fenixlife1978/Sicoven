@@ -1927,11 +1927,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const cleanRef = stmt.reference.trim().toLowerCase();
           const matchEntry = companyEntries.find(entry => {
             if (alreadyMatchedEntryIds.has(entry.id)) return false;
-            const touchesBank = entry.items.some(it => it.accountCode === bankCode);
-            if (!touchesBank) return false;
+            const bankLines = entry.items.filter(it => it.accountCode === bankCode);
+            if (bankLines.length === 0) return false;
 
-            const entryRef = (entry.referenceDoc || '').toLowerCase();
-            const entryDesc = (entry.description || '').toLowerCase();
+            // A coincident reference is not enough: the bank-side amount and
+            // direction must also agree with the statement movement.
+            const isUsdAccount = targetAccount.currency === 'USD';
+            const statementAmount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
+            const tolerance = isUsdAccount ? 0.000001 : 0.05;
+            const amountAndNatureMatch = bankLines.some(it => {
+              const entryDebit = isUsdAccount ? it.debitUsd : it.debitBs;
+              const entryCredit = isUsdAccount ? it.creditUsd : it.creditBs;
+              return stmt.type === 'CREDIT'
+                ? Math.abs(entryDebit - statementAmount) < tolerance
+                : Math.abs(entryCredit - statementAmount) < tolerance;
+            });
+            if (!amountAndNatureMatch) return false;
+
+            const entryRef = (entry.referenceDoc || '').trim().toLowerCase();
+            const entryDesc = (entry.description || '').trim().toLowerCase();
             return (
               (entryRef && (entryRef.includes(cleanRef) || cleanRef.includes(entryRef))) ||
               (entryDesc && entryDesc.includes(cleanRef))
