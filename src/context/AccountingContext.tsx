@@ -1794,10 +1794,35 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addBankStatementMovement = (movData: Omit<BankStatementMovement, 'id' | 'companyId'>): BankStatementMovement => {
+    const bank = bankAccounts.find(item =>
+      item.id === movData.bankAccountId && item.companyId === currentCompany.id
+    );
+    if (!bank) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
+    const parsedDate = new Date(movData.date + 'T00:00:00Z');
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(movData.date) ||
+        !Number.isFinite(parsedDate.getTime()) ||
+        parsedDate.toISOString().slice(0, 10) !== movData.date) {
+      throw new Error('La fecha del movimiento bancario no es válida.');
+    }
+    if (movData.type !== 'DEBIT' && movData.type !== 'CREDIT') {
+      throw new Error('La naturaleza del movimiento bancario debe ser débito o crédito.');
+    }
+    const amountBs = Number(movData.amountBs);
+    const amountUsd = Number(movData.amountUsd);
+    if (!Number.isFinite(amountBs) || !Number.isFinite(amountUsd) ||
+        amountBs < 0 || amountUsd < 0 || (amountBs === 0 && amountUsd === 0)) {
+      throw new Error('El movimiento debe tener un importe válido y positivo en al menos una moneda.');
+    }
     const newMov: BankStatementMovement = {
       ...movData,
-      id: `stmt-${Date.now()}`,
-      companyId: currentCompany.id
+      amountBs: Math.round(amountBs * 100) / 100,
+      amountUsd: Math.round(amountUsd * 1000000) / 1000000,
+      id: `stmt-${Date.now()}-${Math.floor(Math.random() * 1000000)}`,
+      companyId: currentCompany.id,
+      isReconciled: false,
+      matchedBy: undefined,
+      reconciledWithJournalEntryId: undefined,
+      reconciledAt: undefined
     };
     setBankStatementMovements(prev => [...prev, newMov]);
     return newMov;
