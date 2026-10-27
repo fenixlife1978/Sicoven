@@ -1678,7 +1678,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
     if (!bankData.bankName?.trim()) throw new Error('Indique el nombre del banco.');
     if (bankData.currency !== 'BS' && bankData.currency !== 'USD') throw new Error('La moneda bancaria debe ser Bs. o USD.');
-    if (bankData.accountType !== 'CORRIENTE' && bankData.accountType !== 'AHORRO') throw new Error('Seleccione un tipo de cuenta bancaria válido.');
+    const accountType = bankData.accountType ?? 'CORRIENTE';
+    if (accountType !== 'CORRIENTE' && accountType !== 'AHORRO') throw new Error('Seleccione un tipo de cuenta bancaria válido.');
     if (bankAccounts.some(b => b.companyId === currentCompany.id && b.accountNumber.replace(/\D/g, '') === digits)) {
       throw new Error('Ya existe una cuenta bancaria con ese número en la empresa activa.');
     }
@@ -1710,13 +1711,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const children = accounts.filter(a => a.parentCode === parentCode && /^\d+$/.test(a.code.split('.').at(-1) || ''));
     const nextAux = children.reduce((max, a) => Math.max(max, Number(a.code.split('.').at(-1) || 0)), 0) + 1;
     const accountCode = parentCode + '.' + String(nextAux).padStart(2, '0');
-    const auxName = `${bankData.bankName.trim()} - Cta. ${bankData.accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${bankData.currency === 'USD' ? 'USD' : 'Bs.'}`;
+    const auxName = `${bankData.bankName.trim()} - Cta. ${accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${bankData.currency === 'USD' ? 'USD' : 'Bs.'}`;
     const newAux: Account = { code: accountCode, name: auxName, type: 'ACTIVO', level: 5, isMovement: true, parentCode };
     if (accounts.some(a => a.code === accountCode)) throw new Error('No se pudo generar un código auxiliar único. Actualice el catálogo e intente nuevamente.');
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
 
-    const newBank: BankAccount = { ...bankData, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    const newBank: BankAccount = { ...bankData, accountType, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
     // Registrar primero el asiento: si falla la partida doble, no deja una cuenta
     // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
     if (hasOpeningBalance && equity) {
