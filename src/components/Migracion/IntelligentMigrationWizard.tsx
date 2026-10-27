@@ -128,7 +128,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    setRows(combined);setHeaders(Array.from(allHeaders));
    const keySet=new Set(Array.from(allHeaders));
    const detected=MODULES.filter(m=>m.aliases.filter(a=>keySet.has(norm(a))).length>=Math.min(2,m.aliases.length)).map(m=>m.id);
-   const inventoryReadyInOneSource = [...new Map(combined.map(row => [String(row.migrationsource ?? 'archivo sin nombre'), combined.filter(candidate => String(candidate.migrationsource ?? 'archivo sin nombre') === String(row.migrationsource ?? 'archivo sin nombre'))])).values()].some(sourceRows => {
+   const inventorySources = new Map<string, Row[]>();
+   combined.forEach(row => { const source = String(row.migrationsource ?? 'archivo sin nombre'); const group = inventorySources.get(source) ?? []; group.push(row); inventorySources.set(source, group); });
+   const inventoryReadyInOneSource = [...inventorySources.values()].some(sourceRows => {
     const sourceKeys = new Set(sourceRows.flatMap(row => Object.keys(row).filter(key => key !== 'migrationsource').map(norm)));
     return [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']].every(group => group.some(key => sourceKeys.has(norm(key))));
    });
