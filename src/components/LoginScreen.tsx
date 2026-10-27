@@ -592,7 +592,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           <img src={efasLogoWhite} alt="EFASfreelancer" className="logo-white" draggable={false} />
           <img src={efasLogo} alt="EFASfreelancer" className="logo-dark" draggable={false} />
           <span className="developer-credit-text">
-            Software desarrollado por <strong>EFASfreelancer</strong>, Rif. V-13313521-5, WhatsApp: +584125773996
+            Software desarrollado por <strong>EFASfreelancer</strong>, Rif. V-13313521-5
           </span>
         </div>
       </main>
