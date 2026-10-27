@@ -14,7 +14,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   const [accountCode, setAccountCode] = useState('1.1.1.03');
   const [accountNumber, setAccountNumber] = useState('');
   const [currency, setCurrency] = useState<'BS' | 'USD'>('BS');
-  const [initialBalanceBs, setInitialBalanceBs] = useState<number>(0);
+  const [initialBalanceBs, setInitialBalanceBs] = useState<string>('');
 
   if (!isOpen) return null;
 
@@ -33,7 +33,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
       accountNumber: accountNumber.trim() || '0000-0000-00-0000000000',
       currency,
       initialBalanceBs: Number(initialBalanceBs) || 0,
-      initialBalanceUsd: currency === 'USD' ? Number(initialBalanceBs) : 0
+      initialBalanceUsd: currency === 'USD' ? (Number(initialBalanceBs) || 0) : 0
     });
 
     onClose();
@@ -121,9 +121,9 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
                 type="number"
                 step="0.01"
                 min="0"
-                value={initialBalanceBs || ''}
+                value={initialBalanceBs}
                 placeholder="0.00"
-                onChange={e => setInitialBalanceBs(parseFloat(e.target.value) || 0)}
+                onChange={e => setInitialBalanceBs(e.target.value)}
                 className="pointer-events-auto select-text w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
