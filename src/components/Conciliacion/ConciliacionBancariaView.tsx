@@ -55,8 +55,9 @@ export const ConciliacionBancariaView: React.FC = () => {
   const [selectedStatementId, setSelectedStatementId] = useState<string | null>(null);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
+  const companyBanks = bankAccounts.filter(b => b.companyId === currentCompany.id);
   const activeBank =
-    bankAccounts.find(b => b.id === selectedBankAccountId) || bankAccounts[0];
+    companyBanks.find(b => b.id === selectedBankAccountId) || companyBanks[0];
 
   // If no bank accounts, display empty state
   if (!activeBank) {
