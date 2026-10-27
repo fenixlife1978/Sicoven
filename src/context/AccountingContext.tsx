@@ -525,7 +525,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const maxEntryNum = companyEntries.reduce((max, e) => (e.entryNumber > max ? e.entryNumber : max), 0);
     const sequenceKey = currentCompany.id;
-    const nextEntryNum = entry.entryNumber || Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0) + 1;
+    const currentSequence = Math.max(maxEntryNum, journalSequenceRef.current[sequenceKey] || 0);
+    const nextEntryNum = entry.entryNumber && entry.entryNumber > currentSequence ? entry.entryNumber : currentSequence + 1;
     journalSequenceRef.current[sequenceKey] = Math.max(journalSequenceRef.current[sequenceKey] || 0, nextEntryNum);
     const newEntry: JournalEntry = {
       ...entry,
