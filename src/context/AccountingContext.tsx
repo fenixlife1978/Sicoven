@@ -1774,8 +1774,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Salida por transferencia entre cuentas propias' }
       ];
     } else {
-      const counterpart = accounts.find(a => a.code === draft.counterpartAccountCode && a.isMovement && a.code !== bankAccount.code);
-      if (!counterpart) throw new Error('Seleccione una cuenta contable de contrapartida válida.');
+      const bankAccountCodes = new Set(bankAccounts.map(bank => bank.accountCode));
+      const counterpart = accounts.find(a => a.code === draft.counterpartAccountCode && a.isMovement && a.code !== bankAccount.code && !bankAccountCodes.has(a.code));
+      if (!counterpart) throw new Error('Seleccione una cuenta contable de movimiento válida que no sea una cuenta bancaria. Para mover fondos entre bancos, use Transferencia.');
       items = draft.type === 'INCOME'
         ? [
             { accountCode: bankAccount.code, accountName: bankAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: draft.description.trim() },
@@ -1837,6 +1838,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       m.id === statementMovementId && m.companyId === currentCompany.id
     );
     if (!statement) throw new Error('El movimiento bancario no pertenece a la empresa activa o ya no existe.');
+    if (statement.isReconciled) throw new Error('El movimiento ya está conciliado. Desconcílielo antes de vincularlo nuevamente.');
 
     if (journalEntryId) {
       const linkedEntry = journalEntries.find(entry =>
