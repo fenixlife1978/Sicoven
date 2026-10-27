@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from './migrationParsing';
+import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber, validateUniqueMigrationHeaders } from './migrationParsing';
 
 test('normaliza encabezados con acentos, espacios y signos', () => {
   assert.equal(normalizeMigrationValue('Código de artículo'), 'codigodearticulo');
@@ -41,5 +41,14 @@ test('rechaza encabezados duplicados equivalentes tras normalizar acentos y may�
   assert.throws(
     () => parseDelimitedRecords('Código,nombre,CODIGO\nA1,Tornillo,A2'),
     /encabezados duplicados o equivalentes/
+  );
+});
+
+
+test('valida encabezados compartidos para hojas Excel y archivos delimitados', () => {
+  assert.deepEqual(validateUniqueMigrationHeaders(['Código', 'Nombre', 'Precio']), ['codigo', 'nombre', 'precio']);
+  assert.throws(
+    () => validateUniqueMigrationHeaders(['Código', 'CODIGO', 'Nombre'], 'hoja de Excel'),
+    /hoja de Excel contiene encabezados duplicados o equivalentes/
   );
 });
