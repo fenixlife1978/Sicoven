@@ -288,6 +288,8 @@ export interface BankAccount {
   currency: 'BS' | 'USD';
   initialBalanceBs: number;
   initialBalanceUsd: number;
+  accountType?: 'CORRIENTE' | 'AHORRO';
+  checkbookNumber?: string;
 }
 
 export type BankMovementType = 'DEBIT' | 'CREDIT';
