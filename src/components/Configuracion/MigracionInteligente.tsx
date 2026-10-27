@@ -160,7 +160,14 @@ export const MigracionInteligente: React.FC = () => {
             return key ? normalize(row[key]) : '';
           }).filter(Boolean);
           const duplicateCount = rowKeys.length - new Set(rowKeys).size;
-          if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+          if (duplicateCount) {
+            const strictUniqueKeys: ModuleKey[] = ['inventory', 'customers', 'suppliers', 'accounts', 'retentions', 'assets'];
+            if (strictUniqueKeys.includes(mod.key)) {
+              notes.push('BLOQUEO: posibles duplicados por identificador único detectado: ' + duplicateCount + '.');
+            } else {
+              notes.push('ADVERTENCIA: se repite un número de documento/referencia (' + duplicateCount + ' repetición(es)). Puede tratarse de partidas de una misma factura; verifica la vista previa antes de autorizar.');
+            }
+          }
         }
         if (missing.length) notes.push('Detección parcial: faltan campos obligatorios para este módulo.');
         if (mod.key !== 'journal') notes.push('La detección de columnas no sustituye la validación de relaciones y saldos antes de escribir.');
@@ -210,7 +217,7 @@ export const MigracionInteligente: React.FC = () => {
       <p className="text-xs text-slate-500">Marca únicamente los módulos que deseas incluir. Los módulos repetidos por archivo se muestran por separado.</p>
       {detections.map((d,i) => { const id=d.key+'|'+d.source; const checked=selected.has(id); return <label key={id+i} className={'block p-4 rounded-xl border cursor-pointer '+(checked?'border-indigo-300 bg-indigo-50/40':'border-slate-200 hover:bg-slate-50')}>
         <div className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={checked} onChange={()=>toggle(id)}/><div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':d.status==='blocked'?'Bloqueado por validación':'Parcial / requiere revisión'}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':d.status==='blocked'?'bg-rose-100 text-rose-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':d.status==='blocked'?'Bloqueado por validación':'Parcial / requiere revisión'}</span></div>
           <p className="text-xs text-slate-600 mt-1">{d.rows.length} filas · {d.fields.length} columnas reconocidas</p>
           {d.missing.length>0 && <p className="text-xs text-amber-800 mt-2">Campos faltantes: {d.missing.join(', ')}</p>}
           {d.notes.map((n,j)=><p key={j} className="text-xs text-slate-600 mt-1 flex gap-1"><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5"/>{n}</p>)}
@@ -220,6 +227,10 @@ export const MigracionInteligente: React.FC = () => {
     {files.length>0 && <div className="rounded-xl border border-slate-200 p-4 space-y-3">
       <h3 className="font-semibold text-slate-800">Revisión previa</h3>
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3"><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Filas analizadas</p><p className="text-xl font-bold">{files.reduce((n,f)=>n+f.rows.length,0)}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Módulos seleccionados</p><p className="text-xl font-bold">{selectedDetections.length}</p></div><div className="rounded-lg bg-slate-50 p-3"><p className="text-xs text-slate-500">Archivos con error</p><p className="text-xl font-bold">{files.filter(f=>f.error).length}</p></div></div>
+      {selectedDetections.map((d, index) => <div key={d.key + '|' + d.source + '|preview'} className="rounded-lg border border-slate-200 overflow-hidden">
+        <div className="bg-slate-50 border-b border-slate-200 px-3 py-2 text-sm font-semibold">{d.name} · {d.source} · vista previa de {Math.min(5, d.rows.length)} de {d.rows.length} filas</div>
+        <div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{Object.keys(d.rows[0] || {}).slice(0, 8).map(header => <th key={header} className="border-b p-2 whitespace-nowrap">{header}</th>)}</tr></thead><tbody>{d.rows.slice(0, 5).map((row, rowIndex) => <tr key={rowIndex}>{Object.keys(d.rows[0] || {}).slice(0, 8).map(header => <td key={header} className="max-w-48 truncate border-b p-2" title={String(row[header] ?? '')}>{String(row[header] ?? '')}</td>)}</tr>)}</tbody></table></div>
+      </div>)}
       <div className="flex gap-2 items-start text-xs text-slate-600"><ShieldCheck className="w-4 h-4 text-emerald-700 shrink-0"/><p>Protección activa: el análisis no modifica la base de datos. Los posibles duplicados y los descuadres contables bloquean el plan. Cada asiento debe cuadrar individualmente y las relaciones entre módulos deben validarse antes de cualquier escritura.</p></div>
       <button onClick={finalizePlan} disabled={!selectedDetections.length} className="w-full sm:w-auto px-4 py-2 rounded-lg bg-slate-900 text-white font-semibold text-sm disabled:opacity-40">Validar selección y preparar plan</button>
       {confirmed && <p className="text-sm text-emerald-800 flex gap-2"><CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5"/>{planNote}</p>}
