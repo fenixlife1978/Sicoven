@@ -179,7 +179,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   try{
    if(selected[0]==='sales'||selected[0]==='purchases'){
     const kind=selected[0];
-    const sourceRows=rows.filter(r=>['invoiceNumber','factura','documento'].some(k=>pick(r,k)!==undefined));
+    const sourceRows=rows.filter(r=>['invoiceNumber','factura','documento'].some(k=>pick(r,k)!==undefined) && (kind==='sales' ? pick(r,'customerName','cliente','nombreCliente')!==undefined && pick(r,'customerRif','rifCliente','rif','taxId')!==undefined : pick(r,'supplierName','proveedor','nombreProveedor')!==undefined && pick(r,'supplierRif','rifProveedor','rif','taxId')!==undefined));
     if(!sourceRows.length)throw new Error('No hay facturas identificables para importar.');
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)||Number.isNaN(Date.parse(value+'T00:00:00Z')))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
