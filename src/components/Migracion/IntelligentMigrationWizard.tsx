@@ -53,7 +53,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const matched=m.aliases.filter(a=>keys.has(norm(a)));
    const detected=matched.length>=Math.min(2,m.aliases.length);
    const missing=m.fields.filter(f=>!keys.has(norm(f)));
-   return {...m,matched,detected,missing,ready:m.id==='inventory'&&detected&&keys.has('code')&&keys.has('name')};
+   return {...m,matched,detected,missing,ready:m.id==='inventory'&&detected&&['code','codigo','sku','productcode'].some(k=>keys.has(norm(k)))&&['name','nombre','productname','producto'].some(k=>keys.has(norm(k)))};
   }).filter(m=>m.detected);
  },[headers]);
  const readFiles=async(list:File[])=>{
@@ -83,7 +83,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      }
      parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
-    parsed=parsed.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row);
+    parsed=parsed.map(row=>{const normalized=Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row; return {...normalized, migrationsource:String(normalized.migrationsource??file.name)};});
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
@@ -104,7 +104,22 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(selected.length!==1||!selected.includes('inventory')){setError('Selecciona Inventario para ejecutar esta primera etapa. Los demás módulos quedan identificados en el plan, pero no se escribirán hasta habilitar sus importadores con validación transaccional.');return;}
   setBusy(true);
   try{
-   const normalized=rows.map((r,i)=>({r,i}));
+   const groupedBySource = new Map<string, Row[]>();
+   rows.forEach(row => {
+    const source = String(row.migrationsource ?? 'archivo sin nombre');
+    const group = groupedBySource.get(source) ?? [];
+    group.push(row);
+    groupedBySource.set(source, group);
+   });
+   const inventoryRows = [...groupedBySource.entries()].filter(([, sourceRows]) => {
+    const sourceKeys = new Set(sourceRows.flatMap(row => Object.keys(row).filter(key => key !== 'migrationsource')));
+    return [
+     ['code','codigo','sku','productcode'],
+     ['name','nombre','productname','producto']
+    ].every(group => group.some(key => sourceKeys.has(norm(key))));
+   }).flatMap(([, sourceRows]) => sourceRows);
+   if (!inventoryRows.length) throw new Error('No se identificaron archivos u hojas con encabezados de inventario (código y nombre). No se importó ningún registro.');
+   const normalized=inventoryRows.map((r,i)=>({r,i}));
    const seen=new Set<string>();const existing=new Set(products.map(p=>p.code.trim().toLowerCase()));
    const prepared=normalized.map(({r,i})=>{
     const code=String(pick(r,'code','codigo','sku','productCode')??'').trim();
