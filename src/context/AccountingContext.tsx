@@ -2095,7 +2095,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     setJournalEntries(prev => [...prev, adjustingEntry]);
 
-    reconcileMovementManual(statementMovement.id, adjustingEntry.id);
+    // The new entry is not yet present in the current render's journalEntries
+    // snapshot, so reconcile directly after validating the statement and bank.
+    setBankStatementMovements(prev =>
+      prev.map(m =>
+        m.id === statementMovement.id && m.companyId === currentCompany.id && m.bankAccountId === targetBank.id
+          ? {
+              ...m,
+              isReconciled: true,
+              matchedBy: 'MANUAL',
+              reconciledWithJournalEntryId: adjustingEntry.id,
+              reconciledAt: new Date().toISOString()
+            }
+          : m
+      )
+    );
 
     return adjustingEntry;
   };
