@@ -14,6 +14,7 @@ import { RetencionesIslrView } from './components/Retenciones/RetencionesIslrVie
 import { CatalogoView } from './components/Catalogo/CatalogoView';
 import { ConfiguracionView } from './components/Configuracion/ConfiguracionView';
 import { ConciliacionBancariaView } from './components/Conciliacion/ConciliacionBancariaView';
+import { TesoreriaView } from './components/Tesoreria/TesoreriaView';
 import { CuentasPorPagarView } from './components/CuentasPorPagar/CuentasPorPagarView';
 import { CuentasPorCobrarView } from './components/CuentasPorCobrar/CuentasPorCobrarView';
 import { ShieldCheck, Building2 } from 'lucide-react';
@@ -40,6 +41,8 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         return <LibroMayorView />;
       case 'balances':
         return <BalancesView />;
+      case 'tesoreria':
+        return <TesoreriaView />;
       case 'conciliacion':
         return <ConciliacionBancariaView />;
       case 'compras':
