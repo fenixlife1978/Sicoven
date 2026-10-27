@@ -62,7 +62,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setFiles(list);
   if(!list.length)return;
   try{
-   const combined:Row[]=[]; let firstHeaders:string[]=[];
+   const combined:Row[]=[]; const allHeaders = new Set<string>();
    for(const file of list){
     const ext=file.name.toLowerCase().split('.').pop();
     let parsed:Row[]=[];
@@ -81,11 +81,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
     parsed=parsed.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row);
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
-    if(!firstHeaders.length)firstHeaders=Object.keys(parsed[0]);
+    for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
    }
-   setRows(combined);setHeaders(firstHeaders);
-   const keySet=new Set(firstHeaders.map(norm));
+   setRows(combined);setHeaders(Array.from(allHeaders));
+   const keySet=new Set(Array.from(allHeaders));
    const detected=MODULES.filter(m=>m.aliases.filter(a=>keySet.has(norm(a))).length>=Math.min(2,m.aliases.length)).map(m=>m.id);
    setSelected(detected.filter(id=>id==='inventory'));
   }catch(e){setError(e instanceof Error?e.message:'No se pudieron leer los archivos.');}
