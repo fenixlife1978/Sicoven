@@ -12,12 +12,13 @@ import {
   ShieldCheck,
   Scale,
   RefreshCw,
-  Info
+  Info,
+  AlertCircle
 } from 'lucide-react';
 import { TaxpayerType } from '../../types/accounting';
 import { CompanyModal } from '../CompanyModal';
 import { BcvRateModal } from '../BcvRateModal';
-import { formatBs } from '../../utils/formatters';
+import { formatBs, validateVenezuelanRif } from '../../utils/formatters';
 import { MigracionInteligente } from './MigracionInteligente';
 
 export const ConfiguracionView: React.FC = () => {
@@ -40,6 +41,7 @@ export const ConfiguracionView: React.FC = () => {
   const [name, setName] = useState(currentCompany.name);
   const [tradeName, setTradeName] = useState(currentCompany.tradeName || '');
   const [rif, setRif] = useState(currentCompany.rif);
+  const [rifError, setRifError] = useState<string | null>(null);
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>(currentCompany.taxpayerType);
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(
     currentCompany.defaultIvaRetentionRate
@@ -55,6 +57,7 @@ export const ConfiguracionView: React.FC = () => {
     setName(currentCompany.name);
     setTradeName(currentCompany.tradeName || '');
     setRif(currentCompany.rif);
+    setRifError(null);
     setTaxpayerType(currentCompany.taxpayerType);
     setDefaultIvaRetentionRate(currentCompany.defaultIvaRetentionRate);
     setAddress(currentCompany.address);
@@ -64,13 +67,36 @@ export const ConfiguracionView: React.FC = () => {
     setBcvRate(String(currentCompany.bcvRate));
   }, [currentCompany]);
 
+  const handleRifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toUpperCase();
+    setRif(val);
+    if (rifError) {
+      const res = validateVenezuelanRif(val);
+      setRifError(res.error);
+    }
+  };
+
+  const handleRifBlur = () => {
+    const res = validateVenezuelanRif(rif);
+    setRifError(res.error);
+    if (res.isValid) {
+      setRif(res.formattedRif);
+    }
+  };
+
   const handleSaveCompany = (e: React.FormEvent) => {
     e.preventDefault();
+    const rifValidation = validateVenezuelanRif(rif);
+    if (!rifValidation.isValid) {
+      setRifError(rifValidation.error);
+      return;
+    }
+    setRifError(null);
     updateCompany({
       ...currentCompany,
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
-      rif: rif.trim().toUpperCase(),
+      rif: rifValidation.formattedRif,
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       address: address.trim(),
@@ -214,14 +240,29 @@ export const ConfiguracionView: React.FC = () => {
         <form onSubmit={handleSaveCompany} className="pt-6 space-y-4 text-xs">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">RIF Oficial</label>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block font-semibold text-slate-700">RIF Oficial</label>
+                <span className="text-[10px] text-slate-400 font-mono">[V,J,G,E,P]</span>
+              </div>
               <input
                 type="text"
                 required
                 value={rif}
-                onChange={e => setRif(e.target.value)}
-                className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono uppercase focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                onChange={handleRifChange}
+                onBlur={handleRifBlur}
+                maxLength={14}
+                className={`w-full px-3 py-1.5 border rounded-lg font-mono uppercase focus:outline-none transition ${
+                  rifError
+                    ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:ring-1 focus:ring-rose-500'
+                    : 'border-slate-300 focus:ring-1 focus:ring-emerald-500'
+                }`}
               />
+              {rifError && (
+                <p className="mt-1 text-[11px] text-rose-600 flex items-start gap-1">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{rifError}</span>
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="block font-semibold text-slate-700 mb-1">Razón Social</label>

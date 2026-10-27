@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../context/AccountingContext';
-import { Building2, X, ShieldAlert, Check } from 'lucide-react';
+import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
 import { TaxpayerType } from '../types/accounting';
+import { validateVenezuelanRif } from '../utils/formatters';
 
 interface CompanyModalProps {
   isOpen: boolean;
@@ -12,6 +13,8 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const { addCompany } = useAccounting();
 
   const [rif, setRif] = useState('');
+  const [rifError, setRifError] = useState<string | null>(null);
+  const [rifTouched, setRifTouched] = useState(false);
   const [name, setName] = useState('');
   const [tradeName, setTradeName] = useState('');
   const [address, setAddress] = useState('');
@@ -24,12 +27,36 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
 
   if (!isOpen) return null;
 
+  const handleRifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toUpperCase();
+    setRif(val);
+    if (rifTouched) {
+      const res = validateVenezuelanRif(val);
+      setRifError(res.error);
+    }
+  };
+
+  const handleRifBlur = () => {
+    setRifTouched(true);
+    const res = validateVenezuelanRif(rif);
+    setRifError(res.error);
+    if (res.isValid) {
+      setRif(res.formattedRif);
+    }
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!rif.trim() || !name.trim()) return;
+    const rifValidation = validateVenezuelanRif(rif);
+    if (!rifValidation.isValid) {
+      setRifTouched(true);
+      setRifError(rifValidation.error);
+      return;
+    }
+    if (!name.trim()) return;
 
     addCompany({
-      rif: rif.trim().toUpperCase(),
+      rif: rifValidation.formattedRif,
       name: name.trim().toUpperCase(),
       tradeName: tradeName.trim() || undefined,
       address: address.trim() || 'Venezuela',
@@ -70,17 +97,52 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
           {/* RIF & Razón Social */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <div>
-              <label className="block text-xs font-semibold text-slate-700 mb-1">
-                RIF Oficial *
-              </label>
-              <input
-                type="text"
-                required
-                placeholder="J-12345678-9"
-                value={rif}
-                onChange={e => setRif(e.target.value)}
-                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none uppercase font-mono"
-              />
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  RIF Oficial *
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono" title="Prefijos legales SENIAT: V, J, G, E, P">
+                  [V,J,G,E,P]
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="J-12345678-9"
+                  value={rif}
+                  onChange={handleRifChange}
+                  onBlur={handleRifBlur}
+                  maxLength={14}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none uppercase font-mono transition ${
+                    rifTouched && rifError
+                      ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                      : rifTouched && !rifError && rif
+                      ? 'border-emerald-500 bg-emerald-50/30 text-slate-900 focus:ring-2 focus:ring-emerald-500/20'
+                      : 'border-slate-300 focus:ring-2 focus:ring-emerald-500'
+                  }`}
+                  aria-invalid={!!(rifTouched && rifError)}
+                  aria-describedby={rifTouched && rifError ? 'company-rif-error' : undefined}
+                />
+                {rifTouched && !rifError && rif && (
+                  <span
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full bg-emerald-100 text-emerald-600"
+                    title="Estructura SENIAT válida"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  </span>
+                )}
+              </div>
+              {rifTouched && rifError ? (
+                <p id="company-rif-error" className="mt-1 text-[11px] text-rose-600 flex items-start gap-1 leading-tight" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{rifError}</span>
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Estructura SENIAT: V, J, G, E, P (ej. J-12345678-9)
+                </p>
+              )}
             </div>
             <div className="sm:col-span-2">
               <label className="block text-xs font-semibold text-slate-700 mb-1">
