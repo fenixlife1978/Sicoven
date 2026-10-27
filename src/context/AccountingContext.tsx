@@ -1808,9 +1808,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
+    const statement = bankStatementMovements.find(m =>
+      m.id === statementMovementId && m.companyId === currentCompany.id
+    );
+    if (!statement) throw new Error('El movimiento bancario no pertenece a la empresa activa o ya no existe.');
+
+    if (journalEntryId) {
+      const linkedEntry = journalEntries.find(entry =>
+        entry.id === journalEntryId &&
+        entry.companyId === currentCompany.id &&
+        entry.items.some(item => item.accountCode === bankAccounts.find(bank =>
+          bank.id === statement.bankAccountId && bank.companyId === currentCompany.id
+        )?.accountCode)
+      );
+      if (!linkedEntry) throw new Error('El asiento seleccionado no pertenece a la empresa activa o no corresponde a la cuenta bancaria del movimiento.');
+    }
+
     setBankStatementMovements(prev =>
       prev.map(m =>
-        m.id === statementMovementId
+        m.id === statementMovementId && m.companyId === currentCompany.id
           ? {
               ...m,
               isReconciled: true,
@@ -1826,7 +1842,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const unreconcileMovement = (statementMovementId: string) => {
     setBankStatementMovements(prev =>
       prev.map(m =>
-        m.id === statementMovementId
+        m.id === statementMovementId && m.companyId === currentCompany.id
           ? {
               ...m,
               isReconciled: false,
@@ -1856,7 +1872,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const runAutoReconciliation = (bankAccountId: string): { matchedCount: number; matchedRefs: string[] } => {
-    const targetAccount = bankAccounts.find(b => b.id === bankAccountId);
+    const targetAccount = bankAccounts.find(b => b.id === bankAccountId && b.companyId === currentCompany.id);
     if (!targetAccount) return { matchedCount: 0, matchedRefs: [] };
 
     const bankCode = targetAccount.accountCode;
