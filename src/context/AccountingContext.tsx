@@ -1721,7 +1721,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const registerTreasuryMovement = (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }): JournalEntry => {
     const source = bankAccounts.find(b => b.id === draft.bankAccountId && b.companyId === currentCompany.id);
     if (!source) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !Number.isFinite(new Date(draft.date + 'T00:00:00Z').getTime())) throw new Error('La fecha del movimiento no es válida.');
+    const parsedDate = new Date(draft.date + 'T00:00:00Z');
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== draft.date) throw new Error('La fecha del movimiento no es válida.');
     if (!draft.reference.trim() || !draft.description.trim()) throw new Error('La referencia y el concepto son obligatorios.');
     if (!Number.isFinite(draft.amount) || draft.amount <= 0) throw new Error('El importe debe ser mayor que cero.');
     const rate = Number(currentCompany.bcvRate);
@@ -1734,6 +1735,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (draft.type === 'TRANSFER') {
       const destination = bankAccounts.find(b => b.id === draft.destinationBankAccountId && b.companyId === currentCompany.id);
       if (!destination || destination.id === source.id) throw new Error('Seleccione otra cuenta bancaria propia como destino.');
+      if (destination.currency !== source.currency) {
+        throw new Error('La transferencia directa entre cuentas de monedas distintas está bloqueada para evitar asientos descuadrados. Registre la operación cambiaria con su tasa y diferencia cambiaria documentadas antes de transferir entre monedas.');
+      }
       const destAccount = accounts.find(a => a.code === destination.accountCode && a.isMovement);
       if (!destAccount) throw new Error('La cuenta auxiliar bancaria de destino no es válida.');
       const destBs = destination.currency === 'USD' ? Math.round(amountUsd * rate * 100) / 100 : amountBs;
