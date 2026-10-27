@@ -34,7 +34,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
     setAutoSyncBcv
   } = useAccounting();
 
-  const [rate, setRate] = useState<number>(currentCompany.bcvRate || 881.06);
+  const [rate, setRate] = useState<string>(String(currentCompany.bcvRate || 881.06));
   const [effectiveDate, setEffectiveDate] = useState<string>(
     currentCompany.lastRateUpdate || new Date().toISOString().slice(0, 10)
   );
@@ -43,7 +43,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
 
   useEffect(() => {
     if (currentCompany.bcvRate) {
-      setRate(currentCompany.bcvRate);
+      setRate(String(currentCompany.bcvRate));
     }
     if (currentCompany.lastRateUpdate) {
       setEffectiveDate(currentCompany.lastRateUpdate);
@@ -56,7 +56,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
     setSyncFeedback(null);
     const result = await syncBcvRate();
     if (result.success && result.usd > 0) {
-      setRate(result.usd);
+      setRate(String(result.usd));
       if (result.effectiveDate) setEffectiveDate(result.effectiveDate);
       setSyncFeedback(`Sincronizado con éxito: Bs. ${result.usd.toFixed(4)} (Fecha valor: ${result.effectiveDate})`);
     } else {
@@ -66,8 +66,9 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
 
   const handleManualSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (rate > 0) {
-      updateBcvRate(Number(rate), effectiveDate);
+    const parsedRate = Number(rate);
+    if (Number.isFinite(parsedRate) && parsedRate > 0) {
+      updateBcvRate(parsedRate, effectiveDate);
       onClose();
     }
   };
@@ -266,7 +267,7 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
                         min="0.0001"
                         required
                         value={rate}
-                        onChange={e => setRate(Number(e.target.value))}
+                        onChange={e => setRate(e.target.value)}
                         className="w-full pl-9 pr-3 py-1.5 text-sm font-bold font-mono text-slate-900 border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
                       />
                     </div>
