@@ -86,7 +86,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const missing=m.fields.filter(field=>!keys.has(norm(field)));
     const ready=m.id==='inventory'&&groups[0].some(k=>keys.has(norm(k)))&&groups[1].some(k=>keys.has(norm(k)))&&
      ['currentstock','existencia','stock','quantity','cantidad'].some(k=>keys.has(norm(k)))&&
-     ['avgcostbs','costbs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
+     ['avgcostbs','costopromediobs','costbs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
      ['salespricebs','precioventabs','pricebs','precioventa'].some(k=>keys.has(norm(k)));
     detected.push({...m,source,matched,missing,detected:true,ready});
    }
@@ -128,14 +128,18 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    setRows(combined);setHeaders(Array.from(allHeaders));
    const keySet=new Set(Array.from(allHeaders));
    const detected=MODULES.filter(m=>m.aliases.filter(a=>keySet.has(norm(a))).length>=Math.min(2,m.aliases.length)).map(m=>m.id);
-   setSelected(detected.filter(id=>id==='inventory'));
+   const inventoryReadyInOneSource = [...new Map(combined.map(row => [String(row.migrationsource ?? 'archivo sin nombre'), combined.filter(candidate => String(candidate.migrationsource ?? 'archivo sin nombre') === String(row.migrationsource ?? 'archivo sin nombre'))])).values()].some(sourceRows => {
+    const sourceKeys = new Set(sourceRows.flatMap(row => Object.keys(row).filter(key => key !== 'migrationsource').map(norm)));
+    return [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']].every(group => group.some(key => sourceKeys.has(norm(key))));
+   });
+   setSelected(inventoryReadyInOneSource && detected.includes('inventory') ? ['inventory'] : []);
   }catch(e){setError(e instanceof Error?e.message:'No se pudieron leer los archivos.');}
  };
  const runMigration=()=>{
   setError('');setNotice('');
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   const available = new Set(headers.map(norm));
-  const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs'],['salesPriceBs','precioVentaBs','priceBs']];
+  const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']];
   const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
   if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
   if(selected.length!==1||!selected.includes('inventory')){setError('Selecciona Inventario para ejecutar esta primera etapa. Los demás módulos quedan identificados en el plan, pero no se escribirán hasta habilitar sus importadores con validación transaccional.');return;}
@@ -168,8 +172,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     seen.add(k);
     const number=(...keys:string[])=>{const raw=pick(r,...keys); if(raw===undefined||raw===''){const essential=keys.some(key=>['currentStock','existencia','stock','quantity','cantidad','avgCostBs','costoPromedioBs','costBs','costoBs','salesPriceBs','precioVentaBs','priceBs'].includes(norm(key))); if(essential)throw new Error('Registro '+(i+1)+': falta el valor de '+keys[0]+'. No se asumirá cero ni se importará parcialmente.'); return 0;} const n=parseMigrationNumber(raw); if(!Number.isFinite(n)||n<0)throw new Error('Registro '+(i+1)+': valor numérico inválido en '+keys[0]+'.');return n;};
     const stock=number('currentStock','existencia','stock','quantity','cantidad');
-    const cost=number('avgCostBs','costoPromedioBs','costBs','costoBs');
-    const priceBs=number('salesPriceBs','precioVentaBs','priceBs');
+    const cost=number('avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost');
+    const priceBs=number('salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta');
     const priceUsd=number('salesPriceUsd','precioVentaUsd','priceUsd');
     return {code,name,category:String(pick(r,'category','categoria')??'General'),unit:String(pick(r,'unit','unidad')??'Unidad'),minStock:number('minStock','stockMinimo'),currentStock:stock,avgCostBs:cost,avgCostUsd:number('avgCostUsd','costoPromedioUsd'),lastCostBs:number('lastCostBs')||cost,lastCostUsd:number('lastCostUsd'),salesPriceBs:priceBs,salesPriceUsd:priceUsd,costingMethod:'PROMEDIO_PONDERADO' as const,vatTreatment:'GENERAL_16' as const,itemType:'MERCANCIA' as const,openingDate:String(pick(r,'openingDate','fechaApertura')??new Date().toISOString().slice(0,10)),openingBcvRate:number('openingBcvRate','bcvRate')};
    });
