@@ -26,6 +26,7 @@ export const TesoreriaView: React.FC = () => {
   const balanceFor = (bankId: string) => {
     const bank = bankAccounts.find(b => b.id === bankId);
     if (!bank) return { bs: 0, usd: 0 };
+    const hasOpeningEntry = companyEntries.some(entry => entry.referenceDoc === `APERTURA-${bank.accountNumber}`);
     return companyEntries.reduce((total, entry) => {
       for (const item of entry.items) {
         if (item.accountCode !== bank.accountCode) continue;
@@ -33,7 +34,7 @@ export const TesoreriaView: React.FC = () => {
         total.usd += (item.debitUsd || 0) - (item.creditUsd || 0);
       }
       return total;
-    }, { bs: bank.initialBalanceBs, usd: bank.initialBalanceUsd });
+    }, hasOpeningEntry ? { bs: 0, usd: 0 } : { bs: bank.initialBalanceBs, usd: bank.initialBalanceUsd });
   };
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
