@@ -2004,6 +2004,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           throw new Error(`La colección ${key} contiene registros inválidos o vinculados a empresas inexistentes.`);
         }
       }
+      for (const [collectionName, documents] of [['ventas', data.sales], ['compras', data.purchases]] as const) {
+        const documentKeys = new Set<string>();
+        for (const document of documents as Array<SaleRecord | PurchaseRecord>) {
+          const key = String(document.companyId) + '|' + String(document.invoiceNumber || '').trim().toLowerCase();
+          const totalBs = Number(document.totalAmountBs), baseBs = Number(document.taxableBaseBs);
+          const exemptBs = Number(document.exemptAmountBs), vatBs = Number(document.vatAmountBs);
+          const totalUsd = Number(document.totalAmountUsd), baseUsd = Number(document.taxableBaseUsd);
+          const vatUsd = Number(document.vatAmountUsd), rate = Number(document.bcvRate);
+          if (!document.invoiceNumber?.trim() || documentKeys.has(key) ||
+              !/^\\d{4}-\\d{2}-\\d{2}$/.test(document.invoiceDate) ||
+              !Number.isFinite(rate) || rate <= 0 ||
+              [totalBs,baseBs,exemptBs,vatBs,totalUsd,baseUsd,vatUsd].some(value => !Number.isFinite(value) || value < 0) ||
+              Math.abs(totalBs - baseBs - exemptBs - vatBs) > 0.02 ||
+              Math.abs(totalUsd - baseUsd - vatUsd - exemptBs / rate) > 0.02 ||
+              (document.paymentTerm !== undefined && !['CONTADO','CREDITO'].includes(document.paymentTerm)) ||
+              (document.paymentTerm === 'CREDITO' && (!Number.isInteger(document.creditDays) || Number(document.creditDays) < 1 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(document.dueDate || '')))) {
+            throw new Error('La colección de ' + collectionName + ' contiene facturas duplicadas, fechas, importes, tasa BCV o condiciones de crédito inválidas.');
+          }
+          documentKeys.add(key);
+        }
+      }
       // Validar todas las liquidaciones antes de tocar cualquier estado: la importación
       // debe ser todo-o-nada desde la perspectiva de la interfaz.
       const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
