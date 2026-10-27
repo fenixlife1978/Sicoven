@@ -68,16 +68,22 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     let parsed:Row[]=[];
     if(ext==='json'){
      const data=JSON.parse(await file.text());
-     const array=Array.isArray(data)?data:Array.isArray(data.records)?data.records:Array.isArray(data.data)?data.data:Array.isArray(data.items)?data.items:null;
-     if(!array) throw new Error(file.name+': el JSON debe ser un arreglo de registros o contener records, data o items.');
+     const array=Array.isArray(data)?data:Array.isArray(data.records)?data.records:Array.isArray(data.data)?data.data:Array.isArray(data.items)?data.items:Array.isArray(data.products)?data.products:null;
+     if(!array) throw new Error(file.name+': el JSON debe ser un arreglo de registros o contener records, data, items o products. Los respaldos contables completos se analizan por módulo y no se importan a ciegas.');
      parsed=(array as unknown[]).filter((x: unknown): x is Row => !!x && typeof x === 'object' && !Array.isArray(x));
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      const matrix=parseCsv(await file.text()); parsed=toRows(matrix);
     }else if(ext==='xlsx'||ext==='xlsm'){
      const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
-     const sheet=wb.worksheets[0]; if(!sheet)throw new Error(file.name+': no contiene hojas.');
-     const matrix:unknown[][]=[];sheet.eachRow({includeEmpty:false},row=>{const vals:unknown[]=[];for(let c=1;c<=row.cellCount;c++)vals.push(scalar(row.getCell(c).value));matrix.push(vals);});
-     parsed=toRows(matrix);
+     if(!wb.worksheets.length)throw new Error(file.name+': no contiene hojas.');
+     const sheetRows: Row[] = [];
+     for(const sheet of wb.worksheets){
+      const matrix:unknown[][]=[];
+      sheet.eachRow({includeEmpty:false},row=>{const vals:unknown[]=[];for(let c=1;c<=row.cellCount;c++)vals.push(scalar(row.getCell(c).value));matrix.push(vals);});
+      const parsedSheet=toRows(matrix);
+      if(parsedSheet.length) sheetRows.push(...parsedSheet);
+     }
+     parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
     parsed=parsed.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row);
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
@@ -94,9 +100,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   setError('');setNotice('');
   if(!confirmed){setError('Marca la confirmación final antes de ejecutar la migración.');return;}
   const available = new Set(headers.map(norm));
-  const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs']];
+  const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs'],['salesPriceBs','precioVentaBs','priceBs']];
   const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
-  if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan columnas esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias ni costos en cero.'); return; }
+  if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
   if(selected.length!==1||!selected.includes('inventory')){setError('Selecciona Inventario para ejecutar esta primera etapa. Los demás módulos quedan identificados en el plan, pero no se escribirán hasta habilitar sus importadores con validación transaccional.');return;}
   setBusy(true);
   try{
