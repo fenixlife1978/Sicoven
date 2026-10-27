@@ -1957,11 +1957,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           if (alreadyMatchedEntryIds.has(entry.id)) return false;
           return entry.items.some(it => {
             if (it.accountCode !== bankCode) return false;
+            const isUsdAccount = targetAccount.currency === 'USD';
+            const statementAmount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
+            const entryDebit = isUsdAccount ? it.debitUsd : it.debitBs;
+            const entryCredit = isUsdAccount ? it.creditUsd : it.creditBs;
+            const tolerance = isUsdAccount ? 0.000001 : 0.05;
             if (stmt.type === 'CREDIT') {
-              return Math.abs(it.debitBs - stmt.amountBs) < 0.05;
-            } else {
-              return Math.abs(it.creditBs - stmt.amountBs) < 0.05;
+              return Math.abs(entryDebit - statementAmount) < tolerance;
             }
+            return Math.abs(entryCredit - statementAmount) < tolerance;
           });
         });
 
@@ -1989,11 +1993,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     statementMovement: BankStatementMovement,
     contraAccountCode: string
   ): JournalEntry => {
-    const targetBank = bankAccounts.find(b => b.id === statementMovement.bankAccountId);
-    const bankAccountCode = targetBank ? targetBank.accountCode : '1.1.1.03';
-    const bankAccountName = targetBank ? targetBank.bankName : 'Banco Nacional de Crédito - Cta. Corriente Bs.';
+    if (statementMovement.companyId !== currentCompany.id) {
+      throw new Error('El movimiento bancario no pertenece a la empresa activa.');
+    }
+    if (statementMovement.isReconciled) {
+      throw new Error('El movimiento ya está conciliado y no puede generar otro asiento de ajuste.');
+    }
+    const targetBank = bankAccounts.find(b =>
+      b.id === statementMovement.bankAccountId && b.companyId === currentCompany.id
+    );
+    if (!targetBank) {
+      throw new Error('La cuenta bancaria no pertenece a la empresa activa.');
+    }
+    const bankAccountCode = targetBank.accountCode;
+    const bankAccountName = targetBank.bankName;
     const contraAccount = accounts.find(a => a.code === contraAccountCode);
-    const contraAccountName = contraAccount ? contraAccount.name : 'Comisiones y Gastos Bancarios';
+    if (!contraAccount || !contraAccount.isMovement || contraAccount.code === bankAccountCode) {
+      throw new Error('Seleccione una cuenta contable de movimiento válida y distinta de la cuenta bancaria.');
+    }
+    const contraAccountName = contraAccount.name;
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = companyEntries.length + 1;
