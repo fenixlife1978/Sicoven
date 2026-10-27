@@ -1676,10 +1676,31 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany.id) throw new Error('Registre o seleccione una empresa antes de crear cuentas bancarias.');
     const digits = String(bankData.accountNumber || '').replace(/\D/g, '');
     if (digits.length !== 20) throw new Error('El número de cuenta bancaria debe contener exactamente 20 dígitos.');
-    if (!bankData.bankName.trim()) throw new Error('Indique el nombre del banco.');
+    if (!bankData.bankName?.trim()) throw new Error('Indique el nombre del banco.');
+    if (bankData.currency !== 'BS' && bankData.currency !== 'USD') throw new Error('La moneda bancaria debe ser Bs. o USD.');
+    if (bankData.accountType !== 'CORRIENTE' && bankData.accountType !== 'AHORRO') throw new Error('Seleccione un tipo de cuenta bancaria válido.');
     if (bankAccounts.some(b => b.companyId === currentCompany.id && b.accountNumber.replace(/\D/g, '') === digits)) {
       throw new Error('Ya existe una cuenta bancaria con ese número en la empresa activa.');
     }
+
+    const rawBs = Number(bankData.initialBalanceBs ?? 0);
+    const rawUsd = Number(bankData.initialBalanceUsd ?? 0);
+    if (!Number.isFinite(rawBs) || !Number.isFinite(rawUsd) || rawBs < 0 || rawUsd < 0) {
+      throw new Error('El saldo inicial debe ser un importe numérico, finito y no negativo.');
+    }
+    const hasOpeningBalance = bankData.currency === 'USD' ? rawUsd > 0 : rawBs > 0;
+    const rate = Number(currentCompany.bcvRate);
+    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
+
+    // El importe introducido en la moneda de la cuenta es la autoridad; la otra
+    // moneda se calcula con la tasa BCV para evitar saldos de apertura incoherentes.
+    const bs = bankData.currency === 'USD'
+      ? Math.round(rawUsd * rate * 100) / 100
+      : Math.round(rawBs * 100) / 100;
+    const usd = bankData.currency === 'USD'
+      ? Math.round(rawUsd * 1000000) / 1000000
+      : (rate > 0 ? Math.round((bs / rate) * 1000000) / 1000000 : 0);
+
     const parentCode = bankData.currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
     const controlName = bankData.currency === 'USD' ? 'Bancos Moneda Extranjera (control)' : 'Bancos Moneda Nacional (control)';
     const existingParent = accounts.find(a => a.code === parentCode);
@@ -1689,21 +1710,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const children = accounts.filter(a => a.parentCode === parentCode && /^\d+$/.test(a.code.split('.').at(-1) || ''));
     const nextAux = children.reduce((max, a) => Math.max(max, Number(a.code.split('.').at(-1) || 0)), 0) + 1;
     const accountCode = parentCode + '.' + String(nextAux).padStart(2, '0');
-    const auxName = `${bankData.bankName.trim()} - Cta. ${bankData.currency === 'USD' ? 'Corriente USD' : 'Corriente Bs.'}`;
+    const auxName = `${bankData.bankName.trim()} - Cta. ${bankData.accountType === 'AHORRO' ? 'Ahorro' : 'Corriente'} ${bankData.currency === 'USD' ? 'USD' : 'Bs.'}`;
     const newAux: Account = { code: accountCode, name: auxName, type: 'ACTIVO', level: 5, isMovement: true, parentCode };
     if (accounts.some(a => a.code === accountCode)) throw new Error('No se pudo generar un código auxiliar único. Actualice el catálogo e intente nuevamente.');
-    const amountBs = Number(bankData.initialBalanceBs || 0);
-    const amountUsd = Number(bankData.initialBalanceUsd || 0);
-    const hasOpeningBalance = amountBs > 0 || amountUsd > 0;
-    const rate = Number(currentCompany.bcvRate);
-    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
     const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
     if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
-    const bs = Math.round(amountBs * 100) / 100;
-    const usd = Math.round((amountUsd || (rate > 0 ? bs / rate : 0)) * 1000000) / 1000000;
-    const newBank: BankAccount = { ...bankData, accountCode, accountNumber: digits, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
-    setAccounts(prev => [...prev.filter(a => a.code !== parentCode), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
-    setBankAccounts(prev => [...prev, newBank]);
+
+    const newBank: BankAccount = { ...bankData, accountCode, accountNumber: digits, initialBalanceBs: bs, initialBalanceUsd: usd, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
+    // Registrar primero el asiento: si falla la partida doble, no deja una cuenta
+    // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
     if (hasOpeningBalance && equity) {
       addJournalEntry({
         entryNumber: 0, date: new Date().toISOString().slice(0,10),
@@ -1715,6 +1730,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ]
       });
     }
+    setAccounts(prev => [...prev.filter(a => a.code !== parentCode), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
+    setBankAccounts(prev => [...prev, newBank]);
     return newBank;
   };
 
