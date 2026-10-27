@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
 import ExcelJS from 'exceljs';
 import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft } from 'lucide-react';
 
@@ -23,7 +24,7 @@ const MODULES: { key: ModuleKey; name: string; aliases: Record<string, string[]>
   { key: 'assets', name: 'Activos fijos', aliases: { code: ['codigo','code','assetid'], name: ['nombre','descripcion','activo','name'], cost: ['costo','cost','costobs','valorhistorico'], date: ['fechaadquisicion','fecha','acquisitiondate'] }, required: [['codigo','code','assetid'], ['nombre','descripcion','activo','name'], ['costo','cost','costobs','valorhistorico']] }
 ];
 
-const normalize = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalize = normalizeMigrationValue;
 const asRows = (data: unknown): Row[] => {
   if (Array.isArray(data)) return data.filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
   if (data && typeof data === 'object') {
@@ -34,41 +35,50 @@ const asRows = (data: unknown): Row[] => {
   }
   return [];
 };
-const csvRows = (text: string): Row[] => {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
-  if (lines.length < 2) return [];
-  const delimiter = [',',';','\t','|'].sort((a,b) => lines[0].split(b).length - lines[0].split(a).length)[0];
-  const split = (line: string) => {
-    const cells: string[] = []; let cell = ''; let quoted = false;
-    for (let i=0;i<line.length;i++) { const c=line[i]; if (c === '"') { if (quoted && line[i+1] === '"') { cell += '"'; i++; } else quoted = !quoted; } else if (c === delimiter && !quoted) { cells.push(cell.trim()); cell=''; } else cell += c; }
-    cells.push(cell.trim()); return cells;
-  };
-  const headers = split(lines[0]).map((h,i) => h || 'columna_' + (i+1));
-  return lines.slice(1).map(line => Object.fromEntries(split(line).map((v,i) => [headers[i] || 'columna_' + (i+1), v])));
-};
-async function parseFile(file: File): Promise<ParsedFile> {
+const csvRows = (text: string): Row[] => parseDelimitedRecords(text);
+
+async function parseFile(file: File): Promise<ParsedFile[]> {
   try {
     const ext = file.name.toLowerCase().split('.').pop();
-    if (ext === 'json') return { name: file.name, rows: asRows(JSON.parse(await file.text())) };
-    if (ext === 'csv' || ext === 'tsv' || ext === 'txt') return { name: file.name, rows: csvRows(await file.text()) };
+    if (ext === 'json') {
+      const rows = asRows(JSON.parse(await file.text()));
+      return [{ name: file.name, rows, ...(rows.length ? {} : { error: 'El JSON no contiene registros en un arreglo reconocido.' }) }];
+    }
+    if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
+      const rows = csvRows(await file.text());
+      return [{ name: file.name, rows, ...(rows.length ? {} : { error: 'No se detectaron filas de datos o encabezados suficientes.' }) }];
+    }
     if (ext === 'xlsx' || ext === 'xlsm') {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
-      const sheet = workbook.worksheets[0];
-      if (!sheet) return { name: file.name, rows: [], error: 'El libro no contiene hojas.' };
-      const headers: string[] = [];
-      sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => { headers[col-1] = String(cell.value ?? 'columna_' + col); });
-      const rows: Row[] = [];
-      sheet.eachRow((row, rowNo) => {
-        if (rowNo === 1) return;
-        const item: Row = {};
-        headers.forEach((h,i) => { const v = row.getCell(i+1).value; item[h || 'columna_' + (i+1)] = v && typeof v === 'object' && 'text' in v ? (v as {text:string}).text : v; });
-        if (Object.values(item).some(v => String(v ?? '').trim())) rows.push(item);
+      if (!workbook.worksheets.length) return [{ name: file.name, rows: [], error: 'El libro no contiene hojas.' }];
+      return workbook.worksheets.map(sheet => {
+        const matrix: unknown[][] = [];
+        sheet.eachRow({ includeEmpty: false }, row => {
+          const values: unknown[] = [];
+          for (let col = 1; col <= row.cellCount; col++) {
+            const value = row.getCell(col).value;
+            if (value instanceof Date) values.push(value.toISOString().slice(0, 10));
+            else if (value && typeof value === 'object' && 'text' in value) values.push((value as { text: unknown }).text);
+            else if (value && typeof value === 'object' && 'result' in value) values.push((value as { result: unknown }).result);
+            else values.push(value);
+          }
+          matrix.push(values);
+        });
+        if (matrix.length < 2) return { name: file.name + ' — hoja: ' + sheet.name, rows: [], error: 'La hoja no contiene encabezados y filas de datos.' };
+        const headers = matrix[0].map((value, index) => String(value ?? '').trim() || 'columna_' + (index + 1));
+        const rows = matrix.slice(1).map(values => {
+          const item: Row = {};
+          headers.forEach((header, index) => { item[header] = values[index] ?? ''; });
+          return item;
+        }).filter(item => Object.values(item).some(value => String(value ?? '').trim() !== ''));
+        return { name: file.name + ' — hoja: ' + sheet.name, rows, ...(rows.length ? {} : { error: 'La hoja no contiene registros de datos.' }) };
       });
-      return { name: file.name, rows };
     }
-    return { name: file.name, rows: [], error: 'Formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.' };
-  } catch (e) { return { name: file.name, rows: [], error: e instanceof Error ? e.message : 'No se pudo interpretar el archivo.' }; }
+    return [{ name: file.name, rows: [], error: 'Formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.' }];
+  } catch (e) {
+    return [{ name: file.name, rows: [], error: e instanceof Error ? e.message : 'No se pudo interpretar el archivo.' }];
+  }
 }
 
 export const MigracionInteligente: React.FC = () => {
@@ -91,11 +101,9 @@ export const MigracionInteligente: React.FC = () => {
         const rows = file.rows;
         const notes: string[] = [];
         if (mod.key === 'journal') {
-          const findValue = (row: Row, aliases: string[]) => {
+          const findRaw = (row: Row, aliases: string[]) => {
             const key = Object.keys(row).find(k => aliases.includes(normalize(k)));
-            const raw = key ? row[key] : 0;
-            const parsed = Number(String(raw ?? '0').replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
-            return Number.isFinite(parsed) ? parsed : NaN;
+            return key ? row[key] : undefined;
           };
           const referenceAliases = ['referencia','comprobante','numeroasiento','entrynumber','asiento','journalid','id'];
           const grouped = new Map<string, { debit: number; credit: number; invalid: boolean; rows: number }>();
@@ -104,32 +112,60 @@ export const MigracionInteligente: React.FC = () => {
             const reference = referenceKey ? String(row[referenceKey] ?? '').trim() : '';
             const groupKey = reference || '__fila_' + (index + 1);
             const group = grouped.get(groupKey) || { debit: 0, credit: 0, invalid: false, rows: 0 };
-            const debit = findValue(row, mod.aliases.debit);
-            const credit = findValue(row, mod.aliases.credit);
-            group.debit += Number.isFinite(debit) ? debit : 0;
-            group.credit += Number.isFinite(credit) ? credit : 0;
-            group.invalid = group.invalid || !Number.isFinite(debit) || !Number.isFinite(credit);
+            const debitRaw = findRaw(row, mod.aliases.debit);
+            const creditRaw = findRaw(row, mod.aliases.credit);
+            const hasDebit = debitRaw !== undefined && String(debitRaw).trim() !== '';
+            const hasCredit = creditRaw !== undefined && String(creditRaw).trim() !== '';
+            const parsedDebit = hasDebit ? parseMigrationNumber(debitRaw) : 0;
+            const parsedCredit = hasCredit ? parseMigrationNumber(creditRaw) : 0;
+            const invalidLine = (!hasDebit && !hasCredit) ||
+              (hasDebit && !Number.isFinite(parsedDebit)) ||
+              (hasCredit && !Number.isFinite(parsedCredit)) ||
+              (Number.isFinite(parsedDebit) && parsedDebit < 0) ||
+              (Number.isFinite(parsedCredit) && parsedCredit < 0) ||
+              (parsedDebit > 0 && parsedCredit > 0) ||
+              (parsedDebit === 0 && parsedCredit === 0);
+            group.debit += Number.isFinite(parsedDebit) ? parsedDebit : 0;
+            group.credit += Number.isFinite(parsedCredit) ? parsedCredit : 0;
+            group.invalid = group.invalid || invalidLine;
             group.rows += 1;
             grouped.set(groupKey, group);
           });
           const invalidGroups = [...grouped.values()].filter(group => group.invalid).length;
           const unbalanced = [...grouped.entries()].filter(([, group]) => !group.invalid && Math.abs(group.debit - group.credit) > 0.01);
-          if (invalidGroups) notes.push('BLOQUEO: hay importes contables no numéricos en ' + invalidGroups + ' grupo(s).');
+          if (invalidGroups) notes.push('BLOQUEO: hay líneas contables sin importes, con importes inválidos/negativos o con debe y haber simultáneos en ' + invalidGroups + ' asiento(s)/grupo(s).');
           if (unbalanced.length) notes.push('BLOQUEO: ' + unbalanced.length + ' asiento(s) no cuadran individualmente. Diferencias: ' + unbalanced.slice(0, 5).map(([ref, group]) => ref + ': ' + (group.debit - group.credit).toFixed(2)).join('; ') + (unbalanced.length > 5 ? '; …' : ''));
           if (!invalidGroups && !unbalanced.length) notes.push('Cada grupo identificado cuadra en débitos/créditos; aún deben validarse las cuentas de movimiento, fechas, referencias y duplicados.');
           if (!rows.some(row => Object.keys(row).some(k => referenceAliases.includes(normalize(k))))) {
             notes.push('ADVERTENCIA: no se detectó identificador de asiento; se validó cada fila por separado y no se puede confirmar integridad por asiento.');
           }
         }
-        const rowKeys = rows.map(row => {
-          const key = Object.keys(row).find(k => ['invoice','invoicenumber','factura','documento','code','codigo','sku','rif','taxid','reference','referencia'].includes(normalize(k)));
-          return key ? normalize(row[key]) : '';
-        }).filter(Boolean);
-        const duplicateCount = rowKeys.length - new Set(rowKeys).size;
-        if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+        const identityAliases: Partial<Record<ModuleKey, string[]>> = {
+          inventory: ['code','codigo','sku','itemcode','codarticulo'],
+          customers: ['rif','documento','identificacion','taxid','customerid'],
+          suppliers: ['rif','documento','identificacion','taxid','supplierid'],
+          receivables: ['invoice','invoicenumber','factura','documento','referencia'],
+          payables: ['invoice','invoicenumber','factura','documento','referencia'],
+          sales: ['invoice','invoicenumber','factura','numerofactura','documento'],
+          purchases: ['invoice','invoicenumber','factura','numerofactura','documento'],
+          accounts: ['codigo','code','cuenta','accountcode'],
+          banks: ['referencia','reference','numero'],
+          retentions: ['comprobante','numerocomprobante','vouchernumber'],
+          assets: ['codigo','code','assetid']
+        };
+        const identity = identityAliases[mod.key] || [];
+        if (identity.length) {
+          const rowKeys = rows.map(row => {
+            const key = Object.keys(row).find(k => identity.includes(normalize(k)));
+            return key ? normalize(row[key]) : '';
+          }).filter(Boolean);
+          const duplicateCount = rowKeys.length - new Set(rowKeys).size;
+          if (duplicateCount) notes.push('BLOQUEO: posibles duplicados por identificador detectado: ' + duplicateCount + '.');
+        }
         if (missing.length) notes.push('Detección parcial: faltan campos obligatorios para este módulo.');
         if (mod.key !== 'journal') notes.push('La detección de columnas no sustituye la validación de relaciones y saldos antes de escribir.');
-        all.push({ key: mod.key, name: mod.name, fields, rows, status: missing.length ? 'partial' : 'complete', missing, notes, selected: selected.has(mod.key + '|' + file.name), source: file.name });
+        const blocked = notes.some(note => note.startsWith('BLOQUEO:'));
+        all.push({ key: mod.key, name: mod.name, fields, rows, status: blocked ? 'blocked' : missing.length ? 'partial' : 'complete', missing, notes, selected: selected.has(mod.key + '|' + file.name), source: file.name });
       }
     }
     return all;
@@ -139,7 +175,8 @@ export const MigracionInteligente: React.FC = () => {
     if (!list?.length) return;
     setBusy(true); setError(''); setConfirmed(false); setPlanNote('');
     try {
-      const parsed = await Promise.all(Array.from(list).map(parseFile));
+      const parsedGroups = await Promise.all(Array.from(list).map(parseFile));
+      const parsed = parsedGroups.flat();
       setFiles(prev => [...prev, ...parsed]);
     } catch { setError('No se pudieron analizar los archivos seleccionados.'); }
     finally { setBusy(false); }
@@ -173,7 +210,7 @@ export const MigracionInteligente: React.FC = () => {
       <p className="text-xs text-slate-500">Marca únicamente los módulos que deseas incluir. Los módulos repetidos por archivo se muestran por separado.</p>
       {detections.map((d,i) => { const id=d.key+'|'+d.source; const checked=selected.has(id); return <label key={id+i} className={'block p-4 rounded-xl border cursor-pointer '+(checked?'border-indigo-300 bg-indigo-50/40':'border-slate-200 hover:bg-slate-50')}>
         <div className="flex items-start gap-3"><input type="checkbox" className="mt-1" checked={checked} onChange={()=>toggle(id)}/><div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':'Parcial / requiere revisión'}</span></div>
+          <div className="flex flex-wrap items-center gap-2"><span className="font-semibold text-sm text-slate-900">{d.name}</span><span className="text-xs text-slate-500">· {d.source}</span><span className={'text-[11px] px-2 py-0.5 rounded-full '+(d.status==='complete'?'bg-emerald-100 text-emerald-800':'bg-amber-100 text-amber-800')}>{d.status==='complete'?'Campos mínimos detectados':d.status==='blocked'?'Bloqueado por validación':'Parcial / requiere revisión'}</span></div>
           <p className="text-xs text-slate-600 mt-1">{d.rows.length} filas · {d.fields.length} columnas reconocidas</p>
           {d.missing.length>0 && <p className="text-xs text-amber-800 mt-2">Campos faltantes: {d.missing.join(', ')}</p>}
           {d.notes.map((n,j)=><p key={j} className="text-xs text-slate-600 mt-1 flex gap-1"><AlertTriangle className="w-3 h-3 shrink-0 mt-0.5"/>{n}</p>)}

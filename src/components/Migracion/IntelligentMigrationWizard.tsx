@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { FileUp, X, CheckCircle2, AlertTriangle, ShieldCheck, FileSpreadsheet } from 'lucide-react';
 import ExcelJS from 'exceljs';
+import { parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
 import { useAccounting } from '../../context/AccountingContext';
 
 type Row = Record<string, unknown>;
@@ -17,10 +18,7 @@ const MODULES: ModuleInfo[] = [
  { id:'journal', name:'Asientos contables', aliases:['entryNumber','accountCode','debitBs','creditBs','fecha','debe','haber'], fields:['date','items'], transactional:true }
 ];
 const norm = (s: string) => s.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/[^a-z0-9]/g,'');
-const parseCsv = (text: string): string[][] => {
- const lines = text.replace(/^\uFEFF/,'').split(/\r?\n/).filter((x: string)=>x.trim());
- return lines.map(line=>{ const out:string[]=[]; let v=''; let q=false; for(let i=0;i<line.length;i++){const c=line[i]; if(c==='"'&&q&&line[i+1]==='"'){v+='"';i++;} else if(c==='"') q=!q; else if((c===','||c===';'||c==='\t')&&!q){out.push(v.trim());v='';} else v+=c;} out.push(v.trim()); return out; });
-};
+const parseCsv = (text: string): Row[] => parseDelimitedRecords(text);
 const scalar = (v: unknown): unknown => {
  if (v && typeof v === 'object' && 'text' in v) return (v as {text:unknown}).text;
  if (v && typeof v === 'object' && 'result' in v) return (v as {result:unknown}).result;
@@ -55,7 +53,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const matched=m.aliases.filter(a=>keys.has(norm(a)));
    const detected=matched.length>=Math.min(2,m.aliases.length);
    const missing=m.fields.filter(f=>!keys.has(norm(f)));
-   return {...m,matched,detected,missing,ready:m.id==='inventory'&&detected&&keys.has('code')&&keys.has('name')};
+   return {...m,matched,detected,missing,ready:m.id==='inventory'&&detected&&['code','codigo','sku','productcode'].some(k=>keys.has(norm(k)))&&['name','nombre','productname','producto'].some(k=>keys.has(norm(k)))};
   }).filter(m=>m.detected);
  },[headers]);
  const readFiles=async(list:File[])=>{
@@ -72,7 +70,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(!array) throw new Error(file.name+': el JSON debe ser un arreglo de registros o contener records, data, items o products. Los respaldos contables completos se analizan por módulo y no se importan a ciegas.');
      parsed=(array as unknown[]).filter((x: unknown): x is Row => !!x && typeof x === 'object' && !Array.isArray(x));
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
-     const matrix=parseCsv(await file.text()); parsed=toRows(matrix);
+     parsed=parseCsv(await file.text());
     }else if(ext==='xlsx'||ext==='xlsm'){
      const wb=new ExcelJS.Workbook(); await wb.xlsx.load(await file.arrayBuffer());
      if(!wb.worksheets.length)throw new Error(file.name+': no contiene hojas.');
@@ -80,12 +78,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      for(const sheet of wb.worksheets){
       const matrix:unknown[][]=[];
       sheet.eachRow({includeEmpty:false},row=>{const vals:unknown[]=[];for(let c=1;c<=row.cellCount;c++)vals.push(scalar(row.getCell(c).value));matrix.push(vals);});
-      const parsedSheet=toRows(matrix);
+      const parsedSheet=toRows(matrix).map(row => ({ ...row, _migrationSource: file.name + ' — hoja: ' + sheet.name }));
       if(parsedSheet.length) sheetRows.push(...parsedSheet);
      }
      parsed=sheetRows;
     }else throw new Error(file.name+': formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.');
-    parsed=parsed.map(row=>Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row);
+    parsed=parsed.map(row=>{const normalized=Object.fromEntries(Object.entries(row).map(([key,value])=>[norm(key),scalar(value)])) as Row; return {...normalized, migrationsource:String(normalized.migrationsource??file.name)};});
     if(!parsed.length)throw new Error(file.name+': no se detectaron filas de datos.');
     for (const row of parsed) for (const key of Object.keys(row)) allHeaders.add(norm(key));
     combined.push(...parsed);
@@ -106,7 +104,22 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   if(selected.length!==1||!selected.includes('inventory')){setError('Selecciona Inventario para ejecutar esta primera etapa. Los demás módulos quedan identificados en el plan, pero no se escribirán hasta habilitar sus importadores con validación transaccional.');return;}
   setBusy(true);
   try{
-   const normalized=rows.map((r,i)=>({r,i}));
+   const groupedBySource = new Map<string, Row[]>();
+   rows.forEach(row => {
+    const source = String(row.migrationsource ?? 'archivo sin nombre');
+    const group = groupedBySource.get(source) ?? [];
+    group.push(row);
+    groupedBySource.set(source, group);
+   });
+   const inventoryRows = [...groupedBySource.entries()].filter(([, sourceRows]) => {
+    const sourceKeys = new Set(sourceRows.flatMap(row => Object.keys(row).filter(key => key !== 'migrationsource')));
+    return [
+     ['code','codigo','sku','productcode'],
+     ['name','nombre','productname','producto']
+    ].every(group => group.some(key => sourceKeys.has(norm(key))));
+   }).flatMap(([, sourceRows]) => sourceRows);
+   if (!inventoryRows.length) throw new Error('No se identificaron archivos u hojas con encabezados de inventario (código y nombre). No se importó ningún registro.');
+   const normalized=inventoryRows.map((r,i)=>({r,i}));
    const seen=new Set<string>();const existing=new Set(products.map(p=>p.code.trim().toLowerCase()));
    const prepared=normalized.map(({r,i})=>{
     const code=String(pick(r,'code','codigo','sku','productCode')??'').trim();
@@ -116,7 +129,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(seen.has(k))throw new Error('Código duplicado dentro de los archivos: '+code+'. No se importó ningún artículo.');
     if(existing.has(k))throw new Error('El código '+code+' ya existe en SICOVEN. No se sobrescriben registros automáticamente.');
     seen.add(k);
-    const number=(...keys:string[])=>{const raw=pick(r,...keys); if(raw===undefined||raw===''){const essential=keys.some(key=>['currentStock','existencia','stock','quantity','cantidad','avgCostBs','costoPromedioBs','costBs','costoBs'].includes(norm(key))); if(essential)throw new Error('Registro '+(i+1)+': falta el valor de '+keys[0]+'. No se asumirá cero ni se importará parcialmente.'); return 0;} const normalized=String(raw).trim().replace(/\s/g,''); const n=normalized.includes(',')&&normalized.includes('.') ? (normalized.lastIndexOf(',')>normalized.lastIndexOf('.') ? Number(normalized.replace(/\./g,'').replace(',','.')) : Number(normalized.replace(/,/g,''))) : normalized.includes(',') ? Number(normalized.replace(',','.')) : Number(normalized); if(!Number.isFinite(n)||n<0)throw new Error('Registro '+(i+1)+': valor numérico inválido en '+keys[0]+'.');return n;};
+    const number=(...keys:string[])=>{const raw=pick(r,...keys); if(raw===undefined||raw===''){const essential=keys.some(key=>['currentStock','existencia','stock','quantity','cantidad','avgCostBs','costoPromedioBs','costBs','costoBs','salesPriceBs','precioVentaBs','priceBs'].includes(norm(key))); if(essential)throw new Error('Registro '+(i+1)+': falta el valor de '+keys[0]+'. No se asumirá cero ni se importará parcialmente.'); return 0;} const n=parseMigrationNumber(raw); if(!Number.isFinite(n)||n<0)throw new Error('Registro '+(i+1)+': valor numérico inválido en '+keys[0]+'.');return n;};
     const stock=number('currentStock','existencia','stock','quantity','cantidad');
     const cost=number('avgCostBs','costoPromedioBs','costBs','costoBs');
     const priceBs=number('salesPriceBs','precioVentaBs','priceBs');
