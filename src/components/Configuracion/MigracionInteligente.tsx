@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { normalizeMigrationValue, parseDelimitedRecords, parseMigrationNumber } from '../../types/migrationParsing';
 import ExcelJS from 'exceljs';
 import { FileUp, Search, ShieldCheck, AlertTriangle, CheckCircle2, XCircle, Files, ArrowRightLeft } from 'lucide-react';
 
@@ -23,7 +24,7 @@ const MODULES: { key: ModuleKey; name: string; aliases: Record<string, string[]>
   { key: 'assets', name: 'Activos fijos', aliases: { code: ['codigo','code','assetid'], name: ['nombre','descripcion','activo','name'], cost: ['costo','cost','costobs','valorhistorico'], date: ['fechaadquisicion','fecha','acquisitiondate'] }, required: [['codigo','code','assetid'], ['nombre','descripcion','activo','name'], ['costo','cost','costobs','valorhistorico']] }
 ];
 
-const normalize = (v: unknown) => String(v ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+const normalize = normalizeMigrationValue;
 const asRows = (data: unknown): Row[] => {
   if (Array.isArray(data)) return data.filter(x => x && typeof x === 'object' && !Array.isArray(x)) as Row[];
   if (data && typeof data === 'object') {
@@ -34,41 +35,50 @@ const asRows = (data: unknown): Row[] => {
   }
   return [];
 };
-const csvRows = (text: string): Row[] => {
-  const lines = text.replace(/^\uFEFF/, '').split(/\r?\n/).filter(line => line.trim());
-  if (lines.length < 2) return [];
-  const delimiter = [',',';','\t','|'].sort((a,b) => lines[0].split(b).length - lines[0].split(a).length)[0];
-  const split = (line: string) => {
-    const cells: string[] = []; let cell = ''; let quoted = false;
-    for (let i=0;i<line.length;i++) { const c=line[i]; if (c === '"') { if (quoted && line[i+1] === '"') { cell += '"'; i++; } else quoted = !quoted; } else if (c === delimiter && !quoted) { cells.push(cell.trim()); cell=''; } else cell += c; }
-    cells.push(cell.trim()); return cells;
-  };
-  const headers = split(lines[0]).map((h,i) => h || 'columna_' + (i+1));
-  return lines.slice(1).map(line => Object.fromEntries(split(line).map((v,i) => [headers[i] || 'columna_' + (i+1), v])));
-};
-async function parseFile(file: File): Promise<ParsedFile> {
+const csvRows = (text: string): Row[] => parseDelimitedRecords(text);
+
+async function parseFile(file: File): Promise<ParsedFile[]> {
   try {
     const ext = file.name.toLowerCase().split('.').pop();
-    if (ext === 'json') return { name: file.name, rows: asRows(JSON.parse(await file.text())) };
-    if (ext === 'csv' || ext === 'tsv' || ext === 'txt') return { name: file.name, rows: csvRows(await file.text()) };
+    if (ext === 'json') {
+      const rows = asRows(JSON.parse(await file.text()));
+      return [{ name: file.name, rows, ...(rows.length ? {} : { error: 'El JSON no contiene registros en un arreglo reconocido.' }) }];
+    }
+    if (ext === 'csv' || ext === 'tsv' || ext === 'txt') {
+      const rows = csvRows(await file.text());
+      return [{ name: file.name, rows, ...(rows.length ? {} : { error: 'No se detectaron filas de datos o encabezados suficientes.' }) }];
+    }
     if (ext === 'xlsx' || ext === 'xlsm') {
       const workbook = new ExcelJS.Workbook();
       await workbook.xlsx.load(await file.arrayBuffer());
-      const sheet = workbook.worksheets[0];
-      if (!sheet) return { name: file.name, rows: [], error: 'El libro no contiene hojas.' };
-      const headers: string[] = [];
-      sheet.getRow(1).eachCell({ includeEmpty: true }, (cell, col) => { headers[col-1] = String(cell.value ?? 'columna_' + col); });
-      const rows: Row[] = [];
-      sheet.eachRow((row, rowNo) => {
-        if (rowNo === 1) return;
-        const item: Row = {};
-        headers.forEach((h,i) => { const v = row.getCell(i+1).value; item[h || 'columna_' + (i+1)] = v && typeof v === 'object' && 'text' in v ? (v as {text:string}).text : v; });
-        if (Object.values(item).some(v => String(v ?? '').trim())) rows.push(item);
+      if (!workbook.worksheets.length) return [{ name: file.name, rows: [], error: 'El libro no contiene hojas.' }];
+      return workbook.worksheets.map(sheet => {
+        const matrix: unknown[][] = [];
+        sheet.eachRow({ includeEmpty: false }, row => {
+          const values: unknown[] = [];
+          for (let col = 1; col <= row.cellCount; col++) {
+            const value = row.getCell(col).value;
+            if (value instanceof Date) values.push(value.toISOString().slice(0, 10));
+            else if (value && typeof value === 'object' && 'text' in value) values.push((value as { text: unknown }).text);
+            else if (value && typeof value === 'object' && 'result' in value) values.push((value as { result: unknown }).result);
+            else values.push(value);
+          }
+          matrix.push(values);
+        });
+        if (matrix.length < 2) return { name: file.name + ' — hoja: ' + sheet.name, rows: [], error: 'La hoja no contiene encabezados y filas de datos.' };
+        const headers = matrix[0].map((value, index) => String(value ?? '').trim() || 'columna_' + (index + 1));
+        const rows = matrix.slice(1).map(values => {
+          const item: Row = {};
+          headers.forEach((header, index) => { item[header] = values[index] ?? ''; });
+          return item;
+        }).filter(item => Object.values(item).some(value => String(value ?? '').trim() !== ''));
+        return { name: file.name + ' — hoja: ' + sheet.name, rows, ...(rows.length ? {} : { error: 'La hoja no contiene registros de datos.' }) };
       });
-      return { name: file.name, rows };
     }
-    return { name: file.name, rows: [], error: 'Formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.' };
-  } catch (e) { return { name: file.name, rows: [], error: e instanceof Error ? e.message : 'No se pudo interpretar el archivo.' }; }
+    return [{ name: file.name, rows: [], error: 'Formato no admitido. Use JSON, CSV, TSV, TXT o Excel XLSX/XLSM.' }];
+  } catch (e) {
+    return [{ name: file.name, rows: [], error: e instanceof Error ? e.message : 'No se pudo interpretar el archivo.' }];
+  }
 }
 
 export const MigracionInteligente: React.FC = () => {
@@ -94,8 +104,7 @@ export const MigracionInteligente: React.FC = () => {
           const findValue = (row: Row, aliases: string[]) => {
             const key = Object.keys(row).find(k => aliases.includes(normalize(k)));
             const raw = key ? row[key] : 0;
-            const parsed = Number(String(raw ?? '0').replace(/\s/g, '').replace(/\.(?=\d{3}(?:\D|$))/g, '').replace(',', '.'));
-            return Number.isFinite(parsed) ? parsed : NaN;
+            return parseMigrationNumber(raw ?? '0');
           };
           const referenceAliases = ['referencia','comprobante','numeroasiento','entrynumber','asiento','journalid','id'];
           const grouped = new Map<string, { debit: number; credit: number; invalid: boolean; rows: number }>();
@@ -139,7 +148,8 @@ export const MigracionInteligente: React.FC = () => {
     if (!list?.length) return;
     setBusy(true); setError(''); setConfirmed(false); setPlanNote('');
     try {
-      const parsed = await Promise.all(Array.from(list).map(parseFile));
+      const parsedGroups = await Promise.all(Array.from(list).map(parseFile));
+      const parsed = parsedGroups.flat();
       setFiles(prev => [...prev, ...parsed]);
     } catch { setError('No se pudieron analizar los archivos seleccionados.'); }
     finally { setBusy(false); }
