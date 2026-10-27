@@ -23,7 +23,6 @@ import {
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewBankMovementModal } from './NewBankMovementModal';
-import { NewBankAccountModal } from './NewBankAccountModal';
 import { BankStatementMovement } from '../../types/accounting';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportConciliacionPdf } from '../../utils/pdfGenerator';
@@ -49,7 +48,6 @@ export const ConciliacionBancariaView: React.FC = () => {
   const [cutoffDate, setCutoffDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewMovementModalOpen, setIsNewMovementModalOpen] = useState(false);
-  const [isNewAccountModalOpen, setIsNewAccountModalOpen] = useState(false);
   const [autoReconcileFeedback, setAutoReconcileFeedback] = useState<string | null>(null);
 
   // Manual pair selection state
@@ -69,17 +67,7 @@ export const ConciliacionBancariaView: React.FC = () => {
         <p className="text-xs text-slate-400 mt-1">
           Registra una cuenta bancaria para conciliar los movimientos contables con los extractos del banco.
         </p>
-        <button
-          onClick={() => setIsNewAccountModalOpen(true)}
-          className="mt-4 inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 rounded-xl hover:bg-emerald-500 transition cursor-pointer"
-        >
-          <Plus className="w-4 h-4" />
-          Registrar Primera Cuenta Bancaria
-        </button>
-        <NewBankAccountModal
-          isOpen={isNewAccountModalOpen}
-          onClose={() => setIsNewAccountModalOpen(false)}
-        />
+        <p className="mt-4 text-xs font-semibold text-emerald-700">Para registrar o administrar bancos, utilice el módulo Tesorería. Esta pantalla queda dedicada al cotejo de extractos y la cédula de conciliación.</p>
       </div>
     );
   }
