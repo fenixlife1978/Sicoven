@@ -48,14 +48,51 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [notice,setNotice]=useState('');
  const [confirmed,setConfirmed]=useState(false);
  const analysis = useMemo(()=>{
-  const keys=new Set(headers.map(norm));
-  return MODULES.map(m=>{
-   const matched=m.aliases.filter(a=>keys.has(norm(a)));
-   const detected=matched.length>=Math.min(2,m.aliases.length);
-   const missing=m.fields.filter(f=>!keys.has(norm(f)));
-   return {...m,matched,detected,missing,ready:m.id==='inventory'&&detected&&['code','codigo','sku','productcode'].some(k=>keys.has(norm(k)))&&['name','nombre','productname','producto'].some(k=>keys.has(norm(k)))};
-  }).filter(m=>m.detected);
- },[headers]);
+  const sources = new Map<string, Row[]>();
+  rows.forEach(row=>{
+   const source=String(row.migrationsource??'archivo sin nombre');
+   const group=sources.get(source)??[];
+   group.push(row); sources.set(source,group);
+  });
+  const detected: Array<ModuleInfo & {source:string; matched:string[]; missing:string[]; detected:boolean; ready:boolean}> = [];
+  for(const [source, sourceRows] of sources){
+   const keys=new Set(sourceRows.flatMap(row=>Object.keys(row).filter(key=>key!=='migrationsource').map(norm)));
+   for(const m of MODULES){
+    const matched=m.aliases.filter(a=>keys.has(norm(a)));
+    const groupsByModule:Record<ModuleId,string[][]>={
+     inventory:[['code','codigo','sku','productcode'],['name','nombre','productname','producto']],
+     customers:[['customername','clientename','customer','cliente','customerrif','rifcliente'],['rif','taxid','identificacion']],
+     receivables:[['customername','cliente','clienterif','rifcliente'],['invoicenumber','invoice','factura','documento'],['saldo','saldoactual','monto','importe','balance','amount']],
+     payables:[['suppliername','proveedor','proveedorrif','rifproveedor'],['invoicenumber','invoice','factura','documento'],['saldo','saldoactual','monto','importe','balance','amount']],
+     sales:[['invoiceDate','fecha','date'],['invoiceNumber','factura','documento'],['totalAmountBs','total','totalbs','monto']],
+     purchases:[['invoiceDate','fecha','date'],['invoiceNumber','factura','documento'],['totalAmountBs','total','totalbs','monto']],
+     accounts:[['accountCode','codigo','code','cuenta'],['accountName','nombre','descripcion','name']],
+     journal:[['fecha','date'],['accountCode','cuenta','codigocuenta'],['debitBs','debito','debe','debit'],['creditBs','credito','haber','credit']]
+    };
+    const groups=groupsByModule[m.id]??[m.fields];
+    const matchedGroups=groups.filter(group=>group.some(key=>keys.has(norm(key)))).length;
+    const specificSignals:Partial<Record<ModuleId,string[]>>={
+     inventory:['sku','productcode','itemcode','existencia','currentstock'],
+     customers:['customerid','customerrif','rifcliente','taxid','identificacion'],
+     receivables:['customername','clienterif','rifcliente'],
+     payables:['suppliername','supplierid','supplierrif','rifproveedor'],
+     sales:['invoicenumber','numerofactura','customerrif'],
+     purchases:['invoicenumber','numerofactura','supplierrif'],
+     accounts:['accountcode','accountname','clasificacion'],
+     journal:['accountcode','codigocuenta','debitbs','creditbs','debe','haber']
+    };
+    const hasSpecific=(specificSignals[m.id]??[]).some(key=>keys.has(norm(key)));
+    if(matchedGroups<2&&!hasSpecific) continue;
+    const missing=m.fields.filter(field=>!keys.has(norm(field)));
+    const ready=m.id==='inventory'&&groups[0].some(k=>keys.has(norm(k)))&&groups[1].some(k=>keys.has(norm(k)))&&
+     ['currentstock','existencia','stock','quantity','cantidad'].some(k=>keys.has(norm(k)))&&
+     ['avgcostbs','costobs','costobs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
+     ['salespricebs','precioventabs','pricebs','precioventa'].some(k=>keys.has(norm(k)));
+    detected.push({...m,source,matched,missing,detected:true,ready});
+   }
+  }
+  return detected;
+ },[rows]);
  const readFiles=async(list:File[])=>{
   setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setFiles(list);
   if(!list.length)return;
