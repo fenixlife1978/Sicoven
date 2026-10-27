@@ -294,13 +294,6 @@ export const ConciliacionBancariaView: React.FC = () => {
                   </option>
                 ))}
               </select>
-              <button
-                onClick={() => setIsNewAccountModalOpen(true)}
-                className="p-1.5 border border-slate-300 hover:border-slate-400 bg-slate-50 hover:bg-slate-100 rounded-lg text-slate-600 transition"
-                title="Registrar otra cuenta bancaria"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
             </div>
           </div>
 
