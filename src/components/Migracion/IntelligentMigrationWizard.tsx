@@ -38,7 +38,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, accounts, addAccount } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -91,7 +91,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      ['avgcostbs','costopromediobs','costbs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
      ['salespricebs','precioventabs','pricebs','precioventa'].some(k=>keys.has(norm(k)));
     const accountReady=m.id==='accounts'&&['code','accountcode','codigo','codigocuenta'].some(k=>keys.has(norm(k)))&&['name','accountname','nombre','nombrecuenta'].some(k=>keys.has(norm(k)))&&['type','accounttype','tipo','tipocuenta','clasificacion'].some(k=>keys.has(norm(k)));
-    const readyFinal=ready||accountReady;
+    const journalReady=m.id==='journal'&&['date','fecha'].some(k=>keys.has(norm(k)))&&['accountcode','codigocuenta','cuenta'].some(k=>keys.has(norm(k)))&&['debitbs','debe','debito'].some(k=>keys.has(norm(k)))&&['creditbs','haber','credito'].some(k=>keys.has(norm(k)));
+    const readyFinal=ready||accountReady||journalReady;
     detected.push({...m,source,matched,missing,detected:true,ready:readyFinal});
    }
   }
@@ -171,7 +172,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   const requiredInventoryFields = [['code','codigo','sku','productCode'],['name','nombre','productName','producto'],['currentStock','existencia','stock','quantity','cantidad'],['avgCostBs','costoPromedioBs','costBs','costoBs','costObs','costo','costoUnitario','unitCost'],['salesPriceBs','precioVentaBs','priceBs','salesPrice','precioVenta']];
   const missingInventoryFields = requiredInventoryFields.filter(group => !group.some(key => available.has(norm(key)))).map(group => group[0]);
   if (missingInventoryFields.length) { setError('No se puede migrar Inventario: faltan campos esenciales '+missingInventoryFields.join(', ')+'. No se supondrán existencias, costos ni precios en cero.'); return; }
-  if(selected.length!==1 || !['inventory','accounts'].includes(selected[0])){setError('Selecciona un único módulo con importador disponible: Inventario o Plan de cuentas.');return;}
+  if(selected.length!==1 || !['inventory','accounts','journal'].includes(selected[0])){setError('Selecciona un único módulo con importador disponible: Inventario, Plan de cuentas o Asientos contables.');return;}
   setBusy(true);
   try{
    if(selected[0]==='accounts'){
@@ -198,6 +199,41 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     for(const a of prepared){if(a.parentCode&&!allCodes.has(a.parentCode.toLowerCase()))throw new Error('La cuenta '+a.code+' referencia una cuenta padre inexistente: '+a.parentCode+'.');}
     prepared.forEach(a=>addAccount(a));
     setNotice('Plan de cuentas importado: '+prepared.length+' cuentas nuevas. Se validaron tipos, niveles, códigos duplicados y referencias de cuenta padre.');
+    return;
+   }
+   if(selected[0]==='journal'){
+    const sourceRows=rows.filter(r=>['accountCode','codigoCuenta','cuenta'].some(k=>pick(r,k)!==undefined));
+    if(!sourceRows.length)throw new Error('No hay líneas de asientos con código de cuenta.');
+    const accountMap=new Map(accounts.map(a=>[a.code.toLowerCase(),a]));
+    const groups=new Map<string,Row[]>();
+    sourceRows.forEach((r,i)=>{
+     const date=String(pick(r,'date','fecha')??'').slice(0,10);
+     if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))throw new Error('Fila '+(i+1)+': fecha obligatoria en formato AAAA-MM-DD.');
+     const ref=String(pick(r,'entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento')??'').trim();
+     if(!ref)throw new Error('Fila '+(i+1)+': indique entryNumber/asiento/referencia para agrupar las líneas del mismo asiento.');
+     const key=date+'|'+ref;const arr=groups.get(key)??[];arr.push(r);groups.set(key,arr);
+    });
+    const prepared=[...groups.entries()].map(([key,items])=>{
+     const [date,ref]=key.split('|');
+     const lines=items.map(r=>{
+      const code=String(pick(r,'accountCode','codigoCuenta','cuenta')??'').trim();
+      const account=accountMap.get(code.toLowerCase());
+      if(!account)throw new Error('Asiento '+ref+': cuenta inexistente '+code+'.');
+      if(!account.isMovement)throw new Error('Asiento '+ref+': la cuenta '+code+' no admite movimientos.');
+      const amount=(...keys:string[])=>{const raw=pick(r,...keys);const n=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(n)||n<0)throw new Error('Asiento '+ref+': importe inválido en '+keys[0]+'.');return n;};
+      const debitBs=amount('debitBs','debe','debito');const creditBs=amount('creditBs','haber','credito');
+      const debitUsd=amount('debitUsd','debeUsd','debitoUsd');const creditUsd=amount('creditUsd','haberUsd','creditoUsd');
+      if((debitBs>0&&creditBs>0)||(debitUsd>0&&creditUsd>0)||(!debitBs&&!creditBs&&!debitUsd&&!creditUsd))throw new Error('Asiento '+ref+': cada línea debe registrar debe o haber, nunca ambos en la misma moneda.');
+      return {accountCode:code,accountName:account.name,debitBs,creditBs,debitUsd,creditUsd,description:String(pick(r,'lineDescription','descripcionLinea','description','descripcion')??'')};
+     });
+     const sum=(field:'debitBs'|'creditBs'|'debitUsd'|'creditUsd')=>lines.reduce((s,l)=>s+l[field],0);
+     if(lines.length<2||Math.abs(sum('debitBs')-sum('creditBs'))>=0.01||Math.abs(sum('debitUsd')-sum('creditUsd'))>=0.01||sum('debitBs')<=0||sum('debitUsd')<=0)throw new Error('Asiento '+ref+': debe tener al menos dos líneas y cuadrar con importes positivos en Bs y USD.');
+     const rateRaw=pick(items[0],'bcvRate','tasaBcv');const bcvRate=rateRaw===undefined?0:parseMigrationNumber(rateRaw);
+     if(!Number.isFinite(bcvRate)||bcvRate<=0)throw new Error('Asiento '+ref+': tasa BCV positiva obligatoria.');
+     return {date,description:String(pick(items[0],'description','descripcion','concepto')??('Importación '+ref)),type:'MANUAL' as const,bcvRate,items:lines,referenceDoc:ref};
+    });
+    prepared.forEach(entry=>addJournalEntry(entry));
+    setNotice('Asientos importados: '+prepared.length+'. Se validaron cuentas de movimiento, fechas, tasa BCV, líneas y cuadre en Bs y USD.');
     return;
    }
    const groupedBySource = new Map<string, Row[]>();
@@ -244,14 +280,14 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     <label className="flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed border-slate-300 bg-slate-50 p-6 text-center hover:border-emerald-500"><FileUp size={30} className="mb-2 text-emerald-700"/><strong>Selecciona uno o varios archivos</strong><span className="mt-1 text-sm text-slate-500">JSON, CSV, TSV, TXT, XLSX o XLSM · los archivos se analizan localmente</span><input className="mt-3 block max-w-full text-sm" type="file" multiple accept=".json,.csv,.tsv,.txt,.xlsx,.xlsm" onChange={e=>void readFiles(Array.from(e.target.files||[]))}/></label>
     {files.length>0&&<p className="text-sm text-slate-600">{files.length} archivo(s) · {backupPayload?'respaldo contable completo detectado':rows.length+' registros detectados'}</p>}
     {backupPayload&&<section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950"><h3 className="font-bold">Respaldo completo de SICOVEN</h3><p className="mt-1">Se detectó un respaldo estructurado. Al confirmarlo, se reemplazarán los datos actuales por los del archivo, tras validar referencias y estructura.</p><ul className="mt-2 grid grid-cols-2 gap-1 md:grid-cols-3">{Object.entries(backupCounts??{}).map(([name,count])=><li key={name}>{name}: <strong>{count}</strong></li>)}</ul></section>}
-    {analysis.length>0&&<section><h3 className="mb-2 font-bold text-slate-800">Módulos detectados automáticamente</h3><div className="grid gap-2 md:grid-cols-2">{analysis.map(m=><label key={m.id} className={'flex items-start gap-3 rounded-xl border p-3 '+(m.ready?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50')}><input type="checkbox" className="mt-1" checked={selected.includes(m.id)} disabled={!m.ready||!['inventory','accounts'].includes(m.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span className="min-w-0"><span className="block font-semibold text-slate-800">{m.name}</span><span className="block text-xs text-slate-600">{m.ready?'Detectado · importador disponible':'Detectado parcialmente · requiere validar campos y dependencias'}</span>{m.missing.length>0&&<span className="block text-xs text-amber-800">Campos no detectados: {m.missing.join(', ')}</span>}</span></label>)}</div></section>}
+    {analysis.length>0&&<section><h3 className="mb-2 font-bold text-slate-800">Módulos detectados automáticamente</h3><div className="grid gap-2 md:grid-cols-2">{analysis.map(m=><label key={m.id} className={'flex items-start gap-3 rounded-xl border p-3 '+(m.ready?'border-emerald-200 bg-emerald-50':'border-amber-200 bg-amber-50')}><input type="checkbox" className="mt-1" checked={selected.includes(m.id)} disabled={!m.ready||!['inventory','accounts','journal'].includes(m.id)} onChange={e=>setSelected(old=>e.target.checked?[...old,m.id]:old.filter(id=>id!==m.id))}/><span className="min-w-0"><span className="block font-semibold text-slate-800">{m.name}</span><span className="block text-xs text-slate-600">{m.ready?'Detectado · importador disponible':'Detectado parcialmente · requiere validar campos y dependencias'}</span>{m.missing.length>0&&<span className="block text-xs text-amber-800">Campos no detectados: {m.missing.join(', ')}</span>}</span></label>)}</div></section>}
     {rows.length>0&&<section className="rounded-xl border border-slate-200 p-3"><div className="mb-2 flex items-center gap-2 font-semibold"><FileSpreadsheet size={17}/> Vista previa (primeros 5 registros)</div><div className="overflow-x-auto"><table className="min-w-full text-left text-xs"><thead><tr>{headers.slice(0,8).map(h=><th key={h} className="border-b p-2">{h}</th>)}</tr></thead><tbody>{rows.slice(0,5).map((r,i)=><tr key={i}>{headers.slice(0,8).map(h=><td key={h} className="max-w-40 truncate border-b p-2">{String(r[h]??'')}</td>)}</tr>)}</tbody></table></div></section>}
     <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-700"><div className="mb-1 flex items-center gap-2 font-semibold"><ShieldCheck size={17}/> Controles de seguridad</div>Se rechazan códigos duplicados y campos numéricos inválidos; no se sobrescriben artículos existentes. Los módulos contables transaccionales no se importan automáticamente: requieren adaptadores con control de saldos, referencias y duplicidad documental.</div>
     {error&&<div role="alert" className="rounded-lg bg-rose-50 p-3 text-sm text-rose-800"><AlertTriangle className="mr-2 inline" size={17}/>{error}</div>}
     {notice&&<div role="status" className="rounded-lg bg-emerald-50 p-3 text-sm text-emerald-800"><CheckCircle2 className="mr-2 inline" size={17}/>{notice}</div>}
     {(rows.length>0||backupPayload)&&<label className="flex items-start gap-2 text-sm text-slate-700"><input type="checkbox" checked={confirmed} onChange={e=>setConfirmed(e.target.checked)} className="mt-1"/><span>{backupPayload?'Confirmo que revisé el respaldo y autorizo reemplazar los datos actuales por los contenidos en este archivo.':'Confirmo que revisé los archivos y la vista previa, y autorizo la importación del módulo seleccionado. Entiendo que los códigos existentes no serán sobrescritos.'}</span></label>}
    </div>
-   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||(!backupPayload&&(!rows.length||!confirmed||selected.length!==1||!['inventory','accounts'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':backupPayload?'Restaurar respaldo completo':'Confirmar migración'}</button></footer>
+   <footer className="flex flex-wrap justify-between gap-2 border-t border-slate-200 bg-slate-50 px-5 py-4"><button onClick={onClose} className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700">Cerrar</button><button disabled={busy||(!backupPayload&&(!rows.length||!confirmed||selected.length!==1||!['inventory','accounts','journal'].includes(selected[0])))||(!!backupPayload&&!confirmed)} onClick={backupPayload?runBackupImport:runMigration} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{busy?'Validando e importando…':backupPayload?'Restaurar respaldo completo':'Confirmar migración'}</button></footer>
   </div>
  </div>;
 };
