@@ -48,7 +48,7 @@ export const ConfiguracionView: React.FC = () => {
   const [phone, setPhone] = useState(currentCompany.phone);
   const [email, setEmail] = useState(currentCompany.email);
   const [fiscalYear, setFiscalYear] = useState(currentCompany.fiscalYear);
-  const [bcvRate, setBcvRate] = useState(currentCompany.bcvRate);
+  const [bcvRate, setBcvRate] = useState(String(currentCompany.bcvRate));
 
   // Sync state if currentCompany switches
   React.useEffect(() => {
@@ -61,7 +61,7 @@ export const ConfiguracionView: React.FC = () => {
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
-    setBcvRate(currentCompany.bcvRate);
+    setBcvRate(String(currentCompany.bcvRate));
   }, [currentCompany]);
 
   const handleSaveCompany = (e: React.FormEvent) => {
@@ -274,7 +274,7 @@ export const ConfiguracionView: React.FC = () => {
                   min="0.01"
                   required
                   value={bcvRate}
-                  onChange={e => setBcvRate(parseFloat(e.target.value) || 0)}
+                  onChange={e => setBcvRate(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
               </div>
