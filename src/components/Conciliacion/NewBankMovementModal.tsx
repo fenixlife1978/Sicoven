@@ -152,7 +152,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
             </button>
             <button
               type="submit"
-              disabled={amountBs <= 0 || !description.trim()}
+              disabled={parsedAmountBs <= 0 || !description.trim()}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer"
             >
               <Check className="w-4 h-4" />
