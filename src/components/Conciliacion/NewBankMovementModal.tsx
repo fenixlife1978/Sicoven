@@ -21,16 +21,17 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
   const [reference, setReference] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
-  const [amountBs, setAmountBs] = useState<number>(0);
+  const [amountBs, setAmountBs] = useState<string>('');
 
   if (!isOpen) return null;
 
   const bcvRate = currentCompany.bcvRate || 68.50;
-  const amountUsd = bcvRate > 0 ? amountBs / bcvRate : 0;
+  const parsedAmountBs = Number(amountBs) || 0;
+  const amountUsd = bcvRate > 0 ? parsedAmountBs / bcvRate : 0;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (amountBs <= 0) return;
+    if (parsedAmountBs <= 0) return;
     if (!description.trim()) return;
 
     addBankStatementMovement({
@@ -39,7 +40,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
       reference: reference.trim() || `REF-${Date.now().toString().slice(-6)}`,
       description: description.trim(),
       type,
-      amountBs,
+      amountBs: parsedAmountBs,
       amountUsd: Number(amountUsd.toFixed(2)),
       isReconciled: false
     });
@@ -131,8 +132,8 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
                 min="0.01"
                 required
                 placeholder="0.00"
-                value={amountBs || ''}
-                onChange={e => setAmountBs(parseFloat(e.target.value) || 0)}
+                value={amountBs}
+                onChange={e => setAmountBs(e.target.value)}
                 className="w-full pl-10 pr-3 py-1.5 border border-slate-300 rounded-lg font-mono font-bold text-sm focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
