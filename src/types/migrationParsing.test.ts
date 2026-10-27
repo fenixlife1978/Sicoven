@@ -35,3 +35,11 @@ test('no descarta celdas vacías intermedias ni agrega columnas fuera de encabez
   assert.equal(rows[0].nombre, '');
   assert.equal(rows[1].precio, '');
 });
+
+
+test('rechaza encabezados duplicados equivalentes tras normalizar acentos y mayúsculas', () => {
+  assert.throws(
+    () => parseDelimitedRecords('Código,nombre,CODIGO\nA1,Tornillo,A2'),
+    /encabezados duplicados o equivalentes/
+  );
+});
