@@ -183,7 +183,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const kind=selected[0];
     const sourceRows=rows.filter(r=>['invoiceNumber','factura','documento'].some(k=>pick(r,k)!==undefined) && (kind==='sales' ? pick(r,'customerName','cliente','nombreCliente')!==undefined && pick(r,'customerRif','rifCliente','rif','taxId')!==undefined : pick(r,'supplierName','proveedor','nombreProveedor')!==undefined && pick(r,'supplierRif','rifProveedor','rif','taxId')!==undefined));
     if(!sourceRows.length)throw new Error('No hay facturas identificables para importar.');
-    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)||Number.isNaN(Date.parse(value+'T00:00:00Z')))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||Number.isNaN(Date.parse(value+'T00:00:00Z')))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const seen=new Set<string>();
     const existingDocs=new Set((kind==='sales'?sales:purchases).map(d=>(d.invoiceNumber||'').trim().toLowerCase()));
@@ -211,7 +211,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const paymentTerm=(paymentTermRaw==='contado'||paymentTermRaw==='cash'?'CONTADO':'CREDITO') as 'CONTADO'|'CREDITO';
      const creditDays=paymentTerm==='CREDITO'?num(r,i,true,'creditDays','diasCredito'):0;
      const dueDate=paymentTerm==='CREDITO'?String(pick(r,'dueDate','fechaVencimiento','vencimiento')??'').slice(0,10):undefined;
-     if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!/^\\d{4}-\\d{2}-\\d{2}$/.test(dueDate||'')))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
+     if(paymentTerm==='CREDITO'&&(!Number.isInteger(creditDays)||creditDays<1||!/^\d{4}-\d{2}-\d{2}$/.test(dueDate||'')))throw new Error('Fila '+(i+1)+': las facturas a crédito requieren días de crédito y vencimiento válidos.');
      const rate=bcvRate||currentCompany.bcvRate;
      if(rate<=0)throw new Error('Fila '+(i+1)+': la tasa BCV debe ser positiva.');
      const expectedBs=taxableBaseBs+exemptAmountBs+vatAmountBs;
@@ -272,7 +272,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const groups=new Map<string,Row[]>();
     sourceRows.forEach((r,i)=>{
      const date=String(pick(r,'date','fecha')??'').slice(0,10);
-     if(!/^\\d{4}-\\d{2}-\\d{2}$/.test(date))throw new Error('Fila '+(i+1)+': fecha obligatoria en formato AAAA-MM-DD.');
+     if(!/^\d{4}-\d{2}-\d{2}$/.test(date))throw new Error('Fila '+(i+1)+': fecha obligatoria en formato AAAA-MM-DD.');
      const ref=String(pick(r,'entryNumber','numeroAsiento','asiento','referenceDoc','referencia','documento')??'').trim();
      if(!ref)throw new Error('Fila '+(i+1)+': indique entryNumber/asiento/referencia para agrupar las líneas del mismo asiento.');
      const key=date+'|'+ref;const arr=groups.get(key)??[];arr.push(r);groups.set(key,arr);
