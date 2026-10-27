@@ -25,14 +25,23 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 
   if (!isOpen) return null;
 
-  const bcvRate = currentCompany.bcvRate || 68.50;
-  const parsedAmountBs = Number(amountBs) || 0;
-  const amountUsd = bcvRate > 0 ? parsedAmountBs / bcvRate : 0;
+  const bcvRate = Number(currentCompany.bcvRate) || 0;
+  const parsedAmount = Number(amountBs) || 0;
+  const parsedAmountBs = bankAccount.currency === 'USD'
+    ? (bcvRate > 0 ? Math.round(parsedAmount * bcvRate * 100) / 100 : 0)
+    : Math.round(parsedAmount * 100) / 100;
+  const amountUsd = bankAccount.currency === 'USD'
+    ? Math.round(parsedAmount * 1000000) / 1000000
+    : (bcvRate > 0 ? Math.round((parsedAmountBs / bcvRate) * 1000000) / 1000000 : 0);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (parsedAmountBs <= 0) return;
+    if (!Number.isFinite(parsedAmount) || parsedAmount <= 0) return;
     if (!description.trim()) return;
+    if (bankAccount.currency === 'USD' && bcvRate <= 0) {
+      window.alert('Configure una tasa BCV válida para convertir el movimiento USD a bolívares.');
+      return;
+    }
 
     addBankStatementMovement({
       bankAccountId: bankAccount.id,
@@ -41,7 +50,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
       description: description.trim(),
       type,
       amountBs: parsedAmountBs,
-      amountUsd: Number(amountUsd.toFixed(2)),
+      amountUsd,
       isReconciled: false
     });
 
@@ -123,9 +132,9 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
           </div>
 
           <div>
-            <label className="block font-semibold text-slate-700 mb-1">Monto de la Operación (Bs.) *</label>
+            <label className="block font-semibold text-slate-700 mb-1">Monto de la Operación ({bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}) *</label>
             <div className="relative">
-              <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">Bs.</span>
+              <span className="absolute left-3 top-2 text-xs font-bold text-slate-400">{bankAccount.currency === 'USD' ? 'USD' : 'Bs.'}</span>
               <input
                 type="number"
                 step="0.01"
@@ -138,7 +147,9 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
               />
             </div>
             <span className="text-[11px] text-slate-500 font-mono mt-1 block">
-              Equivalente en Divisa: {formatUsd(amountUsd)} (Tasa BCV: Bs. {bcvRate.toFixed(2)})
+              {bankAccount.currency === 'USD'
+                ? `Equivalente en Bs.: ${formatBs(parsedAmountBs)}`
+                : `Equivalente en USD: ${formatUsd(amountUsd)}`} {bcvRate > 0 ? `(Tasa BCV: Bs. ${bcvRate.toFixed(2)})` : '(Tasa BCV no configurada)'}
             </span>
           </div>
 
