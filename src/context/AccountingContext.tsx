@@ -1692,18 +1692,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const auxName = `${bankData.bankName.trim()} - Cta. ${bankData.currency === 'USD' ? 'Corriente USD' : 'Corriente Bs.'}`;
     const newAux: Account = { code: accountCode, name: auxName, type: 'ACTIVO', level: 5, isMovement: true, parentCode };
     if (accounts.some(a => a.code === accountCode)) throw new Error('No se pudo generar un código auxiliar único. Actualice el catálogo e intente nuevamente.');
+    const amountBs = Number(bankData.initialBalanceBs || 0);
+    const amountUsd = Number(bankData.initialBalanceUsd || 0);
+    const hasOpeningBalance = amountBs > 0 || amountUsd > 0;
+    const rate = Number(currentCompany.bcvRate);
+    if (hasOpeningBalance && (!Number.isFinite(rate) || rate <= 0)) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
+    const equity = hasOpeningBalance ? accounts.find(a => a.code === '3.3.1.01' && a.isMovement) : undefined;
+    if (hasOpeningBalance && !equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
+    const bs = Math.round(amountBs * 100) / 100;
+    const usd = Math.round((amountUsd || (rate > 0 ? bs / rate : 0)) * 1000000) / 1000000;
     const newBank: BankAccount = { ...bankData, accountCode, accountNumber: digits, id: `bank-acc-${Date.now()}-${Math.floor(Math.random()*100000)}`, companyId: currentCompany.id };
     setAccounts(prev => [...prev.filter(a => a.code !== parentCode), parent, newAux].sort((a,b)=>a.code.localeCompare(b.code,undefined,{numeric:true})));
     setBankAccounts(prev => [...prev, newBank]);
-    const amountBs = Number(bankData.initialBalanceBs || 0);
-    const amountUsd = Number(bankData.initialBalanceUsd || 0);
-    if (amountBs > 0 || amountUsd > 0) {
-      const rate = Number(currentCompany.bcvRate);
-      if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida antes de registrar un saldo inicial.');
-      const equity = accounts.find(a => a.code === '3.3.1.01' && a.isMovement);
-      if (!equity) throw new Error('No existe la cuenta de contrapartida de apertura 3.3.1.01.');
-      const bs = Math.round(amountBs * 100) / 100;
-      const usd = Math.round((amountUsd || bs / rate) * 1000000) / 1000000;
+    if (hasOpeningBalance && equity) {
       addJournalEntry({
         entryNumber: 0, date: new Date().toISOString().slice(0,10),
         description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,
