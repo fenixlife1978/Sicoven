@@ -1830,7 +1830,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteBankStatementMovement = (id: string) => {
-    setBankStatementMovements(prev => prev.filter(m => m.id !== id));
+    // No permitir que una operación de una empresa afecte los datos de otra.
+    setBankStatementMovements(prev => prev.filter(m => !(m.id === id && m.companyId === currentCompany.id)));
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
