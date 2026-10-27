@@ -226,7 +226,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const islrWithheldUsd=num(r,i,true,'islrWithheldUsd','islrRetenidoUsd');
      const payable=totalAmountBs-vatWithheldBs-islrWithheldBs;
      if(islrWithheldBs>payable||islrWithheldUsd>totalAmountUsd-vatWithheldUsd)throw new Error('Fila '+(i+1)+': las retenciones superan el neto a pagar.');
-     return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,vatVoucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
+     return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
     else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
