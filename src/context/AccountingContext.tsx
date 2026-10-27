@@ -31,6 +31,7 @@ import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
+import { isValidIsoDate } from '../types/migrationParsing';
 
 interface AccountingContextType {
   companies: Company[];
@@ -1978,7 +1979,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       for (const entry of data.journalEntries as JournalEntry[]) {
         if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
-            !/^\d{4}-\d{2}-\d{2}$/.test(entry.date) ||
+            !isValidIsoDate(entry.date) ||
             !Number.isFinite(entry.bcvRate) || entry.bcvRate <= 0 || entry.items.length < 2) {
           throw new Error('Hay asientos con empresa, fecha, tasa BCV o líneas inválidas.');
         }
@@ -2013,13 +2014,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const totalUsd = Number(document.totalAmountUsd), baseUsd = Number(document.taxableBaseUsd);
           const vatUsd = Number(document.vatAmountUsd), rate = Number(document.bcvRate);
           if (!document.invoiceNumber?.trim() || documentKeys.has(key) ||
-              !/^\d{4}-\d{2}-\d{2}$/.test(document.invoiceDate) ||
+              !isValidIsoDate(document.invoiceDate) ||
               !Number.isFinite(rate) || rate <= 0 ||
               [totalBs,baseBs,exemptBs,vatBs,totalUsd,baseUsd,vatUsd].some(value => !Number.isFinite(value) || value < 0) ||
               Math.abs(totalBs - baseBs - exemptBs - vatBs) > 0.02 ||
               Math.abs(totalUsd - baseUsd - vatUsd - exemptBs / rate) > 0.02 ||
               (document.paymentTerm !== undefined && !['CONTADO','CREDITO'].includes(document.paymentTerm)) ||
-              (document.paymentTerm === 'CREDITO' && (!Number.isInteger(document.creditDays) || Number(document.creditDays) < 1 || !/^\d{4}-\d{2}-\d{2}$/.test(document.dueDate || '')))) {
+              (document.paymentTerm === 'CREDITO' && (!Number.isInteger(document.creditDays) || Number(document.creditDays) < 1 || !isValidIsoDate(document.dueDate)))) {
             throw new Error('La colección de ' + collectionName + ' contiene facturas duplicadas, fechas, importes, tasa BCV o condiciones de crédito inválidas.');
           }
           documentKeys.add(key);
