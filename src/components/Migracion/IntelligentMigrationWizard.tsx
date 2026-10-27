@@ -215,6 +215,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const expectedBs=taxableBaseBs+exemptAmountBs+vatAmountBs;
      const expectedUsd=taxableBaseUsd+(rate>0?exemptAmountBs/rate:0)+vatAmountUsd;
      if(Math.abs(expectedBs-totalAmountBs)>0.02||Math.abs(expectedUsd-totalAmountUsd)>0.02)throw new Error('Fila '+(i+1)+': el total no cuadra con base imponible, exento e IVA en Bs/USD.');
+     if(Math.abs(totalAmountBs/rate-totalAmountUsd)>0.02||Math.abs(taxableBaseBs/rate-taxableBaseUsd)>0.02||Math.abs(vatAmountBs/rate-vatAmountUsd)>0.02||Math.abs(vatWithheldBs/rate-vatWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': los importes en USD no corresponden a los importes en Bs divididos por la tasa BCV. El asiento nativo de SICOVEN usa esa conversión; corrija los datos antes de importar.');
      if(vatWithheldBs>totalAmountBs||vatWithheldUsd>totalAmountUsd)throw new Error('Fila '+(i+1)+': la retención supera el total de la factura.');
      const documentTypeRaw=String(pick(r,'documentType','tipoDocumento')??'01').trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
