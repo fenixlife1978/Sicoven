@@ -23,6 +23,10 @@ test('interpreta números con formatos regionales habituales', () => {
   assert.equal(parseMigrationNumber('1,234.56'), 1234.56);
   assert.equal(parseMigrationNumber('1234,56'), 1234.56);
   assert.equal(parseMigrationNumber('1.234'), 1234);
+  assert.equal(parseMigrationNumber('Bs. 1.234,56'), 1234.56);
+  assert.equal(parseMigrationNumber('(1.234,56)'), -1234.56);
+  assert.equal(parseMigrationNumber('-25,50'), -25.5);
+  assert.equal(parseMigrationNumber(''), Number.NaN);
   assert.equal(parseMigrationNumber('texto'), Number.NaN);
 });
 
