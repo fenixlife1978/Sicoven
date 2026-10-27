@@ -31,6 +31,22 @@ const splitDelimited = (text: string, delimiter: string): string[][] => {
   return rows;
 };
 
+export const validateUniqueMigrationHeaders = (headers: unknown[], context = 'archivo'): string[] => {
+  const normalized = headers.map(header => normalizeMigrationValue(header));
+  const seen = new Set<string>();
+  const duplicates = new Set<string>();
+  for (const header of normalized) {
+    if (!header) continue;
+    if (seen.has(header)) duplicates.add(header);
+    seen.add(header);
+  }
+  if (duplicates.size) {
+    throw new Error('El ' + context + ' contiene encabezados duplicados o equivalentes tras normalizar: ' +
+      [...duplicates].join(', ') + '. Renombra las columnas antes de importar.');
+  }
+  return normalized;
+};
+
 export const parseDelimitedRecords = (text: string, requestedDelimiter?: string): MigrationRow[] => {
   const candidates = requestedDelimiter ? [requestedDelimiter] : [',', ';', '\t', '|'];
   const scored = candidates.map(delimiter => {
@@ -41,7 +57,7 @@ export const parseDelimitedRecords = (text: string, requestedDelimiter?: string)
   }).sort((a, b) => b.score - a.score);
   const parsed = scored[0];
   if (!parsed || parsed.rows.length < 2 || parsed.rows[0].length < 2) return [];
-  const headers = parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1));
+  const headers = validateUniqueMigrationHeaders(parsed.rows[0].map((header, index) => header || 'columna_' + (index + 1)), 'archivo delimitado');
   return parsed.rows.slice(1).map(values => {
     const record: MigrationRow = {};
     headers.forEach((header, index) => { record[header] = values[index] ?? ''; });
