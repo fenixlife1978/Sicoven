@@ -234,7 +234,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
     else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Verifica documentos, impuestos y saldos antes de operar.');
-    return;
+    setBusy(false);return;
    }
    if(selected[0]==='accounts'){
     const sourceRows=rows.filter(r=>['code','accountcode','codigo','codigocuenta'].some(k=>pick(r,k)!==undefined)&&['name','accountname','nombre','nombrecuenta'].some(k=>pick(r,k)!==undefined));
@@ -263,7 +263,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     for(const a of prepared){if(a.parentCode&&!allCodes.has(a.parentCode.toLowerCase()))throw new Error('La cuenta '+a.code+' referencia una cuenta padre inexistente: '+a.parentCode+'.');}
     prepared.forEach(a=>addAccount(a));
     setNotice('Plan de cuentas importado: '+prepared.length+' cuentas nuevas. Se validaron tipos, niveles, códigos duplicados y referencias de cuenta padre.');
-    return;
+    setBusy(false);return;
    }
    if(selected[0]==='journal'){
     const sourceRows=rows.filter(r=>['accountCode','codigoCuenta','cuenta'].some(k=>pick(r,k)!==undefined));
@@ -298,7 +298,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     prepared.forEach(entry=>addJournalEntry(entry));
     setNotice('Asientos importados: '+prepared.length+'. Se validaron cuentas de movimiento, fechas, tasa BCV, líneas y cuadre en Bs y USD.');
-    return;
+    setBusy(false);return;
    }
    const groupedBySource = new Map<string, Row[]>();
    rows.forEach(row => {
