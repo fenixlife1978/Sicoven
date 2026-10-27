@@ -877,10 +877,6 @@ export const ConciliacionBancariaView: React.FC = () => {
         onClose={() => setIsNewMovementModalOpen(false)}
         bankAccount={activeBank}
       />
-      <NewBankAccountModal
-        isOpen={isNewAccountModalOpen}
-        onClose={() => setIsNewAccountModalOpen(false)}
-      />
     </div>
   );
 };
