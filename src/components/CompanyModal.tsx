@@ -19,7 +19,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
-  const [bcvRate, setBcvRate] = useState<number>(0);
+  const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<number>(new Date().getFullYear());
 
   if (!isOpen) return null;
@@ -38,7 +38,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
       fiscalYear,
-      bcvRate: Number(bcvRate),
+      bcvRate: Number(bcvRate) || 0,
       lastRateUpdate: new Date().toISOString().split('T')[0]
     });
 
@@ -237,7 +237,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
                 min="0.01"
                 required
                 value={bcvRate}
-                onChange={e => setBcvRate(Number(e.target.value))}
+                onChange={e => setBcvRate(e.target.value)}
                 className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
               />
             </div>
