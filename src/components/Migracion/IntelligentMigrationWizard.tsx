@@ -28,6 +28,16 @@ const scalar = (v: unknown): unknown => {
 const toRows = (matrix: unknown[][]): Row[] => {
  if(matrix.length<2) return [];
  const headers=matrix[0].map(v=>norm(String(scalar(v)??'')));
+ const seen = new Set<string>();
+ const duplicates = new Set<string>();
+ for (const header of headers) {
+  if (!header) continue;
+  if (seen.has(header)) duplicates.add(header);
+  seen.add(header);
+ }
+ if (duplicates.size) {
+  throw new Error('La hoja de Excel contiene encabezados duplicados o equivalentes: ' + [...duplicates].join(', ') + '. Renombra las columnas antes de importar.');
+ }
  return matrix.slice(1).filter(r=>r.some(v=>String(scalar(v)??'').trim())).map(r=>{
   const obj:Row={}; headers.forEach((h,i)=>{if(h)obj[h]=scalar(r[i]);}); return obj;
  });
