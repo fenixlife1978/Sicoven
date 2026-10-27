@@ -294,7 +294,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(lines.length<2||Math.abs(sum('debitBs')-sum('creditBs'))>=0.01||Math.abs(sum('debitUsd')-sum('creditUsd'))>=0.01||sum('debitBs')<=0||sum('debitUsd')<=0)throw new Error('Asiento '+ref+': debe tener al menos dos líneas y cuadrar con importes positivos en Bs y USD.');
      const rateRaw=pick(items[0],'bcvRate','tasaBcv');const bcvRate=rateRaw===undefined?0:parseMigrationNumber(rateRaw);
      if(!Number.isFinite(bcvRate)||bcvRate<=0)throw new Error('Asiento '+ref+': tasa BCV positiva obligatoria.');
-     return {date,description:String(pick(items[0],'description','descripcion','concepto')??('Importación '+ref)),type:'MANUAL' as const,bcvRate,items:lines,referenceDoc:ref};
+     const parsedEntryNumber=/^\d+$/.test(ref)&&Number.isSafeInteger(Number(ref))&&Number(ref)>0?Number(ref):0;
+     return {entryNumber:parsedEntryNumber,date,description:String(pick(items[0],'description','descripcion','concepto')??('Importación '+ref)),type:'MANUAL' as const,bcvRate,items:lines,referenceDoc:ref};
     });
     prepared.forEach(entry=>addJournalEntry(entry));
     setNotice('Asientos importados: '+prepared.length+'. Se validaron cuentas de movimiento, fechas, tasa BCV, líneas y cuadre en Bs y USD.');
