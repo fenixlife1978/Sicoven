@@ -19,12 +19,13 @@ export const TesoreriaView: React.FC = () => {
   const [destinationBankId, setDestinationBankId] = useState('');
   const [message, setMessage] = useState('');
 
-  const activeBank = bankAccounts.find(b => b.id === selectedBankId) || bankAccounts[0];
-  const accountCodes = useMemo(() => new Set(bankAccounts.map(b => b.accountCode)), [bankAccounts]);
+  const companyBanks = bankAccounts.filter(b => b.companyId === currentCompany.id);
+  const activeBank = companyBanks.find(b => b.id === selectedBankId) || companyBanks[0];
+  const accountCodes = useMemo(() => new Set(companyBanks.map(b => b.accountCode)), [companyBanks]);
   const counterpartAccounts = accounts.filter(a => a.isMovement && !accountCodes.has(a.code));
   const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
   const balanceFor = (bankId: string) => {
-    const bank = bankAccounts.find(b => b.id === bankId);
+    const bank = companyBanks.find(b => b.id === bankId);
     if (!bank) return { bs: 0, usd: 0 };
     const hasOpeningEntry = companyEntries.some(entry => entry.referenceDoc === `APERTURA-${bank.accountNumber}`);
     return companyEntries.reduce((total, entry) => {
@@ -65,14 +66,14 @@ export const TesoreriaView: React.FC = () => {
       </div>
     </section>
 
-    {bankAccounts.length === 0 ? <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
+    {companyBanks.length === 0 ? <section className="rounded-2xl border border-dashed border-slate-300 bg-white p-10 text-center">
       <Landmark className="mx-auto mb-3 h-10 w-10 text-slate-300"/>
       <h2 className="font-semibold text-slate-800">Aún no hay cuentas de tesorería</h2>
       <p className="mt-1 text-xs text-slate-500">Registre un banco para crear automáticamente el auxiliar contable dentro del Plan de Cuentas.</p>
       <button onClick={() => setShowNewBank(true)} className="mt-4 rounded-lg bg-emerald-600 px-4 py-2 text-xs font-semibold text-white">Registrar primer banco</button>
     </section> : <>
       <section className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {bankAccounts.map(bank => {
+        {companyBanks.map(bank => {
           const balance = balanceFor(bank.id);
           return <button key={bank.id} onClick={() => setSelectedBankId(bank.id)} className={'rounded-xl border p-4 text-left transition ' + ((activeBank?.id === bank.id) ? 'border-emerald-400 bg-emerald-50/60 ring-1 ring-emerald-200' : 'border-slate-200 bg-white hover:border-slate-300')}>
             <div className="flex items-start justify-between gap-2"><span className="text-sm font-bold text-slate-900">{bank.bankName}</span><Landmark className="h-4 w-4 text-emerald-600"/></div>
