@@ -133,7 +133,7 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
               </select>
             </div>
             <div>
-              <label className="block font-semibold text-slate-700 mb-1">Saldo Inicial en Libros ({currency === 'USD' ? '$ USD' : 'Bs.'})</label>
+              <label className="block font-semibold text-slate-700 mb-1">Saldo Inicial en {currency === 'USD' ? '$ USD' : 'Bs.'}</label>
               <input
                 type="number"
                 step="0.01"
