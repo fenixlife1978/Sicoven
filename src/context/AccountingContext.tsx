@@ -1741,12 +1741,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!source) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
     const parsedDate = new Date(draft.date + 'T00:00:00Z');
     if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.date) || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== draft.date) throw new Error('La fecha del movimiento no es válida.');
-    if (!draft.reference.trim() || !draft.description.trim()) throw new Error('La referencia y el concepto son obligatorios.');
+    if (!draft.reference?.trim() || !draft.description?.trim()) throw new Error('La referencia y el concepto son obligatorios.');
+    if (!['INCOME', 'EXPENSE', 'TRANSFER'].includes(draft.type)) throw new Error('El tipo de movimiento no es válido.');
     if (!Number.isFinite(draft.amount) || draft.amount <= 0) throw new Error('El importe debe ser mayor que cero.');
+    const normalizedReference = draft.reference.trim().toLocaleLowerCase();
+    const duplicatedReference = journalEntries.some(entry =>
+      entry.companyId === currentCompany.id &&
+      entry.referenceDoc?.trim().toLocaleLowerCase() === normalizedReference &&
+      entry.items.some(item => item.accountCode === source.accountCode)
+    );
+    if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para esta cuenta bancaria.');
     const rate = Number(currentCompany.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida para registrar movimientos.');
     const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
     const amountUsd = source.currency === 'USD' ? Math.round(draft.amount * 1000000) / 1000000 : Math.round(amountBs / rate * 1000000) / 1000000;
+    if (amountBs <= 0 || amountUsd <= 0) throw new Error('El importe es demasiado pequeño para contabilizarse en ambas monedas.');
     const bankAccount = accounts.find(a => a.code === source.accountCode && a.isMovement);
     if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
     let items: JournalEntryItem[];
