@@ -1680,7 +1680,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (bankAccounts.some(b => b.companyId === currentCompany.id && b.accountNumber.replace(/\D/g, '') === digits)) {
       throw new Error('Ya existe una cuenta bancaria con ese número en la empresa activa.');
     }
-    const parentCode = bankData.currency === 'USD' ? '1.1.1.05' : '1.1.1.03';
+    const parentCode = bankData.currency === 'USD' ? '1.1.1.07' : '1.1.1.06';
     const controlName = bankData.currency === 'USD' ? 'Bancos Moneda Extranjera (control)' : 'Bancos Moneda Nacional (control)';
     const existingParent = accounts.find(a => a.code === parentCode);
     const parent: Account = existingParent
