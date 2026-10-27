@@ -2008,8 +2008,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const bankAccountCode = targetBank.accountCode;
     const bankAccountName = targetBank.bankName;
     const contraAccount = accounts.find(a => a.code === contraAccountCode);
-    if (!contraAccount || !contraAccount.isMovement || contraAccount.code === bankAccountCode) {
-      throw new Error('Seleccione una cuenta contable de movimiento válida y distinta de la cuenta bancaria.');
+    const allBankAccountCodes = new Set(bankAccounts.map(bank => bank.accountCode));
+    if (!contraAccount || !contraAccount.isMovement || allBankAccountCodes.has(contraAccount.code)) {
+      throw new Error('Seleccione una cuenta contable de movimiento válida que no sea una cuenta bancaria.');
     }
     const contraAccountName = contraAccount.name;
 
