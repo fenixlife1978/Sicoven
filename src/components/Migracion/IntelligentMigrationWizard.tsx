@@ -59,7 +59,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    const keys=new Set(sourceRows.flatMap(row=>Object.keys(row).filter(key=>key!=='migrationsource').map(norm)));
    for(const m of MODULES){
     const matched=m.aliases.filter(a=>keys.has(norm(a)));
-    const groupsByModule:Record<ModuleId,string[][]>={
+    const groupsByModule:Partial<Record<ModuleId,string[][]>>={
      inventory:[['code','codigo','sku','productcode'],['name','nombre','productname','producto']],
      customers:[['customername','clientename','customer','cliente','customerrif','rifcliente'],['rif','taxid','identificacion']],
      receivables:[['customername','cliente','clienterif','rifcliente'],['invoicenumber','invoice','factura','documento'],['saldo','saldoactual','monto','importe','balance','amount']],
@@ -86,7 +86,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const missing=m.fields.filter(field=>!keys.has(norm(field)));
     const ready=m.id==='inventory'&&groups[0].some(k=>keys.has(norm(k)))&&groups[1].some(k=>keys.has(norm(k)))&&
      ['currentstock','existencia','stock','quantity','cantidad'].some(k=>keys.has(norm(k)))&&
-     ['avgcostbs','costobs','costobs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
+     ['avgcostbs','costbs','costobs','costo','costounitario','unitcost'].some(k=>keys.has(norm(k)))&&
      ['salespricebs','precioventabs','pricebs','precioventa'].some(k=>keys.has(norm(k)));
     detected.push({...m,source,matched,missing,detected:true,ready});
    }
