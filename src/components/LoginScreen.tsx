@@ -576,7 +576,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
                   <line x1="10" y1="14" x2="21" y2="3"></line>
                 </svg>
               </a>
-              <p style={{ margin: 0, color: '#e2e8f0', fontSize: 11, lineHeight: 1.45, textShadow: '0 1px 2px rgba(0,0,0,0.6)' }}>
+              <p style={{ margin: 0, color: '#0f2942', fontSize: 12, fontWeight: 600, lineHeight: 1.5, letterSpacing: '0.01em' }}>
                 Dispone de 24 horas de prueba. Si desea adquirir su licencia antes de que termine ese período, seleccione «Ver Planes y Pagos».
               </p>
             </div>
