@@ -311,6 +311,52 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           white-space: nowrap;
         }
 
+        .technical-support-badge {
+          position: absolute;
+          top: 20px;
+          right: 28px;
+          z-index: 30;
+          display: inline-flex;
+          align-items: center;
+          gap: 9px;
+          padding: 8px 15px;
+          border-radius: 9999px;
+          background: rgba(7, 31, 61, 0.78);
+          border: 1px solid rgba(56, 189, 248, 0.4);
+          backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
+          color: #ffffff;
+          font-family: "Segoe UI", Arial, sans-serif;
+          font-size: 12px;
+          font-weight: 600;
+          letter-spacing: 0.02em;
+          text-decoration: none;
+          box-shadow: 0 4px 14px rgba(0, 0, 0, 0.28);
+          transition: all 0.2s ease;
+          pointer-events: auto;
+        }
+
+        .technical-support-badge:hover {
+          background: rgba(16, 45, 84, 0.95);
+          border-color: #38bdf8;
+          transform: translateY(-1px);
+          box-shadow: 0 6px 18px rgba(2, 132, 199, 0.35);
+          color: #ffffff;
+        }
+
+        .technical-support-icon {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          background: linear-gradient(135deg, #10b981, #059669);
+          color: #ffffff;
+          flex-shrink: 0;
+          box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
+        }
+
         .quick-credentials-hint {
           display: flex;
           align-items: center;
@@ -404,6 +450,14 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             font-size: 11px;
           }
 
+          .technical-support-badge {
+            top: 14px;
+            right: 14px;
+            padding: 6px 12px;
+            font-size: 11px;
+            background: rgba(7, 31, 61, 0.88);
+          }
+
           .login-form::before {
             content: "SICOVEN";
             display: block;
@@ -463,6 +517,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           className="login-background-img"
           draggable={false}
         />
+
+        {/* Acceso a Soporte Técnico (WhatsApp) ubicado en la esquina superior sin superponer formulario ni créditos */}
+        <a
+          href="https://wa.me/584125773996?text=Hola,%20necesito%20soporte%20t%C3%A9cnico%20con%20SICOVEN"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="technical-support-badge"
+          title="Contactar a Soporte Técnico por WhatsApp"
+          aria-label="Soporte técnico WhatsApp: +584125773996"
+        >
+          <span className="technical-support-icon" aria-hidden="true">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 18v-6a9 9 0 0 1 18 0v6"></path>
+              <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"></path>
+            </svg>
+          </span>
+          <span>WhatsApp: +584125773996</span>
+        </a>
+
         <form className="login-form" id="loginForm" autoComplete="on" onSubmit={handleSubmit}>
           <label className="field" htmlFor="username">
             <svg viewBox="0 0 24 24" aria-hidden="true" className="icon-field">
