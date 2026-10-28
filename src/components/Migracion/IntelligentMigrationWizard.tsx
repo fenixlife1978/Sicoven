@@ -48,7 +48,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [notice,setNotice]=useState('');
  const [confirmed,setConfirmed]=useState(false);
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
- const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);\n const [posvenBackup,setPosvenBackup]=useState(false);
+ const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
+ const [posvenBackup,setPosvenBackup]=useState(false);
  const analysis = useMemo(()=>{
   const sources = new Map<string, Row[]>();
   rows.forEach(row=>{
