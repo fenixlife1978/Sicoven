@@ -367,6 +367,25 @@ app.whenReady().then(async () => {
     try { return JSON.parse(row.state_json); } catch { return null; }
   });
 
+  ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
+    const emptyState = {
+      companies: [], currentCompanyId: '', accounts: require('../src/data/defaultChartOfAccounts').DEFAULT_CHART_OF_ACCOUNTS,
+      journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: false, bcvSyncResult: null
+    };
+    const reset = db.transaction(() => {
+      db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now')) ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json,updated_at=excluded.updated_at")
+        .run(JSON.stringify(emptyState));
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'license_state'], removed: ['accounting_records', 'companies'] }));
+    });
+    reset();
+    return { ok: true, cleared: true };
+  });
+
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
