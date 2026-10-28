@@ -2140,7 +2140,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (window.sicovenStore) {
       if (!storageReady) throw new Error('La base de datos todavía se está inicializando. Intente nuevamente.');
       const result = await window.sicovenStore.resetAccounting(token);
-      if (!result?.ok || !result.cleared) throw new Error('SQLite no confirmó el reset de fábrica.');
+      if (!result?.ok || !result.cleared || result.verified !== true) throw new Error('SQLite no confirmó y verificó el reinicio de fábrica.');
     }
     setCompanies([]);
     setCurrentCompanyId('');
