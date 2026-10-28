@@ -17,7 +17,7 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
 }) => {
   const { currentCompany, addBankStatementMovement } = useAccounting();
 
-  const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [date, setDate] = useState<string>(() => { const now = new Date(); const local = new Date(now.getTime() - now.getTimezoneOffset() * 60000); return local.toISOString().slice(0, 10); });
   const [reference, setReference] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [type, setType] = useState<BankMovementType>('CREDIT');
@@ -43,18 +43,24 @@ export const NewBankMovementModal: React.FC<NewBankMovementModalProps> = ({
       return;
     }
 
-    addBankStatementMovement({
-      bankAccountId: bankAccount.id,
-      date,
-      reference: reference.trim() || `REF-${Date.now().toString().slice(-6)}`,
-      description: description.trim(),
-      type,
-      amountBs: parsedAmountBs,
-      amountUsd,
-      isReconciled: false
-    });
-
-    onClose();
+    try {
+      addBankStatementMovement({
+        bankAccountId: bankAccount.id,
+        date,
+        reference: reference.trim(),
+        description: description.trim(),
+        type,
+        amountBs: parsedAmountBs,
+        amountUsd,
+        isReconciled: false
+      });
+      setReference('');
+      setDescription('');
+      setAmountBs('');
+      onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo registrar el movimiento del extracto bancario.');
+    }
   };
 
   return (
