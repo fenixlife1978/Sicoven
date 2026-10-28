@@ -48,7 +48,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, sales, purchases, currentCompany } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, sales, purchases, journalEntries, currentCompany } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -369,6 +369,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     const prepared=[...groups.entries()].map(([key,items])=>{
      const [date,ref]=key.split('|');
+     const existingEntry=journalEntries.some(entry=>entry.date===date&&String(entry.referenceDoc??'').trim().toLowerCase()===ref.trim().toLowerCase());
+     if(existingEntry)throw new Error('Ya existe un asiento con fecha '+date+' y referencia '+ref+'. No se importaron los asientos de este archivo para evitar duplicar contabilidad.');
      const lines=items.map(r=>{
       const code=String(pick(r,'accountCode','codigoCuenta','cuenta')??'').trim();
       const account=accountMap.get(code.toLowerCase());
