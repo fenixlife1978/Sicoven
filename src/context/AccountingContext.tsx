@@ -1745,12 +1745,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!['INCOME', 'EXPENSE', 'TRANSFER'].includes(draft.type)) throw new Error('El tipo de movimiento no es válido.');
     if (!Number.isFinite(draft.amount) || draft.amount <= 0) throw new Error('El importe debe ser mayor que cero.');
     const normalizedReference = draft.reference.trim().toLocaleLowerCase();
+    const destinationForTransfer = draft.type === 'TRANSFER'
+      ? bankAccounts.find(b => b.id === draft.destinationBankAccountId && b.companyId === currentCompany.id)
+      : undefined;
     const duplicatedReference = journalEntries.some(entry =>
       entry.companyId === currentCompany.id &&
       entry.referenceDoc?.trim().toLocaleLowerCase() === normalizedReference &&
-      entry.items.some(item => item.accountCode === source.accountCode)
+      entry.items.some(item =>
+        item.accountCode === source.accountCode ||
+        (destinationForTransfer !== undefined && item.accountCode === destinationForTransfer.accountCode)
+      )
     );
-    if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para esta cuenta bancaria.');
+    if (duplicatedReference) throw new Error('Ya existe un movimiento contabilizado con esa referencia para una de las cuentas bancarias involucradas.');
     const rate = Number(currentCompany.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('Configure una tasa BCV válida para registrar movimientos.');
     const amountBs = source.currency === 'USD' ? Math.round(draft.amount * rate * 100) / 100 : Math.round(draft.amount * 100) / 100;
@@ -1760,7 +1766,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!bankAccount) throw new Error('La cuenta auxiliar del banco no existe o no admite movimientos.');
     let items: JournalEntryItem[];
     if (draft.type === 'TRANSFER') {
-      const destination = bankAccounts.find(b => b.id === draft.destinationBankAccountId && b.companyId === currentCompany.id);
+      const destination = destinationForTransfer;
       if (!destination || destination.id === source.id) throw new Error('Seleccione otra cuenta bancaria propia como destino.');
       if (destination.currency !== source.currency) {
         throw new Error('La transferencia directa entre cuentas de monedas distintas está bloqueada para evitar asientos descuadrados. Registre la operación cambiaria con su tasa y diferencia cambiaria documentadas antes de transferir entre monedas.');
