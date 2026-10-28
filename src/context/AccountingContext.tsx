@@ -321,6 +321,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // SQLite local es la persistencia operativa en la versión de escritorio.
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
+  // Serializa las escrituras completas de app_state: varias actualizaciones rápidas
+  // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
+  const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
     vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult
@@ -427,9 +430,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   useEffect(() => {
     if (!storageReady) return;
     if (window.sicovenStore) {
-      window.sicovenStore.save(token, stateSnapshot).catch(error => {
-        console.error('Error guardando los datos contables en SQLite:', error);
-      });
+      const snapshotToSave = stateSnapshot;
+      saveQueueRef.current = saveQueueRef.current
+        .then(async () => {
+          const result = await window.sicovenStore!.save(token, snapshotToSave);
+          if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
+          setStorageError(null);
+        })
+        .catch(error => {
+          const message = error instanceof Error ? error.message : 'Error desconocido al guardar en SQLite.';
+          console.error('Error guardando los datos contables en SQLite:', error);
+          setStorageError(message);
+        });
       return;
     }
     // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
