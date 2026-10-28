@@ -36,6 +36,7 @@ export const ConfiguracionView: React.FC = () => {
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
+  const [factoryResetBusy, setFactoryResetBusy] = useState(false);
 
   // Form state for current company editing
   const [name, setName] = useState(currentCompany.name);
@@ -435,21 +436,24 @@ export const ConfiguracionView: React.FC = () => {
             </button>
 
             <button
-              onClick={() => {
-                const first = window.confirm('RESET DE FÁBRICA SICOVEN\n\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
+              disabled={factoryResetBusy}
+              onClick={async () => {
+                const first = window.confirm('RESET DE FÁBRICA SICOVEN\\n\\nSe eliminarán los registros operativos: asientos, compras, ventas, inventario, movimientos, retenciones, conciliaciones, liquidaciones y cuentas bancarias operativas. Se eliminarán todas las empresas registradas y sus parámetros, junto con todos los registros operativos. Se conservarán el acceso administrativo y la licencia/prueba actual. Esta acción no se puede deshacer. ¿Deseas continuar?');
                 if (!first) return;
                 const confirmation = window.prompt('Para confirmar definitivamente, escribe: RESETEAR SICOVEN');
-                if (confirmation !== 'RESETEAR SICOVEN') {
-                  alert('Reset cancelado. No se modificaron los datos.');
-                  return;
-                }
-                resetFactoryData();
-                alert('Reset de fábrica ejecutado. Se eliminaron todas las empresas y sus datos. Se conservaron el acceso administrativo y el estado de licencia/prueba.');
+                if (confirmation !== 'RESETEAR SICOVEN') { alert('Reset cancelado. No se modificaron los datos.'); return; }
+                setFactoryResetBusy(true);
+                try {
+                  await resetFactoryData();
+                  alert('Reset de fábrica confirmado por SQLite. Se eliminaron los datos operativos y las empresas. El acceso administrativo y la licencia/prueba se conservaron.');
+                } catch (error) {
+                  alert(error instanceof Error ? error.message : 'No se pudo completar el reset. No se confirmó el borrado.');
+                } finally { setFactoryResetBusy(false); }
               }}
-              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer"
+              className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer disabled:opacity-60"
             >
               <RotateCcw className="w-4 h-4" />
-              Reset de fábrica: borrar datos operativos
+              {factoryResetBusy ? 'Restableciendo SQLite…' : 'Reset de fábrica: borrar datos operativos'}
             </button>
           </div>
         </div>
