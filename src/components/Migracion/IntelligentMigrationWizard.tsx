@@ -287,15 +287,16 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
+    const documentKey=(invoiceNumber:string,partyRif:string)=>norm(invoiceNumber)+'|'+norm(partyRif);
     const seen=new Set<string>();
-    const existingDocs=new Set((kind==='sales'?sales:purchases).map(d=>(d.invoiceNumber||'').trim().toLowerCase()));
+    const existingDocs=new Set((kind==='sales'?sales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):purchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
     const prepared=sourceRows.map((r,i)=>{
      const invoiceNumber=String(pick(r,'invoiceNumber','factura','documento')??'').trim();
      const partyName=String(pick(r,kind==='sales'?'customerName':'supplierName',kind==='sales'?'cliente':'proveedor',kind==='sales'?'nombreCliente':'nombreProveedor')??'').trim();
      const partyRif=String(pick(r,kind==='sales'?'customerRif':'supplierRif',kind==='sales'?'rifCliente':'rifProveedor','rif','taxId')??'').trim();
-     const key=invoiceNumber.toLowerCase();
+     const key=documentKey(invoiceNumber,partyRif);
      if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
-     if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada o ya existente: '+invoiceNumber+'. No se sobrescribieron documentos.');seen.add(key);
+     if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada para el mismo cliente/proveedor o ya existente: '+invoiceNumber+' ('+partyRif+'). No se sobrescribieron documentos.');seen.add(key);
      const invoiceDate=dateValue(r,i);
      const totalAmountBs=num(r,i,true,'totalAmountBs','totalBs','total');
      const exemptAmountBs=num(r,i,true,'exemptAmountBs','montoExentoBs','exentoBs');
