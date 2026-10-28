@@ -1819,10 +1819,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const amountBs = Number(movData.amountBs);
     const amountUsd = Number(movData.amountUsd);
+    // La contabilidad de SICOVEN valida cada asiento en Bs y USD. Guardar
+    // cero en la moneda equivalente permite importar el movimiento, pero luego
+    // impide generar un ajuste de conciliación válido en partida doble.
     if (!Number.isFinite(amountBs) || !Number.isFinite(amountUsd) ||
-        amountBs < 0 || amountUsd < 0 ||
-        (bank.currency === 'USD' ? amountUsd <= 0 : amountBs <= 0)) {
-      throw new Error('El movimiento debe tener un importe positivo en la moneda de la cuenta bancaria y un equivalente válido.');
+        amountBs <= 0 || amountUsd <= 0) {
+      throw new Error('El movimiento debe tener importes positivos y válidos tanto en la moneda de la cuenta como en su equivalente.');
     }
     const newMov: BankStatementMovement = {
       ...movData,
