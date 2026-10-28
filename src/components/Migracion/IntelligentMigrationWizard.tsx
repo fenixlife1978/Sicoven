@@ -48,7 +48,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, sales, purchases, journalEntries, currentCompany } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -343,8 +343,10 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(islrWithheldBs>payable||islrWithheldUsd>totalAmountUsd-vatWithheldUsd)throw new Error('Fila '+(i+1)+': las retenciones superan el neto a pagar.');
      return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
-    if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
-    else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
+    runAtomicInvoiceImport(()=>{
+     if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
+     else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
+    });
     setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');
     setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
      setBusy(false);return;
