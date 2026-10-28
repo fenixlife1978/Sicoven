@@ -372,7 +372,7 @@ app.whenReady().then(async () => {
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
     const emptyState = {
-      companies: [], currentCompanyId: '', accounts: require('../src/data/defaultChartOfAccounts').DEFAULT_CHART_OF_ACCOUNTS,
+      companies: [], currentCompanyId: '', accounts: [],
       journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
       bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: false, bcvSyncResult: null
     };
