@@ -1842,14 +1842,40 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (statement.isReconciled) throw new Error('El movimiento ya está conciliado. Desconcílielo antes de vincularlo nuevamente.');
 
     if (journalEntryId) {
-      const linkedEntry = journalEntries.find(entry =>
-        entry.id === journalEntryId &&
-        entry.companyId === currentCompany.id &&
-        entry.items.some(item => item.accountCode === bankAccounts.find(bank =>
-          bank.id === statement.bankAccountId && bank.companyId === currentCompany.id
-        )?.accountCode)
+      const statementBank = bankAccounts.find(bank =>
+        bank.id === statement.bankAccountId && bank.companyId === currentCompany.id
       );
-      if (!linkedEntry) throw new Error('El asiento seleccionado no pertenece a la empresa activa o no corresponde a la cuenta bancaria del movimiento.');
+      if (!statementBank) throw new Error('La cuenta bancaria del movimiento ya no existe en la empresa activa.');
+
+      const linkedEntry = journalEntries.find(entry =>
+        entry.id === journalEntryId && entry.companyId === currentCompany.id
+      );
+      if (!linkedEntry) throw new Error('El asiento seleccionado no pertenece a la empresa activa.');
+
+      const alreadyUsed = bankStatementMovements.some(m =>
+        m.id !== statement.id &&
+        m.companyId === currentCompany.id &&
+        m.bankAccountId === statement.bankAccountId &&
+        m.isReconciled &&
+        m.reconciledWithJournalEntryId === journalEntryId
+      );
+      if (alreadyUsed) throw new Error('Ese asiento ya está vinculado a otro movimiento conciliado de esta cuenta bancaria.');
+
+      const isUsdAccount = statementBank.currency === 'USD';
+      const expectedAmount = isUsdAccount ? statement.amountUsd : statement.amountBs;
+      const tolerance = isUsdAccount ? 0.000001 : 0.05;
+      const hasExactBankLine = linkedEntry.items.some(item => {
+        if (item.accountCode !== statementBank.accountCode) return false;
+        const debit = isUsdAccount ? Number(item.debitUsd) : Number(item.debitBs);
+        const credit = isUsdAccount ? Number(item.creditUsd) : Number(item.creditBs);
+        const expectsDebit = statement.type === 'CREDIT';
+        const amount = expectsDebit ? debit : credit;
+        const opposite = expectsDebit ? credit : debit;
+        return Math.abs(amount - expectedAmount) < tolerance && opposite === 0;
+      });
+      if (!hasExactBankLine) {
+        throw new Error('El asiento no coincide con la cuenta, el importe y la naturaleza débito/crédito del movimiento bancario.');
+      }
     }
 
     setBankStatementMovements(prev =>
