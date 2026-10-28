@@ -339,6 +339,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const retentionRate=num(r,i,true,'retentionRate','tasaRetencion');
      const islrWithheldBs=num(r,i,true,'islrWithheldBs','islrRetenidoBs');
      const islrWithheldUsd=num(r,i,true,'islrWithheldUsd','islrRetenidoUsd');
+     if(Math.abs(islrWithheldBs/rate-islrWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': la retención ISLR en USD no corresponde al importe en Bs dividido por la tasa BCV.');
      const payable=totalAmountBs-vatWithheldBs-islrWithheldBs;
      if(islrWithheldBs>payable||islrWithheldUsd>totalAmountUsd-vatWithheldUsd)throw new Error('Fila '+(i+1)+': las retenciones superan el neto a pagar.');
      return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
