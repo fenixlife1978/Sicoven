@@ -10,10 +10,10 @@ type ModuleInfo = { id: ModuleId; name: string; aliases: string[]; fields: strin
 const POSVEN_COLLECTION_LABELS: Array<{label:string; match:RegExp}> = [
  {label:'Ventas y facturación',match:/sale|venta|invoice|factura/i},
  {label:'Compras y proveedores',match:/purchase|compra|supplier|proveedor/i},
- {label:'Inventario y productos',match:/product|inventory|inventario|stock|movement|movimiento/i},
+ {label:'Inventario y productos',match:/product|inventory|inventario|stock|kardex/i},
  {label:'Clientes y cuentas por cobrar',match:/customer|client|receivable|cxc/i},
  {label:'Cuentas por pagar',match:/payable|cxp/i},
- {label:'Caja y cierres',match:/cash|caja|register|shift|corte|report.?z/i},
+ {label:'Caja, movimientos de caja y cierres',match:/cash|caja|register|shift|corte|report.?z|movimiento.*caja|cash.*movement/i},
  {label:'Contabilidad y libro diario',match:/journal|ledger|account|asiento|diario|accounting/i},
  {label:'Impuestos y retenciones',match:/tax|vat|iva|retention|retencion|islr/i}
 ];
