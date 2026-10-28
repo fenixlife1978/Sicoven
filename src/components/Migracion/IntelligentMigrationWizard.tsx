@@ -86,7 +86,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const allFieldNames=Array.from(new Set(objects.flatMap(row=>Object.keys(row))));
     const numericSummaries=allFieldNames.filter(field=>/(total|subtotal|amount|monto|importe|saldo|balance|debit|credit|debe|haber|iva|tax|cost|costo|price|precio|quantity|cantidad|stock|existencia)/i.test(norm(field))).map(field=>{
      const values=objects.map(row=>row[field]).filter(value=>value!==null&&value!==undefined&&String(value).trim()!=='');
-     const numbers=values.map(value=>typeof value==='number'?value:typeof value==='string'&&/^-?\d+(?:[.,]\d+)?$/.test(value.trim())?Number(value.trim().replace(',','.')):NaN);
+     const numbers=values.map(value=>typeof value==='number'?value:typeof value==='string'?parseMigrationNumber(value):NaN);
      const valid=numbers.filter(Number.isFinite);
      return {field,count:valid.length,sum:valid.reduce((total,value)=>total+value,0)};
     }).filter(item=>item.count>0).slice(0,8);
