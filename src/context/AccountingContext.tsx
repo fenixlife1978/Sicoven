@@ -1905,105 +1905,70 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const bankCode = targetAccount.accountCode;
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-    const stmtMovements = bankStatementMovements.filter(
+    const statementRows = bankStatementMovements.filter(
       m => m.companyId === currentCompany.id && m.bankAccountId === bankAccountId
     );
-
-    let matchedCount = 0;
-    const matchedRefs: string[] = [];
-
-    const alreadyMatchedEntryIds = new Set<string>();
-    for (const m of stmtMovements) {
-      if (m.isReconciled && m.reconciledWithJournalEntryId) {
-        alreadyMatchedEntryIds.add(m.reconciledWithJournalEntryId);
-      }
-    }
-
-    setBankStatementMovements(prev => {
-      return prev.map(stmt => {
-        if (stmt.companyId !== currentCompany.id || stmt.bankAccountId !== bankAccountId || stmt.isReconciled) {
-          return stmt;
-        }
-
-        // 1. Try match by Reference
-        if (stmt.reference && stmt.reference !== '0') {
-          const cleanRef = stmt.reference.trim().toLowerCase();
-          const matchEntry = companyEntries.find(entry => {
-            if (alreadyMatchedEntryIds.has(entry.id)) return false;
-            const bankLines = entry.items.filter(it => it.accountCode === bankCode);
-            if (bankLines.length === 0) return false;
-
-            // A coincident reference is not enough: the bank-side amount and
-            // direction must also agree with the statement movement.
-            const isUsdAccount = targetAccount.currency === 'USD';
-            const statementAmount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
-            const tolerance = isUsdAccount ? 0.000001 : 0.05;
-            const amountAndNatureMatch = bankLines.some(it => {
-              const entryDebit = isUsdAccount ? it.debitUsd : it.debitBs;
-              const entryCredit = isUsdAccount ? it.creditUsd : it.creditBs;
-              return stmt.type === 'CREDIT'
-                ? Math.abs(entryDebit - statementAmount) < tolerance
-                : Math.abs(entryCredit - statementAmount) < tolerance;
-            });
-            if (!amountAndNatureMatch) return false;
-
-            const entryRef = (entry.referenceDoc || '').trim().toLowerCase();
-            const entryDesc = (entry.description || '').trim().toLowerCase();
-            return (
-              (entryRef && (entryRef.includes(cleanRef) || cleanRef.includes(entryRef))) ||
-              (entryDesc && entryDesc.includes(cleanRef))
-            );
-          });
-
-          if (matchEntry) {
-            alreadyMatchedEntryIds.add(matchEntry.id);
-            matchedCount++;
-            matchedRefs.push(stmt.reference);
-            return {
-              ...stmt,
-              isReconciled: true,
-              matchedBy: 'AUTO_REF',
-              reconciledWithJournalEntryId: matchEntry.id,
-              reconciledAt: new Date().toISOString()
-            };
-          }
-        }
-
-        // 2. Try match by Amount + Nature
-        const matchByAmount = companyEntries.find(entry => {
-          if (alreadyMatchedEntryIds.has(entry.id)) return false;
-          return entry.items.some(it => {
-            if (it.accountCode !== bankCode) return false;
-            const isUsdAccount = targetAccount.currency === 'USD';
-            const statementAmount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
-            const entryDebit = isUsdAccount ? it.debitUsd : it.debitBs;
-            const entryCredit = isUsdAccount ? it.creditUsd : it.creditBs;
-            const tolerance = isUsdAccount ? 0.000001 : 0.05;
-            if (stmt.type === 'CREDIT') {
-              return Math.abs(entryDebit - statementAmount) < tolerance;
-            }
-            return Math.abs(entryCredit - statementAmount) < tolerance;
-          });
-        });
-
-        if (matchByAmount) {
-          alreadyMatchedEntryIds.add(matchByAmount.id);
-          matchedCount++;
-          matchedRefs.push(stmt.reference || `Bs. ${stmt.amountBs}`);
-          return {
-            ...stmt,
-            isReconciled: true,
-            matchedBy: 'AUTO_AMOUNT',
-            reconciledWithJournalEntryId: matchByAmount.id,
-            reconciledAt: new Date().toISOString()
-          };
-        }
-
-        return stmt;
-      });
+    const usedEntryIds = new Set<string>();
+    statementRows.forEach(m => {
+      if (m.isReconciled && m.reconciledWithJournalEntryId) usedEntryIds.add(m.reconciledWithJournalEntryId);
     });
 
-    return { matchedCount, matchedRefs };
+    const updates = new Map<string, BankStatementMovement>();
+    const matchedRefs: string[] = [];
+    const now = new Date().toISOString();
+    const isUsdAccount = targetAccount.currency === 'USD';
+    const matchesAmountAndNature = (stmt: BankStatementMovement, entry: JournalEntry) =>
+      entry.items.some(item => {
+        if (item.accountCode !== bankCode) return false;
+        const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
+        const debit = isUsdAccount ? item.debitUsd : item.debitBs;
+        const credit = isUsdAccount ? item.creditUsd : item.creditBs;
+        const tolerance = isUsdAccount ? 0.000001 : 0.05;
+        return stmt.type === 'CREDIT'
+          ? Math.abs(debit - amount) < tolerance
+          : Math.abs(credit - amount) < tolerance;
+      });
+
+    for (const stmt of statementRows) {
+      if (stmt.isReconciled) continue;
+      let matchedEntry: JournalEntry | undefined;
+      let matchedBy: 'AUTO_REF' | 'AUTO_AMOUNT' = 'AUTO_AMOUNT';
+
+      if (stmt.reference && stmt.reference !== '0') {
+        const cleanRef = stmt.reference.trim().toLowerCase();
+        matchedEntry = companyEntries.find(entry => {
+          if (usedEntryIds.has(entry.id) || !matchesAmountAndNature(stmt, entry)) return false;
+          const entryRef = (entry.referenceDoc || '').trim().toLowerCase();
+          const entryDesc = (entry.description || '').trim().toLowerCase();
+          return Boolean((entryRef && (entryRef.includes(cleanRef) || cleanRef.includes(entryRef))) ||
+            (entryDesc && entryDesc.includes(cleanRef)));
+        });
+        if (matchedEntry) matchedBy = 'AUTO_REF';
+      }
+
+      if (!matchedEntry) {
+        matchedEntry = companyEntries.find(entry =>
+          !usedEntryIds.has(entry.id) && matchesAmountAndNature(stmt, entry)
+        );
+        matchedBy = 'AUTO_AMOUNT';
+      }
+
+      if (!matchedEntry) continue;
+      usedEntryIds.add(matchedEntry.id);
+      matchedRefs.push(stmt.reference || `Bs. ${stmt.amountBs}`);
+      updates.set(stmt.id, {
+        ...stmt,
+        isReconciled: true,
+        matchedBy,
+        reconciledWithJournalEntryId: matchedEntry.id,
+        reconciledAt: now
+      });
+    }
+
+    if (updates.size > 0) {
+      setBankStatementMovements(prev => prev.map(m => updates.get(m.id) || m));
+    }
+    return { matchedCount: updates.size, matchedRefs };
   };
 
   const createAdjustingEntryForBankMovement = (
