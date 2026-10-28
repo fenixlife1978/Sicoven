@@ -45,7 +45,13 @@ export const ConciliacionBancariaView: React.FC = () => {
     bankAccounts[0]?.id || ''
   );
   const [activeSubTab, setActiveSubTab] = useState<'COTEJO' | 'CEDULA'>('COTEJO');
-  const [cutoffDate, setCutoffDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [cutoffDate, setCutoffDate] = useState<string>(() => {
+    const now = new Date();
+    const localYear = now.getFullYear();
+    const localMonth = String(now.getMonth() + 1).padStart(2, '0');
+    const localDay = String(now.getDate()).padStart(2, '0');
+    return `${localYear}-${localMonth}-${localDay}`;
+  });
   const [searchTerm, setSearchTerm] = useState('');
   const [isNewMovementModalOpen, setIsNewMovementModalOpen] = useState(false);
   const [autoReconcileFeedback, setAutoReconcileFeedback] = useState<string | null>(null);
@@ -290,7 +296,7 @@ export const ConciliacionBancariaView: React.FC = () => {
                 onChange={e => setSelectedBankAccountId(e.target.value)}
                 className="w-full px-3 py-1.5 text-xs font-semibold border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
               >
-                {bankAccounts.map(b => (
+                {companyBanks.map(b => (
                   <option key={b.id} value={b.id}>
                     {b.bankName} ({b.accountNumber}) - Cuenta {b.accountCode}
                   </option>
