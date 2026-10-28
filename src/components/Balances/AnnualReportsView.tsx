@@ -19,7 +19,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
   const availableYears = useMemo(() => {
     const years = journalEntries
-      .filter(e => e.companyId === currentCompany.id && /^\\d{4}-\\d{2}-\\d{2}$/.test(e.date))
+      .filter(e => e.companyId === currentCompany.id && /^\d{4}-\d{2}-\d{2}$/.test(e.date))
       .map(e => Number(e.date.slice(0, 4)));
     return Array.from(new Set([...years, Number(currentCompany.fiscalYear) || new Date().getFullYear()])).sort((a, b) => b - a);
   }, [journalEntries, currentCompany.id, currentCompany.fiscalYear]);
@@ -58,7 +58,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     const costsUsd = sum(['COSTOS'], 'netUsd');
     const expensesBs = sum(['GASTOS'], 'netBs');
     const expensesUsd = sum(['GASTOS'], 'netUsd');
-    const legalReserveRows = rows.filter(r => /reserva\\s+legal/i.test(r.name) || /reserva legal/i.test(r.code));
+    const legalReserveRows = rows.filter(r => /reserva\s+legal/i.test(r.name) || /reserva legal/i.test(r.code));
     const retentionRows = rows.filter(r => /retenci[oó]n|retenciones/i.test(r.name));
     return {
       entriesCount: fiscalEntries.length,
@@ -95,10 +95,10 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       ['Código', 'Cuenta', 'Tipo', 'Debe Bs.', 'Haber Bs.', 'Debe USD', 'Haber USD', 'Saldo anual Bs.', 'Saldo anual USD'],
       ...report.rows.map(r => [r.code, r.name, r.type, r.debitBs.toFixed(2), r.creditBs.toFixed(2), r.debitUsd.toFixed(6), r.creditUsd.toFixed(6), r.netBs.toFixed(2), r.netUsd.toFixed(6)])
     ];
-    const csv = '\\ufeff' + rows.map(row => row.map(cell => {
+    const csv = '\ufeff' + rows.map(row => row.map(cell => {
       const value = String(cell ?? '');
       return '"' + value.replace(/"/g, '""') + '"';
-    }).join(';')).join('\\r\\n');
+    }).join(';')).join('\r\n');
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
