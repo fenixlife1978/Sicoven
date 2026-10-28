@@ -57,8 +57,8 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
   };
 
   return createPortal((
-    <div className="fixed inset-0 z-[2147483000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto select-text" style={{ pointerEvents: 'auto', WebkitAppRegion: 'no-drag' as any }} onMouseDown={e => e.stopPropagation()}>
-      <div className="relative z-[2147483000] pointer-events-auto bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150" style={{ pointerEvents: 'auto', WebkitAppRegion: 'no-drag' as any }} onMouseDown={e => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[2147483000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto select-text" style={{ pointerEvents: 'auto', WebkitAppRegion: 'no-drag' } as any} onMouseDown={e => e.stopPropagation()}>
+      <div className="relative z-[2147483000] pointer-events-auto bg-white rounded-2xl shadow-2xl max-w-md w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-150" style={{ pointerEvents: 'auto', WebkitAppRegion: 'no-drag' } as any} onMouseDown={e => e.stopPropagation()}>
         <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
