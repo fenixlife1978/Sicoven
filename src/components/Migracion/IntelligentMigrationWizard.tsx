@@ -340,8 +340,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const islrWithheldBs=num(r,i,true,'islrWithheldBs','islrRetenidoBs');
      const islrWithheldUsd=num(r,i,true,'islrWithheldUsd','islrRetenidoUsd');
      if(Math.abs(islrWithheldBs/rate-islrWithheldUsd)>0.02)throw new Error('Fila '+(i+1)+': la retención ISLR en USD no corresponde al importe en Bs dividido por la tasa BCV.');
-     const payable=totalAmountBs-vatWithheldBs-islrWithheldBs;
-     if(islrWithheldBs>payable||islrWithheldUsd>totalAmountUsd-vatWithheldUsd)throw new Error('Fila '+(i+1)+': las retenciones superan el neto a pagar.');
+     const netPayableBs=totalAmountBs-vatWithheldBs-islrWithheldBs;
+     const netPayableUsd=totalAmountUsd-vatWithheldUsd-islrWithheldUsd;
+     if(vatWithheldBs+islrWithheldBs>totalAmountBs+0.02||vatWithheldUsd+islrWithheldUsd>totalAmountUsd+0.02||netPayableBs < -0.02||netPayableUsd < -0.02)throw new Error('Fila '+(i+1)+': la suma de las retenciones IVA e ISLR supera el total de la factura.');
      return {...common,supplierRif:partyRif,supplierName:partyName,supplierAddress:String(pick(r,'supplierAddress','direccionProveedor')??''),islrWithheldBs,islrWithheldUsd,retentionRate,voucherNumber:String(pick(r,'voucherNumber','comprobanteRetencion')??'')||undefined,vatWithheldBs,vatWithheldUsd};
     });
     runAtomicInvoiceImport(()=>{
