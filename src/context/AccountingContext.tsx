@@ -1722,7 +1722,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // bancaria ni un auxiliar huérfanos en el estado de la aplicación.
     if (hasOpeningBalance && equity) {
       addJournalEntry({
-        entryNumber: 0, date: new Date().toISOString().slice(0,10),
+        entryNumber: 0, date: (() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); })(),
         description: `Apertura de cuenta bancaria: ${auxName}`, type: 'APERTURA', bcvRate: rate,
         referenceDoc: `APERTURA-${digits}`,
         items: [
