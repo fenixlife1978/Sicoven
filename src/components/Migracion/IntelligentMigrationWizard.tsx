@@ -285,7 +285,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     if(ambiguousSources.length)throw new Error('Hay archivos que parecen contener '+(kind==='sales'?'ventas':'compras')+' pero no tienen encabezados suficientes de '+(kind==='sales'?'cliente':'proveedor')+' y número de factura: '+ambiguousSources.map(item=>item.source).join(', ')+'. No se importó nada. Separa los módulos o corrige los encabezados antes de continuar.');
     const sourceRows=sourceGroups.filter(item=>item.hasPartySignal&&item.hasDocumentSignal).flatMap(item=>item.group);
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
-    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
+    const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha de factura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>norm(invoiceNumber)+'|'+norm(partyRif);
     const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
@@ -312,7 +312,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const taxRate=num(r,i,true,'taxRate','alicuota','tasaIva');
      const vatAmountBs=num(r,i,true,'vatAmountBs','ivaBs','montoIvaBs');
      const vatWithheldBs=num(r,i,true,'vatWithheldBs','ivaRetenidoBs','retencionIvaBs');
-     const bcvRate=num(r,i,true,'bcvRate','tasaBcv');
+     const bcvRate=num(r,i,false,'bcvRate','tasaBcv');
      const totalAmountUsd=num(r,i,true,'totalAmountUsd','totalUsd');
      const taxableBaseUsd=num(r,i,true,'taxableBaseUsd','baseImponibleUsd','baseUsd');
      const vatAmountUsd=num(r,i,true,'vatAmountUsd','ivaUsd');
