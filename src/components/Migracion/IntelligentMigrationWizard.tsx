@@ -288,15 +288,23 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const documentKey=(invoiceNumber:string,partyRif:string)=>norm(invoiceNumber)+'|'+norm(partyRif);
+    const controlKey=(controlNumber:string,partyRif:string)=>norm(controlNumber)+'|'+norm(partyRif);
     const seen=new Set<string>();
+    const seenControls=new Set<string>();
     const existingDocs=new Set((kind==='sales'?sales.map(d=>documentKey(d.invoiceNumber||'',d.customerRif||'')):purchases.map(d=>documentKey(d.invoiceNumber||'',d.supplierRif||''))));
+    const existingControls=new Set((kind==='sales'?sales.map(d=>controlKey(d.controlNumber||'',d.customerRif||'')):purchases.map(d=>controlKey(d.controlNumber||'',d.supplierRif||''))).filter(key=>!key.startsWith('|')));
     const prepared=sourceRows.map((r,i)=>{
-     const invoiceNumber=String(pick(r,'invoiceNumber','factura','documento')??'').trim();
+     const invoiceNumber=String(pick(r,'invoiceNumber','numeroFactura','numero de factura','factura','documento')??'').trim();
      const partyName=String(pick(r,kind==='sales'?'customerName':'supplierName',kind==='sales'?'cliente':'proveedor',kind==='sales'?'nombreCliente':'nombreProveedor')??'').trim();
      const partyRif=String(pick(r,kind==='sales'?'customerRif':'supplierRif',kind==='sales'?'rifCliente':'rifProveedor','rif','taxId')??'').trim();
+     const incomingControl=String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim();
      const key=documentKey(invoiceNumber,partyRif);
      if(!invoiceNumber||!partyName||!partyRif)throw new Error('Fila '+(i+1)+': número de factura, nombre y RIF de cliente/proveedor son obligatorios.');
      if(seen.has(key)||existingDocs.has(key))throw new Error('Factura duplicada para el mismo cliente/proveedor o ya existente: '+invoiceNumber+' ('+partyRif+'). No se sobrescribieron documentos.');seen.add(key);
+     if(!incomingControl)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
+     const controlIdentity=controlKey(incomingControl,partyRif);
+     if(seenControls.has(controlIdentity)||existingControls.has(controlIdentity))throw new Error('Número de control duplicado para el mismo cliente/proveedor o ya existente: '+incomingControl+' ('+partyRif+'). No se importó ningún documento.');
+     seenControls.add(controlIdentity);
      const invoiceDate=dateValue(r,i);
      const totalAmountBs=num(r,i,true,'totalAmountBs','totalBs','total');
      const exemptAmountBs=num(r,i,true,'exemptAmountBs','montoExentoBs','exentoBs');
@@ -324,7 +332,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      if(vatWithheldBs>totalAmountBs||vatWithheldUsd>totalAmountUsd)throw new Error('Fila '+(i+1)+': la retención supera el total de la factura.');
      const documentTypeRaw=String(pick(r,'documentType','tipoDocumento')??'01').trim();
      if(!['01','02','03'].includes(documentTypeRaw))throw new Error('Fila '+(i+1)+': tipo de documento inválido; use 01, 02 o 03.');
-     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
+     const common={invoiceDate,invoiceNumber,controlNumber:String(pick(r,'controlNumber','numeroControl','numero de control')??'').trim(),documentType:documentTypeRaw as '01'|'02'|'03',totalAmountBs,exemptAmountBs,taxableBaseBs,taxRate,vatAmountBs,vatWithheldBs,bcvRate:rate,totalAmountUsd,taxableBaseUsd,vatAmountUsd,vatWithheldUsd,notes:String(pick(r,'notes','observaciones')??''),paymentTerm,creditDays,dueDate,currencyPricingMode:'REVISION_MANUAL' as const,fiscalAdjustmentMode:'REVISION_CONTADOR' as const};
      if(!common.controlNumber)throw new Error('Fila '+(i+1)+': número de control obligatorio.');
      if(kind==='sales')return {...common,customerRif:partyRif,customerName:partyName,customerAddress:String(pick(r,'customerAddress','direccionCliente')??''),retentionRate:num(r,i,false,'retentionRate','tasaRetencion'),retentionVoucherNumber:String(pick(r,'retentionVoucherNumber','comprobanteRetencion')??'')||undefined};
      const retentionRate=num(r,i,true,'retentionRate','tasaRetencion');
