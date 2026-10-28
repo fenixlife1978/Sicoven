@@ -37,6 +37,7 @@ export const ConfiguracionView: React.FC = () => {
   const [isBcvModalOpen, setIsBcvModalOpen] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
+  const [factoryResetStage, setFactoryResetStage] = useState('');
 
   // Form state for current company editing
   const [name, setName] = useState(currentCompany.name);
@@ -443,18 +444,34 @@ export const ConfiguracionView: React.FC = () => {
                 const confirmation = window.prompt('Para confirmar definitivamente, escribe: RESETEAR SICOVEN');
                 if (confirmation !== 'RESETEAR SICOVEN') { alert('Reset cancelado. No se modificaron los datos.'); return; }
                 setFactoryResetBusy(true);
+                setFactoryResetStage('Verificando sesión y preparando el reinicio…');
                 try {
+                  setFactoryResetStage('Eliminando datos operativos y empresas de SQLite…');
                   await resetFactoryData();
-                  alert('Reset de fábrica confirmado por SQLite. Se eliminaron los datos operativos y las empresas. El acceso administrativo y la licencia/prueba se conservaron.');
+                  setFactoryResetStage('Verificación completada. Datos operativos eliminados.');
+                  alert('Reinicio de fábrica verificado: se eliminaron las empresas y los datos operativos. Se conservaron usuarios, licencia y valores predeterminados del sistema.');
                 } catch (error) {
                   alert(error instanceof Error ? error.message : 'No se pudo completar el reset. No se confirmó el borrado.');
-                } finally { setFactoryResetBusy(false); }
+                } finally { setFactoryResetBusy(false); setFactoryResetStage(''); }
               }}
               className="w-full flex items-center justify-center gap-2 px-4 py-2 text-rose-700 hover:bg-rose-50 rounded-xl text-xs font-semibold transition cursor-pointer disabled:opacity-60"
             >
               <RotateCcw className="w-4 h-4" />
               {factoryResetBusy ? 'Restableciendo SQLite…' : 'Reset de fábrica: borrar datos operativos'}
             </button>
+            {factoryResetBusy && (
+              <div className="mt-3 rounded-xl border border-rose-200 bg-rose-50 p-4" role="status" aria-live="polite">
+                <div className="mb-2 flex items-center justify-between gap-3">
+                  <span className="text-xs font-semibold text-rose-900">{factoryResetStage || 'Restableciendo el sistema…'}</span>
+                  <span className="text-[10px] font-bold text-rose-700">EN CURSO</span>
+                </div>
+                <div className="h-2 w-full overflow-hidden rounded-full bg-rose-100">
+                  <div className="h-full w-2/5 animate-pulse rounded-full bg-rose-600" />
+                </div>
+                <p className="mt-2 text-[10px] text-rose-800">No cierre SICOVEN hasta que termine la verificación de SQLite.</p>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
