@@ -50,6 +50,13 @@ export const NewBankAccountModal: React.FC<NewBankAccountModalProps> = ({ isOpen
         accountType,
         checkbookNumber: checkbookNumber.trim() || undefined
       });
+      // Dejar el formulario limpio para la próxima alta, sin datos residuales.
+      setBankName('');
+      setAccountType('CORRIENTE');
+      setCheckbookNumber('');
+      setAccountNumber('');
+      setCurrency('BS');
+      setInitialBalanceBs('');
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la cuenta bancaria.');
