@@ -14,6 +14,7 @@ declare global {
       deleteSeedAdmin: (token: string) => Promise<{ ok: boolean; message?: string }>;
       load: (token: string) => Promise<Record<string, unknown> | null>;
       save: (token: string, state: Record<string, unknown>) => Promise<{ ok: boolean; savedAt: string }>;
+      resetAccounting: (token: string) => Promise<{ ok: boolean; cleared: boolean }>;
       getDemoUsage: () => Record<string, number>;
       consumeDemoAction: (moduleKey: string) => {
         ok: boolean;
