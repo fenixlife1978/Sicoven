@@ -16,6 +16,7 @@ import { formatBs, formatUsd } from '../../utils/formatters';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
+import { AnnualReportsView } from './AnnualReportsView';
 import {
   exportBalanceComprobacionPdf,
   exportBalanceAjustadoPdf,
@@ -25,7 +26,7 @@ import {
 export const BalancesView: React.FC = () => {
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
 
-  const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO'>('COMPROBACION');
+  const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO' | 'ANUAL'>('COMPROBACION');
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -258,6 +259,10 @@ export const BalancesView: React.FC = () => {
     return <HistoricalBalancesView onBack={() => setActiveReport("GENERAL")} />;
   }
 
+  if (activeReport === "ANUAL") {
+    return <AnnualReportsView onBack={() => setActiveReport("GENERAL")} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Official Header with Selected Company Logo */}
@@ -352,6 +357,18 @@ export const BalancesView: React.FC = () => {
           >
             <TrendingUp className="w-4 h-4 text-emerald-500" />
             4. Balances históricos
+          </button>
+
+          <button
+            onClick={() => setActiveReport('ANUAL')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeReport === 'ANUAL'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <FileCheck className="w-4 h-4 text-emerald-500" />
+            5. Reportes Anuales
           </button>
 
           <button
