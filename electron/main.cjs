@@ -371,19 +371,33 @@ app.whenReady().then(async () => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
     if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para restablecer los datos.');
+    // El estado operativo completo vive en app_state. Vaciar la tabla dentro de
+    // una sola transacción impide dejar colecciones antiguas bajo claves adicionales.
+    // auth_users, auth_sessions y license_state son tablas separadas y no se tocan.
     const emptyState = {
       companies: [], currentCompanyId: '', accounts: [],
       journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
-      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: false, bcvSyncResult: null
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
     };
     const reset = db.transaction(() => {
-      db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now')) ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json,updated_at=excluded.updated_at")
+      db.prepare('DELETE FROM app_state').run();
+      db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now'))")
         .run(JSON.stringify(emptyState));
+      // Los eventos anteriores pueden contener metadatos de actividad de los módulos.
+      // Se elimina ese historial operativo; las cuentas y la licencia permanecen intactas.
+      db.prepare('DELETE FROM audit_events').run();
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'license_state'], removed: ['accounting_records', 'companies'] }));
+        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'auth_sessions', 'license_state'], removed: ['app_state', 'operational_audit_events'] }));
     });
     reset();
-    return { ok: true, cleared: true };
+    const persisted = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+    const verified = persisted ? JSON.parse(persisted.state_json) : null;
+    if (!verified || verified.companies?.length !== 0 ||
+        ['journalEntries','purchases','sales','products','movements','vatVouchers','islrVouchers','bankAccounts','bankStatementMovements','creditSettlements']
+          .some(key => !Array.isArray(verified[key]) || verified[key].length !== 0)) {
+      throw new Error('La verificación posterior al reinicio detectó datos operativos residuales.');
+    }
+    return { ok: true, cleared: true, verified: true };
   });
 
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
