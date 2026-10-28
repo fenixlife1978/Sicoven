@@ -2073,21 +2073,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
-    const adjustingEntry: JournalEntry = {
-      id: `entry-bank-adj-${Date.now()}`,
-      companyId: currentCompany.id,
-      entryNumber: nextEntryNum,
+    const adjustingEntry = addJournalEntry({
+      entryNumber: 0,
       date: statementMovement.date,
       description: `Ajuste Conciliación Bancaria: ${statementMovement.description}`,
       type: 'AJUSTE',
       bcvRate: rate,
       referenceDoc: statementMovement.reference,
       items,
-      isAdjusted: true,
-      createdAt: new Date().toISOString()
-    };
-
-    setJournalEntries(prev => [...prev, adjustingEntry]);
+      isAdjusted: true
+    });
 
     // The new entry is not yet present in the current render's journalEntries
     // snapshot, so reconcile directly after validating the statement and bank.
