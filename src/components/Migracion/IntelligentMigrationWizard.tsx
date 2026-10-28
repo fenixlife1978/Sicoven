@@ -208,7 +208,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
      const data=JSON.parse(await file.text());
      const array=Array.isArray(data)?data:Array.isArray(data.records)?data.records:Array.isArray(data.data)?data.data:Array.isArray(data.items)?data.items:Array.isArray(data.products)?data.products:null;
      if(!array) throw new Error(file.name+': el JSON debe ser un arreglo de registros o contener records, data, items o products. Los respaldos contables completos se analizan por módulo y no se importan a ciegas.');
-     parsed=(array as unknown[]).filter((x: unknown): x is Row => !!x && typeof x === 'object' && !Array.isArray(x));
+     const invalidRows=(array as unknown[]).filter((x: unknown)=>!x||typeof x!=='object'||Array.isArray(x)).length;
+     if(invalidRows>0)throw new Error(file.name+': el JSON contiene '+invalidRows+' fila(s) que no son objetos de registro. Corrige el archivo; no se importó ningún registro.');
+     parsed=array as Row[];
     }else if(ext==='csv'||ext==='tsv'||ext==='txt'){
      parsed=parseCsv(await file.text());
     }else if(ext==='xlsx'||ext==='xlsm'){
