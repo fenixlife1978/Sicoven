@@ -11,7 +11,7 @@ export const TesoreriaView: React.FC = () => {
   const [showNewBank, setShowNewBank] = useState(false);
   const [selectedBankId, setSelectedBankId] = useState('');
   const [kind, setKind] = useState<MovementKind>('INCOME');
-  const [date, setDate] = useState(new Date().toISOString().slice(0, 10));
+  const [date, setDate] = useState(() => { const now = new Date(); return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10); });
   const [reference, setReference] = useState('');
   const [description, setDescription] = useState('');
   const [amount, setAmount] = useState('');
