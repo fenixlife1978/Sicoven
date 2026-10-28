@@ -345,8 +345,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     if(kind==='sales')prepared.forEach(s=>addSale(s as Parameters<typeof addSale>[0]));
     else prepared.forEach(p=>addPurchase({...p,documentType:p.documentType,retentionRate:p.retentionRate,vatWithheldBs:p.vatWithheldBs,vatWithheldUsd:p.vatWithheldUsd} as Parameters<typeof addPurchase>[0]));
-    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Verifica documentos, impuestos y saldos antes de operar.');
-    setBusy(false);return;
+    setNotice((kind==='sales'?'Ventas':'Compras')+' importadas: '+prepared.length+' facturas. SICOVEN generó los asientos y derivó CxC/CxP según la condición de pago. Revisa documentos, impuestos y saldos; confirma por separado el siguiente módulo.');
+    setSelected(old=>old.filter(id=>id!==kind));setConfirmed(false);
+     setBusy(false);return;
    }
    if(selected[0]==='accounts'){
     const sourceRows=rows.filter(r=>['code','accountcode','codigo','codigocuenta'].some(k=>pick(r,k)!==undefined)&&['name','accountname','nombre','nombrecuenta'].some(k=>pick(r,k)!==undefined));
@@ -374,8 +375,9 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const allCodes=new Set([...existing,...seen]);
     for(const a of prepared){if(a.parentCode&&!allCodes.has(a.parentCode.toLowerCase()))throw new Error('La cuenta '+a.code+' referencia una cuenta padre inexistente: '+a.parentCode+'.');}
     prepared.forEach(a=>addAccount(a));
-    setNotice('Plan de cuentas importado: '+prepared.length+' cuentas nuevas. Se validaron tipos, niveles, códigos duplicados y referencias de cuenta padre.');
-    setBusy(false);return;
+    setNotice('Plan de cuentas importado: '+prepared.length+' cuentas nuevas. Se validaron tipos, niveles, códigos duplicados y referencias de cuenta padre; confirma por separado el siguiente módulo.');
+    setSelected(old=>old.filter(id=>id!=='accounts'));setConfirmed(false);
+     setBusy(false);return;
    }
    if(selected[0]==='journal'){
     const sourceRows=rows.filter(r=>['accountCode','codigoCuenta','cuenta'].some(k=>pick(r,k)!==undefined));
@@ -413,7 +415,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     });
     prepared.forEach(entry=>addJournalEntry(entry));
     setNotice('Asientos importados: '+prepared.length+'. Se validaron cuentas de movimiento, fechas, tasa BCV, líneas y cuadre en Bs y USD.');
-    setBusy(false);return;
+    setSelected(old=>old.filter(id=>id!=='journal'));setConfirmed(false);
+     setBusy(false);return;
    }
    const groupedBySource = new Map<string, Row[]>();
    rows.forEach(row => {
@@ -449,7 +452,8 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    });
    const count=importInventoryProducts(prepared);
    setNotice('Migración completada: '+count+' artículos incorporados. SICOVEN no sobrescribió códigos existentes. Revisa el Kardex y la valoración inicial antes de continuar.');
-   setBusy(false);
+   setSelected(old=>old.filter(id=>id!=='inventory'));setConfirmed(false);
+    setBusy(false);
   }catch(e){setError(e instanceof Error?e.message:'La validación falló. No se completó la migración.');setBusy(false);}
  };
  return <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/60 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="migration-title">
