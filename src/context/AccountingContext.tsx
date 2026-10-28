@@ -966,6 +966,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setJournalEntries(prev => prev.filter(entry => entry.id !== purchase.journalEntryId));
     }
     setVatVouchers(prev => prev.filter(voucher => voucher.purchaseRecordId !== id));
+    // El comprobante ISLR se identifica con el ID de la compra que lo originó.
+    // Al eliminar la factura también debe retirarse ese comprobante para no dejar
+    // una retención huérfana en los reportes fiscales.
+    setIslrVouchers(prev => prev.filter(voucher => voucher.id !== `vouch-islr-${id}`));
   };
 
   // Registrar venta y generar asiento contable
