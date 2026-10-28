@@ -60,6 +60,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
  const [backupPayload,setBackupPayload]=useState<string|null>(null);
  const [backupCounts,setBackupCounts]=useState<Record<string,number>|null>(null);
  const [posvenBackup,setPosvenBackup]=useState(false);
+ const [posvenQuality,setPosvenQuality]=useState({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});
  const analysis = useMemo(()=>{
   const sources = new Map<string, Row[]>();
   rows.forEach(row=>{
@@ -112,7 +113,7 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
   return detected;
  },[rows]);
  const readFiles=async(list:File[])=>{
-  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setFiles(list);
+  setError('');setNotice('');setRows([]);setHeaders([]);setSelected([]);setConfirmed(false);setBackupPayload(null);setBackupCounts(null);setPosvenBackup(false);setPosvenQuality({collections:0,objectRows:0,invalidRows:0,emptyCollections:0});setFiles(list);
   if(!list.length)return;
   try{
    if(list.length===1 && list[0].name.toLowerCase().endsWith('.json')){
@@ -122,7 +123,11 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     // No se deben tratar como respaldo nativo de SICOVEN ni restaurar a ciegas.
     if(data && typeof data==='object' && !Array.isArray(data) && String((data as Record<string,unknown>).app??'').toLowerCase()==='posven-pro' && (data as Record<string,unknown>).data && typeof (data as Record<string,unknown>).data==='object' && !Array.isArray((data as Record<string,unknown>).data)){
      const payload=(data as {data:Record<string,unknown>}).data;
-     const counts=Object.fromEntries(Object.entries(payload).filter(([,value])=>Array.isArray(value)).map(([key,value])=>[key,(value as unknown[]).length]));
+     const arrayCollections=Object.entries(payload).filter(([,value])=>Array.isArray(value));
+     const counts=Object.fromEntries(arrayCollections.map(([key,value])=>[key,(value as unknown[]).length]));
+     const allRows=arrayCollections.flatMap(([,value])=>value as unknown[]);
+     const objectRows=allRows.filter(value=>!!value&&typeof value==='object'&&!Array.isArray(value)).length;
+     setPosvenQuality({collections:arrayCollections.length,objectRows,invalidRows:allRows.length-objectRows,emptyCollections:arrayCollections.filter(([,value])=>(value as unknown[]).length===0).length});
      setBackupPayload(raw);setBackupCounts(counts);setPosvenBackup(true);
      return;
     }
