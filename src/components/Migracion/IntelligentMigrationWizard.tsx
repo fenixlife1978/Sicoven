@@ -270,16 +270,20 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
     const kind=selected[0];
     const rowsBySource=new Map<string,Row[]>();
     rows.forEach(row=>{const source=String(row.migrationsource??'archivo sin nombre');const group=rowsBySource.get(source)??[];group.push(row);rowsBySource.set(source,group);});
-    const sourceRows=[...rowsBySource.values()].filter(group=>{
+    const sourceGroups=[...rowsBySource.entries()].map(([source,group])=>{
      const sourceKeys=new Set(group.flatMap(row=>Object.keys(row).filter(key=>key!=='migrationsource').map(norm)));
      const hasPartySignal=kind==='sales'
       ? ['customername','cliente','nombrecliente','customerrif','rifcliente','clienterif'].some(key=>sourceKeys.has(norm(key)))
       : ['suppliername','proveedor','nombreproveedor','supplierrif','rifproveedor','proveedorrif'].some(key=>sourceKeys.has(norm(key)));
      const hasDocumentSignal=['invoicenumber','factura','documento','numerofactura'].some(key=>sourceKeys.has(norm(key)));
-     return hasPartySignal&&hasDocumentSignal;
-    }).flat();
+     const hasDateOrAmountSignal=['invoicedate','fechafactura','fecha','totalamountbs','totalbs','total','vatamountbs','iva'].some(key=>sourceKeys.has(norm(key)));
+     return {source,group,hasPartySignal,hasDocumentSignal,hasDateOrAmountSignal};
+    });
+    // No descartar silenciosamente un archivo que parece contener facturas pero carece de campos para identificarlo.
+    const ambiguousSources=sourceGroups.filter(item=>item.hasDateOrAmountSignal&&(!item.hasPartySignal||!item.hasDocumentSignal));
+    if(ambiguousSources.length)throw new Error('Hay archivos que parecen contener '+(kind==='sales'?'ventas':'compras')+' pero no tienen encabezados suficientes de '+(kind==='sales'?'cliente':'proveedor')+' y número de factura: '+ambiguousSources.map(item=>item.source).join(', ')+'. No se importó nada. Separa los módulos o corrige los encabezados antes de continuar.');
+    const sourceRows=sourceGroups.filter(item=>item.hasPartySignal&&item.hasDocumentSignal).flatMap(item=>item.group);
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
-    if(!sourceRows.length)throw new Error('No hay facturas identificables para importar.');
     const dateValue=(r:Row,i:number)=>{const value=String(pick(r,'invoiceDate','fechaFactura','fecha')??'').slice(0,10);if(!isValidIsoDate(value))throw new Error('Fila '+(i+1)+': fecha de factura inválida; use AAAA-MM-DD.');return value;};
     const num=(r:Row,i:number,required:boolean,...keys:string[])=>{const raw=pick(r,...keys);if((raw===undefined||raw==='')&&required)throw new Error('Fila '+(i+1)+': falta el campo obligatorio '+keys[0]+'.');const value=raw===undefined||raw===''?0:parseMigrationNumber(raw);if(!Number.isFinite(value)||value<0)throw new Error('Fila '+(i+1)+': importe inválido en '+keys[0]+'.');return value;};
     const seen=new Set<string>();
