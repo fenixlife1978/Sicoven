@@ -74,6 +74,7 @@ interface AccountingContextType {
   sales: SaleRecord[];
   addSale: (sale: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>) => SaleRecord;
   deleteSale: (id: string) => void;
+  runAtomicInvoiceImport: <T>(operation: () => T) => T;
 
   // Inventario
   products: InventoryProduct[];
@@ -239,6 +240,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
+  const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
+    // React setters are queued synchronously; capture every collection touched by
+    // addSale/addPurchase and restore the complete batch if any operation throws.
+    const before = {
+      journalEntries, purchases, sales, vatVouchers, islrVouchers,
+      saleSequence: { ...saleSequenceRef.current },
+      purchaseSequence: { ...purchaseSequenceRef.current },
+      journalSequence: { ...journalSequenceRef.current },
+      vatSequence: { ...vatVoucherSequenceRef.current },
+      islrSequence: { ...islrVoucherSequenceRef.current }
+    };
+    try {
+      return operation();
+    } catch (error) {
+      setJournalEntries(before.journalEntries);
+      setPurchases(before.purchases);
+      setSales(before.sales);
+      setVatVouchers(before.vatVouchers);
+      setIslrVouchers(before.islrVouchers);
+      saleSequenceRef.current = before.saleSequence;
+      purchaseSequenceRef.current = before.purchaseSequence;
+      journalSequenceRef.current = before.journalSequence;
+      vatVoucherSequenceRef.current = before.vatSequence;
+      islrVoucherSequenceRef.current = before.islrSequence;
+      throw error;
+    }
+  };
+
   const saleSequenceRef = useRef<Record<string, number>>({});
   const purchaseSequenceRef = useRef<Record<string, number>>({});
   const journalSequenceRef = useRef<Record<string, number>>({});
@@ -2326,6 +2355,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         sales: sales.filter(s => s.companyId === currentCompany.id),
         addSale,
         deleteSale,
+        runAtomicInvoiceImport,
         products: products.filter(p => p.companyId === currentCompany.id),
         addProduct,
         importInventoryProducts,
