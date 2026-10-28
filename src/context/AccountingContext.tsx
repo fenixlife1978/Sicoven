@@ -2022,7 +2022,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const contraAccountName = contraAccount.name;
 
-    const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const rate = currentCompany.bcvRate;
     if (!Number.isFinite(rate) || rate <= 0) {
       throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
