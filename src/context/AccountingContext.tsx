@@ -1800,7 +1800,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     );
     if (!bank) throw new Error('Seleccione una cuenta bancaria de la empresa activa.');
     const parsedDate = new Date(movData.date + 'T00:00:00Z');
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(movData.date) ||
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(movData.date) ||
         !Number.isFinite(parsedDate.getTime()) ||
         parsedDate.toISOString().slice(0, 10) !== movData.date) {
       throw new Error('La fecha del movimiento bancario no es válida.');
