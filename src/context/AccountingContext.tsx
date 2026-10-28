@@ -110,7 +110,7 @@ interface AccountingContextType {
 
   // Respaldo
   resetToSampleData: () => void;
-  resetFactoryData: () => void;
+  resetFactoryData: () => Promise<void>;
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
 }
@@ -2134,10 +2134,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setCreditSettlements([]);
   };
 
-  const resetFactoryData = () => {
-    // Reset de fábrica completo de los datos del negocio: elimina TODAS las empresas
-    // y todos sus registros. Conserva el usuario administrador y la licencia/prueba,
-    // gestionados fuera de este contexto, para permitir volver a configurar SICOVEN.
+  const resetFactoryData = async () => {
+    // En escritorio, borrar primero el estado persistido en SQLite de forma atómica.
+    // No se muestra éxito hasta que la base de datos confirma la operación.
+    if (window.sicovenStore) {
+      if (!storageReady) throw new Error('La base de datos todavía se está inicializando. Intente nuevamente.');
+      const result = await window.sicovenStore.resetAccounting(token);
+      if (!result?.ok || !result.cleared) throw new Error('SQLite no confirmó el reset de fábrica.');
+    }
     setCompanies([]);
     setCurrentCompanyId('');
     setAccounts(DEFAULT_CHART_OF_ACCOUNTS);
@@ -2151,6 +2155,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankAccounts([]);
     setBankStatementMovements([]);
     setCreditSettlements([]);
+    setDisplayCurrency('DUAL');
+    setBcvSyncResult(null);
   };
 
   const exportBackupJson = (): string => {
