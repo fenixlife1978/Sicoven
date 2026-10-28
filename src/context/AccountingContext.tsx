@@ -1814,11 +1814,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (movData.type !== 'DEBIT' && movData.type !== 'CREDIT') {
       throw new Error('La naturaleza del movimiento bancario debe ser débito o crédito.');
     }
+    if (!movData.reference?.trim() || !movData.description?.trim()) {
+      throw new Error('La referencia y la descripción del movimiento bancario son obligatorias.');
+    }
     const amountBs = Number(movData.amountBs);
     const amountUsd = Number(movData.amountUsd);
     if (!Number.isFinite(amountBs) || !Number.isFinite(amountUsd) ||
-        amountBs < 0 || amountUsd < 0 || (amountBs === 0 && amountUsd === 0)) {
-      throw new Error('El movimiento debe tener un importe válido y positivo en al menos una moneda.');
+        amountBs < 0 || amountUsd < 0 ||
+        (bank.currency === 'USD' ? amountUsd <= 0 : amountBs <= 0)) {
+      throw new Error('El movimiento debe tener un importe positivo en la moneda de la cuenta bancaria y un equivalente válido.');
     }
     const newMov: BankStatementMovement = {
       ...movData,
