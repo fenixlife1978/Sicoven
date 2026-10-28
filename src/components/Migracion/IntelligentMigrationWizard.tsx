@@ -276,11 +276,12 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
       ? ['customername','cliente','nombrecliente','customerrif','rifcliente','clienterif'].some(key=>sourceKeys.has(norm(key)))
       : ['suppliername','proveedor','nombreproveedor','supplierrif','rifproveedor','proveedorrif'].some(key=>sourceKeys.has(norm(key)));
      const hasDocumentSignal=['invoicenumber','factura','documento','numerofactura'].some(key=>sourceKeys.has(norm(key)));
-     const hasDateOrAmountSignal=['invoicedate','fechafactura','fecha','totalamountbs','totalbs','total','vatamountbs','iva'].some(key=>sourceKeys.has(norm(key)));
-     return {source,group,hasPartySignal,hasDocumentSignal,hasDateOrAmountSignal};
+     const hasDateSignal=['invoicedate','fechafactura','fecha'].some(key=>sourceKeys.has(norm(key)));
+     const hasAmountSignal=['totalamountbs','totalbs','total','vatamountbs','iva'].some(key=>sourceKeys.has(norm(key)));
+     return {source,group,hasPartySignal,hasDocumentSignal,hasDateSignal,hasAmountSignal};
     });
     // No descartar silenciosamente un archivo que parece contener facturas pero carece de campos para identificarlo.
-    const ambiguousSources=sourceGroups.filter(item=>item.hasDateOrAmountSignal&&(!item.hasPartySignal||!item.hasDocumentSignal));
+    const ambiguousSources=sourceGroups.filter(item=>item.hasDateSignal&&item.hasAmountSignal&&(!item.hasPartySignal||!item.hasDocumentSignal));
     if(ambiguousSources.length)throw new Error('Hay archivos que parecen contener '+(kind==='sales'?'ventas':'compras')+' pero no tienen encabezados suficientes de '+(kind==='sales'?'cliente':'proveedor')+' y número de factura: '+ambiguousSources.map(item=>item.source).join(', ')+'. No se importó nada. Separa los módulos o corrige los encabezados antes de continuar.');
     const sourceRows=sourceGroups.filter(item=>item.hasPartySignal&&item.hasDocumentSignal).flatMap(item=>item.group);
     if(sourceRows.length===0)throw new Error('No se identificaron archivos con encabezados de '+(kind==='sales'?'ventas y cliente':'compras y proveedor')+'. Verifica número de factura y datos de la contraparte.');
