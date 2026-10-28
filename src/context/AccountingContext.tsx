@@ -1997,7 +1997,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const contraAccountName = contraAccount.name;
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
-    const nextEntryNum = companyEntries.length + 1;
+    const nextEntryNum = companyEntries.reduce((max, entry) => Math.max(max, Number(entry.entryNumber) || 0), 0) + 1;
     const rate = currentCompany.bcvRate;
     if (!Number.isFinite(rate) || rate <= 0) {
       throw new Error('Configure una tasa BCV válida para generar el asiento de conciliación.');
