@@ -29,6 +29,9 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [clientIsSpecial, setClientIsSpecial] = useState<boolean>(false);
   const [retentionRate, setRetentionRate] = useState<number>(75);
   const [retentionVoucherNumber, setRetentionVoucherNumber] = useState<string>('');
+  const [retentionVoucherDate, setRetentionVoucherDate] = useState<string>('');
+  const [igtfAgent, setIgtfAgent] = useState<boolean>(false);
+  const [paymentCurrency, setPaymentCurrency] = useState<'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO'>('BS');
 
   // Currency
   const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
@@ -43,7 +46,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
-  const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const igtfApplicable = igtfAgent && paymentCurrency !== 'BS';
+  const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
+  const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = clientIsSpecial
     ? Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100
     : 0;
@@ -57,6 +63,18 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     e.preventDefault();
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
     if (totalAmountBs <= 0) return;
+    if (clientIsSpecial && !/^\\d{14}$/.test(retentionVoucherNumber.trim())) {
+      alert('El número del comprobante de retención debe contener exactamente 14 dígitos.');
+      return;
+    }
+    if (clientIsSpecial && !retentionVoucherDate) {
+      alert('Indique la fecha del comprobante de retención de IVA.');
+      return;
+    }
+    if (clientIsSpecial && retentionVoucherDate < invoiceDate) {
+      alert('La fecha del comprobante de retención no puede ser anterior a la fecha de la factura. Verifique el documento.');
+      return;
+    }
 
     addSale({
       invoiceDate,
@@ -75,6 +93,12 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
       vatWithheldBs,
       retentionRate: clientIsSpecial ? retentionRate : 0,
       retentionVoucherNumber: clientIsSpecial ? retentionVoucherNumber.trim() : undefined,
+      retentionVoucherDate: clientIsSpecial ? retentionVoucherDate : undefined,
+      igtfApplicable,
+      igtfRate: igtfApplicable ? 3 : 0,
+      igtfAmountBs,
+      igtfAmountUsd: bcvRate > 0 ? igtfAmountBs / bcvRate : 0,
+      paymentCurrency,
       bcvRate,
       totalAmountUsd,
       taxableBaseUsd,
@@ -256,7 +280,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </label>
 
             {clientIsSpecial && (
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 pt-2">
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">% Retenido por el Cliente</label>
                   <select
@@ -269,13 +293,27 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                   </select>
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">N° Comprobante Recibido</label>
+                  <label className="block font-semibold text-slate-700 mb-1">N° Comprobante Recibido (14 dígitos) *</label>
                   <input
                     type="text"
+                    inputMode="numeric"
+                    pattern="[0-9]{14}"
+                    maxLength={14}
+                    required
                     placeholder="20261000001234"
                     value={retentionVoucherNumber}
-                    onChange={e => setRetentionVoucherNumber(e.target.value)}
+                    onChange={e => setRetentionVoucherNumber(e.target.value.replace(/\\D/g, '').slice(0, 14))}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Fecha del Comprobante *</label>
+                  <input
+                    type="date"
+                    required
+                    value={retentionVoucherDate}
+                    onChange={e => setRetentionVoucherDate(e.target.value)}
+                    className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
                 <div className="bg-emerald-50 p-2.5 rounded-lg border border-emerald-200">
@@ -299,10 +337,33 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <div className="rounded-lg bg-white border border-amber-200 p-3 text-[11px] text-slate-700">{currencyPricingMode === 'USD_FIJO' ? 'Se conserva el importe contractual en USD; se evaluará la diferencia cambiaria al liquidar.' : currencyPricingMode === 'BS_AJUSTABLE' ? 'Se calculará una variación preliminar del precio en Bs.; el efecto fiscal debe validarse antes de emitir documentos.' : 'La liquidación y el ajuste quedarán sujetos a revisión manual.'} La selección no modifica la factura original ni autoriza por sí sola emitir notas fiscales.</div>
             </>}
           </div>
+          {/* IGTF: se calcula solo cuando se declara agente de percepción y pago en moneda extranjera/cripto */}
+          <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-3">
+            <span className="font-bold text-slate-800 uppercase tracking-wider block">5. IGTF — percepción de grandes transacciones financieras</span>
+            <label className="flex items-start gap-2 font-semibold text-slate-700 cursor-pointer">
+              <input type="checkbox" checked={igtfAgent} onChange={e => setIgtfAgent(e.target.checked)} className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
+              <span>La empresa está designada agente de percepción del IGTF y esta operación está sujeta al impuesto.</span>
+            </label>
+            <div>
+              <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
+              <select value={paymentCurrency} onChange={e => setPaymentCurrency(e.target.value as typeof paymentCurrency)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                <option value="BS">Bolívares (no calcular IGTF)</option>
+                <option value="FOREIGN_CASH">Efectivo en moneda extranjera</option>
+                <option value="FOREIGN_TRANSFER">Pago/transferencia en moneda extranjera</option>
+                <option value="CRYPTO">Criptoactivos</option>
+              </select>
+            </div>
+            <div className="flex flex-wrap justify-between gap-2 text-xs">
+              <span className="text-slate-600">IGTF estimado (3% sobre el total de la factura, sujeto a validación fiscal):</span>
+              <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
+            </div>
+            <p className="text-[11px] text-slate-600">El impuesto solo se suma si se marca la condición de agente y se selecciona un medio sujeto. Confirme con su contador la base imponible y los supuestos legales aplicables antes de emitir el comprobante.</p>
+          </div>
+
           {/* Summary Box */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="flex justify-between items-center text-xs">
-              <span className="text-slate-400">Total Factura de Venta con IVA:</span>
+              <span className="text-slate-400">Total Factura (IVA e IGTF si aplica):</span>
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
             {clientIsSpecial && (
