@@ -294,10 +294,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const getAuditEvents = async (limit = 100): Promise<AccountingAuditEvent[]> => {
-    if (!window.sicovenStore?.listAuditEvents) {
+    const localStore = window.sicovenStore;
+    if (!localStore?.listAuditEvents) {
       throw new Error('El historial de auditoría está disponible en la edición de escritorio con SQLite local.');
     }
-    const result = await window.sicovenStore.listAuditEvents(token, limit);
+    const result = await localStore.listAuditEvents(token, limit);
     if (!result.ok) throw new Error(result.message || 'No se pudo consultar el historial de auditoría local.');
     return result.events || [];
   };
