@@ -239,6 +239,8 @@ export interface InventoryMovement {
   journalEntryId?: string;
   /** Enlace explícito entre una corrección/devolución y el movimiento original del Kardex. */
   correctionForMovementId?: string;
+  /** La salida física se registra sin otro asiento cuando el contra-asiento de compra ya revierte la cuenta de inventario. */
+  inventoryOnlyCorrection?: boolean;
   /** Tasa BCV aplicable a la fecha del movimiento, conservada como dato histórico. */
   bcvRate?: number;
   documentType?: string;
