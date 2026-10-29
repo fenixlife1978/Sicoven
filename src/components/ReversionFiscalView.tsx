@@ -5,7 +5,7 @@ import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
-    currentCompany, accounts, journalEntries, sales, purchases,
+    currentCompany, accounts, journalEntries, sales, purchases, movements,
     reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
@@ -15,6 +15,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [reason, setReason] = useState('');
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
+  const [inventoryReviewed, setInventoryReviewed] = useState(false);
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
 
@@ -53,6 +54,13 @@ export const ReversionFiscalView: React.FC = () => {
 
   const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
+  const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
+  const linkedInventoryMovements = source && linkedInvoiceNumber
+    ? movements.filter(movement => movement.companyId === currentCompany.id &&
+        (movement.journalEntryId === source.id || movement.documentRef.trim().toLocaleUpperCase() === linkedInvoiceNumber.trim().toLocaleUpperCase() ||
+         movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))
+    : [];
+  const requiresInventoryReview = linkedInventoryMovements.length > 0;
   const balanceSheetImpactBs = preview.reduce((sum, item) => {
     const type = accountMap.get(item.targetCode)?.type;
     return ['ACTIVO','PASIVO','PATRIMONIO'].includes(type || '') ? sum + item.debitBs - item.creditBs : sum;
@@ -72,6 +80,10 @@ export const ReversionFiscalView: React.FC = () => {
 
   const submitReversal = () => {
     if (!source || reversalDisabled) return;
+    if (requiresInventoryReview && !inventoryReviewed) {
+      setFeedback({kind:'error', message:'Confirme la revisión del Kardex y la necesidad de registrar movimientos compensatorios por separado antes de reversar la factura.'});
+      return;
+    }
     const confirmed = window.confirm(
       'Se registrará un contra-asiento nuevo e inmutable. No se borrará el asiento original. La reversión contable no sustituye la nota de crédito ni la rectificación fiscal que legalmente corresponda. ¿Desea continuar?'
     );
@@ -85,6 +97,7 @@ export const ReversionFiscalView: React.FC = () => {
       setReason('');
       setWorkpaperNote('');
       setSelectedId('');
+      setInventoryReviewed(false);
     } catch (error) {
       setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión.'});
     }
@@ -119,7 +132,7 @@ export const ReversionFiscalView: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-3">
               <label className="block text-sm font-semibold text-slate-700">1. Seleccione el asiento original</label>
-              <select value={selectedId} onChange={event=>{setSelectedId(event.target.value);setFeedback(null);}} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white">
+              <select value={selectedId} onChange={event=>{setSelectedId(event.target.value);setFeedback(null);setInventoryReviewed(false);}} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white">
                 <option value="">Seleccionar asiento contabilizado…</option>
                 {journalEntries.filter(entry=>!entry.reversalOfEntryId && !hasReversal(entry.id)).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.entryNumber-a.entryNumber).map(entry=>(
                   <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · {entry.description.slice(0,90)}</option>
@@ -130,6 +143,7 @@ export const ReversionFiscalView: React.FC = () => {
                 <div><span className="text-slate-500">Tipo / referencia:</span> {source.type} · {source.referenceDoc || 'Sin referencia'}</div>
                 <div><span className="text-slate-500">Descripción:</span> {source.description}</div>
                 {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
+                {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y que la corrección del inventario se gestionará por separado con soporte documental.</span></label></div>}
                 {hasReversal(source.id) && <p className="text-red-700 font-semibold">Este asiento ya fue reversado.</p>}
               </div>}
               <label className="block text-sm font-semibold text-slate-700">2. Fecha del contra-asiento</label>
