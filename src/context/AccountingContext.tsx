@@ -336,6 +336,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const linkedSale = sales.find(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)));
     const linkedPurchase = purchases.find(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)));
+    // Reversión fail-closed: una factura con movimientos de Kardex o extractos
+    // bancarios conciliados no puede revertirse solo desde el Libro Diario. El
+    // contra-asiento aislado dejaría inventario/caja/bancos y auxiliares descuadrados.
+    const linkedInventoryMovements = movements.filter(movement =>
+      movement.companyId === currentCompany.id &&
+      (movement.journalEntryId === source.id ||
+        (linkedSale && movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedSale.invoiceNumber).toUpperCase()) ||
+        (linkedPurchase && movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase()))
+    );
+    if (linkedInventoryMovements.length > 0) {
+      const movementTypes = [...new Set(linkedInventoryMovements.map(movement => movement.concept))].join(', ');
+      throw new Error('Reversión bloqueada: el asiento tiene ' + linkedInventoryMovements.length +
+        ' movimiento(s) de inventario relacionado(s) (' + movementTypes +
+        '). Se requiere una reversión coordinada de Kardex, costo, existencia y asiento contable. No se registró ningún contra-asiento.');
+    }
+    const linkedBankMovements = bankStatementMovements.filter(movement =>
+      movement.companyId === currentCompany.id && movement.reconciledWithJournalEntryId === source.id
+    );
+    if (linkedBankMovements.length > 0) {
+      throw new Error('Reversión bloqueada: el asiento está conciliado con ' + linkedBankMovements.length +
+        ' movimiento(s) bancario(s). Deshaga primero la conciliación mediante el flujo autorizado y luego ejecute la reversión integral.');
+    }
     if (linkedSale || linkedPurchase) {
       const documentId = linkedSale?.id || linkedPurchase?.id;
       const kind = linkedSale ? 'SALE_COLLECTION' : 'PURCHASE_PAYMENT';
