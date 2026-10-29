@@ -31,6 +31,17 @@ describe('credit settlement balances and validation', () => {
     assert.equal(balance.settlementCount, 0);
   });
 
+  it('keeps reversed settlements in history but excludes them from the payable/receivable balance', () => {
+    const balance = calculateCreditBalance('invoice-1', 100, 8000, [
+      settlement({ amountUsd: 25, amountBs: 2500 }),
+      settlement({ id: 's-reversed', amountUsd: 40, amountBs: 4000, isReversed: true, reversedByJournalEntryId: 'j-reversal' })
+    ]);
+    assert.equal(balance.settledAmountUsd, 25);
+    assert.equal(balance.settledAmountBs, 2500);
+    assert.equal(balance.outstandingUsd, 75);
+    assert.equal(balance.settlementCount, 1);
+  });
+
   it('caps outstanding principal at zero when settlement list exceeds original amount', () => {
     const balance = calculateCreditBalance('invoice-1', 100, 8000, [
       settlement({ amountUsd: 60 }), settlement({ id: 's-2', amountUsd: 60 })
