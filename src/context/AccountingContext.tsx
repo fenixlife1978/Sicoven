@@ -26,7 +26,7 @@ import {
   INITIAL_BANK_ACCOUNTS,
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
-import { formatVoucherNumber } from '../utils/formatters';
+import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
@@ -706,6 +706,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
       throw new Error('La compra requiere fecha válida, número de factura y número de control.');
+    }
+    if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
+      throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
+    }
+    // No generar asientos de compra positivos para notas que requieren reversión contable/fiscal.
+    // Hasta completar el flujo de notas de débito/crédito, se rechazan para evitar alterar saldos incorrectamente.
+    if (purchaseData.documentType !== '01') {
+      throw new Error('Las notas de débito/crédito de proveedores requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
     }
     if (!Number.isFinite(purchaseData.taxRate) || purchaseData.taxRate < 0 || purchaseData.taxRate > 100 ||
         !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
