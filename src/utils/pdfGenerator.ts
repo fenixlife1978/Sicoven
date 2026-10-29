@@ -783,6 +783,7 @@ export async function exportComprasPdf(
     totalBase += p.taxableBaseBs || 0;
     totalIva += p.vatAmountBs || 0;
     totalRetenido += p.vatWithheldBs || 0;
+    totalIgtf += Number(p.igtfAmountBs || 0);
 
     return [
       p.opNumber,
@@ -792,6 +793,7 @@ export async function exportComprasPdf(
       p.invoiceNumber,
       p.controlNumber,
       formatNumberVe(p.totalAmountBs),
+      Number(p.igtfAmountBs || 0) > 0 ? formatNumberVe(Number(p.igtfAmountBs)) : '-',
       p.exemptAmountBs > 0 ? formatNumberVe(p.exemptAmountBs) : '-',
       formatNumberVe(p.taxableBaseBs),
       `${p.taxRate}%`,
@@ -805,6 +807,7 @@ export async function exportComprasPdf(
   tableBody.push([
     { content: 'TOTALES DEL PERÍODO:', colSpan: 6, styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalMonto), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
+    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [251, 191, 36] } },
     { content: formatNumberVe(totalExento), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: formatNumberVe(totalBase), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [255, 255, 255] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
@@ -823,6 +826,7 @@ export async function exportComprasPdf(
       'N° Factura',
       'N° Control',
       'Total Compras (Bs.)',
+      'IGTF (Bs.)',
       'Exento (Bs.)',
       'Base Imp. (Bs.)',
       '% Alíc.',
@@ -842,12 +846,13 @@ export async function exportComprasPdf(
       4: { cellWidth: 20, font: 'courier' },
       5: { cellWidth: 20, font: 'courier' },
       6: { cellWidth: 24, halign: 'right', font: 'courier', fontStyle: 'bold' },
-      7: { cellWidth: 20, halign: 'right', font: 'courier' },
-      8: { cellWidth: 22, halign: 'right', font: 'courier' },
-      9: { cellWidth: 12, halign: 'center' },
-      10: { cellWidth: 22, halign: 'right', font: 'courier' },
-      11: { cellWidth: 12, halign: 'center' },
-      12: { cellWidth: 22, halign: 'right', font: 'courier' }
+      7: { cellWidth: 17, halign: 'right', font: 'courier' },
+      8: { cellWidth: 20, halign: 'right', font: 'courier' },
+      9: { cellWidth: 22, halign: 'right', font: 'courier' },
+      10: { cellWidth: 12, halign: 'center' },
+      11: { cellWidth: 22, halign: 'right', font: 'courier' },
+      12: { cellWidth: 12, halign: 'center' },
+      13: { cellWidth: 22, halign: 'right', font: 'courier' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
