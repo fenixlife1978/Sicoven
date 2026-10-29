@@ -14,14 +14,15 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   onClose,
   defaultProductId
 }) => {
-  const { currentCompany, products, addMovement } = useAccounting();
+  const { currentCompany, products, movements, addMovement } = useAccounting();
 
   const [productId, setProductId] = useState<string>(
     defaultProductId || products[0]?.id || ''
   );
   const [date, setDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [type, setType] = useState<'ENTRADA' | 'SALIDA' | 'AJUSTE'>('ENTRADA');
-  const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE'>('COMPRA');
+  const [concept, setConcept] = useState<'COMPRA' | 'VENTA' | 'MERMA' | 'AJUSTE' | 'DEVOLUCION_COMPRA' | 'DEVOLUCION_CLIENTE' | 'AUTOCONSUMO' | 'INVENTARIO_INICIAL'>('COMPRA');
+  const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [documentRef, setDocumentRef] = useState<string>('');
   const [quantity, setQuantity] = useState<number>(1);
   const [unitCostBs, setUnitCostBs] = useState<number>(0);
@@ -33,6 +34,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   const [error, setError] = useState('');
 
   const selectedProduct = products.find(p => p.id === productId) || products[0];
+  const supplierReturnSources = movements.filter(m => m.companyId === currentCompany.id && m.productId === productId && m.type === 'ENTRADA' && m.concept === 'COMPRA' && !m.correctionForMovementId).map(m => ({...m, remaining: m.quantity - movements.filter(x => x.companyId === currentCompany.id && x.correctionForMovementId === m.id).reduce((sum,x)=>sum+Number(x.quantity||0),0)})).filter(m=>m.remaining>1e-8);
+  const selectedReturnSource = supplierReturnSources.find(m=>m.id===correctionMovementId);
 
   // Auto-set cost when product changes
   React.useEffect(() => {
@@ -65,6 +68,12 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
     e.preventDefault();
     setError('');
     if ((type !== 'AJUSTE' && quantity <= 0) || (type === 'AJUSTE' && quantity < 0) || !Number.isFinite(bcvRate) || bcvRate <= 0) { setError('Verifique que la cantidad y la tasa BCV sean válidas.'); return; }
+    if (type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA') {
+      if (!selectedReturnSource) { setError('Seleccione la entrada original de Kardex que se devuelve.'); return; }
+      if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
+      if (documentRef.trim().length < 4) { setError('Indique el número real de nota de crédito del proveedor o soporte autorizado (mínimo 4 caracteres).'); return; }
+      if (selectedProduct.costingMethod === 'PEPS') { setError('La devolución con PEPS requiere identificar el lote de origen; permanece bloqueada hasta disponer de ese dato.'); return; }
+    }
     try {
     addMovement({
       productId: selectedProduct.id,
@@ -76,6 +85,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       documentRef: documentRef.trim() || `MOV-${Date.now().toString().slice(-6)}`,
       documentType, counterpartyRif: counterpartyRif.trim(), counterpartyName: counterpartyName.trim(), bcvRate,
       additionalLandedCostsBs: type === 'ENTRADA' ? additionalLandedCostsBs : 0,
+      correctionForMovementId: type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA' ? selectedReturnSource?.id : undefined,
       quantity,
       unitCostBs,
       unitCostUsd: Number(unitCostUsd.toFixed(2)),
@@ -118,7 +128,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             <label className="block font-semibold text-slate-700 mb-1">Producto / Artículo *</label>
             <select
               value={productId}
-              onChange={e => setProductId(e.target.value)}
+              onChange={e => { setProductId(e.target.value); setCorrectionMovementId(''); }}
               className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
             >
               {products.map(p => (
@@ -137,6 +147,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
                 onChange={e => {
                   const val = e.target.value as any;
                   setType(val);
+                  setCorrectionMovementId('');
                   if (val === 'ENTRADA') setConcept('COMPRA');
                   else if (val === 'SALIDA') setConcept('VENTA');
                   else setConcept('AJUSTE');
@@ -178,6 +189,15 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
               </select>
             </div>
           </div>
+
+          {type === 'SALIDA' && concept === 'DEVOLUCION_COMPRA' && <div className="rounded-xl border border-amber-300 bg-amber-50 p-3 space-y-3">
+            <div className="font-bold text-amber-950">Conciliación obligatoria de devolución a proveedor</div>
+            <p className="text-amber-900">Seleccione la entrada original del Kardex y registre la referencia de la nota de crédito del proveedor. La cantidad se limita a las unidades recibidas menos devoluciones previas; el asiento de salida afecta CxP e inventario. Esto no sustituye el documento fiscal válido.</p>
+            <div><label className="block font-semibold text-slate-700 mb-1">Entrada original de compra *</label><select required value={correctionMovementId} onChange={e=>{setCorrectionMovementId(e.target.value);const source=supplierReturnSources.find(m=>m.id===e.target.value);if(source){setUnitCostBs(source.unitCostBs);setCounterpartyRif(source.counterpartyRif||'');setCounterpartyName(source.counterpartyName||'');setDocumentType('Nota de crédito proveedor');}}} className="w-full rounded-lg border border-slate-300 p-2"><option value="">Seleccionar factura / entrada de Kardex…</option>{supplierReturnSources.map(m=><option key={m.id} value={m.id}>{m.date} · {m.documentRef} · {m.productCode} · recibidas {m.quantity} · pendientes {m.remaining}</option>)}</select></div>
+            {selectedReturnSource && <p className="text-xs text-slate-700">Pendiente máximo: <strong>{selectedReturnSource.remaining}</strong> unidades · costo original: <strong>{formatBs(selectedReturnSource.unitCostBs)}</strong> por unidad.</p>}
+            <div><label className="block font-semibold text-slate-700 mb-1">N.º nota de crédito / soporte autorizado *</label><input required minLength={4} value={documentRef} onChange={e=>setDocumentRef(e.target.value)} placeholder="NC proveedor / documento real" className="w-full rounded-lg border border-slate-300 p-2"/></div>
+            {selectedProduct.costingMethod === 'PEPS' && <p className="text-rose-700 font-semibold">PEPS: bloqueado hasta identificar el lote de origen.</p>}
+          </div>}
 
           <div className="grid grid-cols-2 gap-3">
             <div>
