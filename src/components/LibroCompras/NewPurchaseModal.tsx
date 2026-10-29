@@ -3,6 +3,7 @@ import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
 import { ISLR_CONCEPTS, calculateIslrRetention } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
+import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -41,7 +42,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
-  const [paymentMethod, setPaymentMethod] = useState<'BS' | 'FOREIGN_CASH' | 'ZELLE' | 'INTERNATIONAL_TRANSFER' | 'CRYPTO'>('BS');
+  const [paymentMethod, setPaymentMethod] = useState<PurchasePaymentMethod>('BS');
   const [applyIgtf, setApplyIgtf] = useState(false);
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
 
@@ -50,8 +51,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfApplicable = applyIgtf && ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'].includes(paymentMethod);
-  const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
+  const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf);
+  const igtfApplicable = igtfCalculation.applicable;
+  const igtfAmountBs = igtfCalculation.amountBs;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100;
 
