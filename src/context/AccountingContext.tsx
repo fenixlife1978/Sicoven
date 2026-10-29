@@ -592,7 +592,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         totalAmountUsd: Number(document.totalAmountUsd || 0),
         taxableBaseUsd: Number(document.taxableBaseUsd || 0),
         vatAmountUsd: Number(document.vatAmountUsd || 0),
-        exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0)),
+        exemptAmountUsd: Math.max(0, Number(document.totalAmountUsd || 0) - Number(document.taxableBaseUsd || 0) - Number(document.vatAmountUsd || 0) - Number(document.igtfAmountUsd || 0)),
         invoiceRate,
         settlementRate: draft.bcvRate,
         settledAmountUsd: Math.round(draft.amountUsd * 100) / 100,
@@ -1007,18 +1007,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deletePurchase = (id: string) => {
-    const purchase = purchases.find(p => p.id === id);
-    if (!purchase || purchase.companyId !== currentCompany.id) return;
-    // Una factura contabilizada no se elimina físicamente: requiere anulación con asiento reverso.
-    if (purchase.journalEntryId) return;
-    setPurchases(prev => prev.filter(p => p.id !== id));
-    if (purchase.journalEntryId) {
-      setJournalEntries(prev => prev.filter(entry => entry.id !== purchase.journalEntryId));
+    const purchase = purchases.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!purchase) return;
+    const hasSettlement = creditSettlements.some(item =>
+      item.companyId === currentCompany.id && item.documentId === id && item.kind === 'PURCHASE_PAYMENT'
+    );
+    const hasJournal = Boolean(purchase.journalEntryId) || journalEntries.some(entry =>
+      entry.companyId === currentCompany.id && entry.type === 'COMPRA' &&
+      entry.referenceDoc === `FAC-${purchase.invoiceNumber}`
+    );
+    if (hasJournal || hasSettlement) {
+      if (typeof window !== 'undefined') window.alert('Esta factura tiene contabilización o pagos vinculados y no puede eliminarse físicamente. Registre una reversión contable para corregirla.');
+      return;
     }
+    setPurchases(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
     setVatVouchers(prev => prev.filter(voucher => voucher.purchaseRecordId !== id));
-    // El comprobante ISLR se identifica con el ID de la compra que lo originó.
-    // Al eliminar la factura también debe retirarse ese comprobante para no dejar
-    // una retención huérfana en los reportes fiscales.
     setIslrVouchers(prev => prev.filter(voucher => voucher.id !== `vouch-islr-${id}`));
   };
 
@@ -1214,14 +1217,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteSale = (id: string) => {
-    const sale = sales.find(item => item.id === id);
-    if (!sale || sale.companyId !== currentCompany.id) return;
-    // Una factura contabilizada no se elimina físicamente: requiere anulación con asiento reverso.
-    if (sale.journalEntryId) return;
-    setSales(prev => prev.filter(item => item.id !== id));
-    if (sale.journalEntryId) {
-      setJournalEntries(prev => prev.filter(entry => entry.id !== sale.journalEntryId));
+    const sale = sales.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!sale) return;
+    const hasSettlement = creditSettlements.some(item =>
+      item.companyId === currentCompany.id && item.documentId === id && item.kind === 'SALE_COLLECTION'
+    );
+    const hasJournal = Boolean(sale.journalEntryId) || journalEntries.some(entry =>
+      entry.companyId === currentCompany.id && entry.type === 'VENTA' &&
+      entry.referenceDoc === `FAC-${sale.invoiceNumber}`
+    );
+    if (hasJournal || hasSettlement) {
+      if (typeof window !== 'undefined') window.alert('Esta factura tiene contabilización o cobros vinculados y no puede eliminarse físicamente. Registre una reversión contable para corregirla.');
+      return;
     }
+    setSales(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
   };
 
   // Inventario contable: cada movimiento valida existencias y conserva la tasa histórica.
