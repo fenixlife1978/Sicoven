@@ -327,7 +327,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
             </div>
             <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
-            <p className="text-[11px] text-amber-900">Confirme que la operación está legalmente sujeta al IGTF antes de activarlo. El método de pago por sí solo no determina la obligación fiscal.</p>
+            <p className="text-[11px] text-amber-900">Advertencia: Antes de activar el cálculo del IGTF, el contador debe validar que la operación esté legalmente sujeta, la base imponible aplicable y el tratamiento contable y tributario vigente. El método de pago por sí solo no determina la obligación fiscal; marque esta opción únicamente después de esa revisión.</p>
           </div>
 
           {/* ISLR Withholding Option */}
