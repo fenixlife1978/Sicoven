@@ -29,6 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
+import { buildReversalItems } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 
@@ -353,38 +354,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (priorPeriodAdjustment && !sourceInClosedPeriod) {
       throw new Error('AIA solo se permite para asientos de un período ya cerrado.');
     }
-    let retainedEarningsAccount: Account | undefined;
-    if (priorPeriodAdjustment) {
-      retainedEarningsAccount = accounts.find(account =>
-        account.code === retainedEarningsAccountCode && account.type === 'PATRIMONIO' && account.isMovement
-      );
-      if (!retainedEarningsAccount) throw new Error('Para AIA seleccione una cuenta de patrimonio de movimiento destinada a resultados acumulados.');
-    }
-    const reversedItems = source.items.map(item => {
-      const sourceAccount = accounts.find(account => account.code === item.accountCode);
-      const targetAccount = priorPeriodAdjustment && sourceAccount &&
-        ['INGRESOS', 'COSTOS', 'GASTOS'].includes(sourceAccount.type)
-        ? retainedEarningsAccount!
-        : sourceAccount;
-      if (!targetAccount) throw new Error('No se encuentra la cuenta contable ' + item.accountCode + ' del asiento original.');
-      return {
-        accountCode: targetAccount.code,
-        accountName: targetAccount.name,
-        debitBs: item.creditBs,
-        creditBs: item.debitBs,
-        debitUsd: item.creditUsd,
-        creditUsd: item.debitUsd,
-        description: priorPeriodAdjustment && targetAccount.code !== item.accountCode
-          ? 'AIA · ' + (item.description || item.accountName)
-          : 'Reversión · ' + (item.description || item.accountName)
-      };
-    });
+    const reversedItems = buildReversalItems(source, accounts, priorPeriodAdjustment, retainedEarningsAccountCode);
     const totalDebitBs = reversedItems.reduce((sum, item) => sum + item.debitBs, 0);
     const totalCreditBs = reversedItems.reduce((sum, item) => sum + item.creditBs, 0);
     const totalDebitUsd = reversedItems.reduce((sum, item) => sum + item.debitUsd, 0);
     const totalCreditUsd = reversedItems.reduce((sum, item) => sum + item.creditUsd, 0);
     if (Math.abs(totalDebitBs - totalCreditBs) >= 0.01 || Math.abs(totalDebitUsd - totalCreditUsd) >= 0.01) {
-      throw new Error('La vista previa de reversión no cuadra en ambas monedas; no se registró ningún cambio.');
+      throw new Error('La vista previa de reversión no cuadra en Bs. y USD; no se registró ningún cambio.');
     }
     const reversal = addJournalEntry({
       entryNumber: 0, // addJournalEntry asigna el siguiente correlativo inmutable.
