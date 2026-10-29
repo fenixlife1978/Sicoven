@@ -19,6 +19,9 @@ export interface CreditSettlement {
   fxFiscalAdjustmentProposal?: FxFiscalAdjustmentSnapshot;
   journalEntryId: string;
   createdAt: string;
+  /** La liquidación se conserva para auditoría, pero deja de reducir el saldo al reversarse. */
+  isReversed?: boolean;
+  reversedByJournalEntryId?: string;
 }
 
 export interface CreditBalance {

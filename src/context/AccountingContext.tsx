@@ -286,10 +286,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const closeAccountingPeriod = (closedThroughDate: string) => {
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
-    const today = new Date().toISOString().slice(0, 10);
+    const now = new Date();
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     if (closedThroughDate > today) throw new Error('No se puede cerrar un período con fecha futura.');
     if (currentCompany.closedThroughDate && closedThroughDate < currentCompany.closedThroughDate) {
       throw new Error('El cierre es irreversible desde esta pantalla: la fecha nueva no puede retroceder. Solicite reapertura formal al administrador contable.');
+    }
+    const entriesToClose = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.date <= closedThroughDate);
+    for (const entry of entriesToClose) {
+      const debitBs = entry.items.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+      const creditBs = entry.items.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+      const debitUsd = entry.items.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+      const creditUsd = entry.items.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+      if (Math.abs(debitBs - creditBs) >= 0.01 || Math.abs(debitUsd - creditUsd) >= 0.01) {
+        throw new Error('No se puede cerrar el período: el asiento #' + entry.entryNumber + ' no cuadra en Bs. y USD.');
+      }
+    }
+    if (sales.some(sale => sale.companyId === currentCompany.id && sale.invoiceDate <= closedThroughDate && !sale.journalEntryId) ||
+        purchases.some(purchase => purchase.companyId === currentCompany.id && purchase.invoiceDate <= closedThroughDate && !purchase.journalEntryId)) {
+      throw new Error('No se puede cerrar el período: hay facturas sin asiento contable vinculado. Regularice la integridad documental primero.');
     }
     setCompanies(prev => prev.map(company => company.id === currentCompany.id
       ? { ...company, closedThroughDate }
@@ -317,6 +332,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     if (reason.trim().length < 10 || workpaperNote.trim().length < 10) {
       throw new Error('La causa y el papel de trabajo deben contener al menos 10 caracteres cada uno.');
+    }
+    const linkedSale = sales.find(sale => sale.companyId === currentCompany.id && sale.journalEntryId === source.id);
+    const linkedPurchase = purchases.find(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id);
+    if (linkedSale || linkedPurchase) {
+      const documentId = linkedSale?.id || linkedPurchase?.id;
+      const kind = linkedSale ? 'SALE_COLLECTION' : 'PURCHASE_PAYMENT';
+      const activeSettlements = creditSettlements.filter(item =>
+        item.companyId === currentCompany.id && item.documentId === documentId &&
+        item.kind === kind && !item.isReversed
+      );
+      if (activeSettlements.length) {
+        throw new Error('La factura tiene ' + activeSettlements.length + ' cobro(s)/pago(s) vigente(s). Revierta primero cada liquidación vinculada; después podrá reversar la factura sin dejar saldos de crédito inconsistentes.');
+      }
     }
     const sourceInClosedPeriod = Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
     if (sourceInClosedPeriod && !priorPeriodAdjustment) {
@@ -379,6 +407,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id
       ? { ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : purchase));
+    setCreditSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
+      ? { ...settlement, isReversed: true, reversedByJournalEntryId: reversal.id }
+      : settlement));
     return reversal;
   };
 
@@ -639,7 +670,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       documentId,
       principal.originalAmountUsd,
       principal.originalAmountBs,
-      creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind)
+      creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind && !item.isReversed)
     );
   };
 
@@ -649,8 +680,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? sales.find(item => item.id === draft.documentId && item.companyId === currentCompany.id)
       : purchases.find(item => item.id === draft.documentId && item.companyId === currentCompany.id);
     if (!document) throw new Error('La factura no existe en la empresa activa.');
+    if (document.isCancelled) throw new Error('No se puede liquidar una factura reversada.');
     if (document.paymentTerm !== 'CREDITO') throw new Error('Solo se pueden liquidar facturas identificadas como crédito.');
-    const prior = creditSettlements.filter(item => item.companyId === currentCompany.id && item.documentId === draft.documentId && item.kind === kind);
+    const prior = creditSettlements.filter(item => item.companyId === currentCompany.id && item.documentId === draft.documentId && item.kind === kind && !item.isReversed);
     const principal = getCreditPrincipal(document, kind);
     const balance = calculateCreditBalance(draft.documentId, principal.originalAmountUsd, principal.originalAmountBs, prior);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);

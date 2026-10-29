@@ -8,7 +8,8 @@ export const ReversionFiscalView: React.FC = () => {
     currentCompany, accounts, journalEntries, sales, purchases,
     reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
-  const today = new Date().toISOString().slice(0, 10);
+  const now = new Date();
+  const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   const [selectedId, setSelectedId] = useState('');
   const [effectiveDate, setEffectiveDate] = useState(today);
   const [reason, setReason] = useState('');
@@ -74,6 +75,7 @@ export const ReversionFiscalView: React.FC = () => {
   };
 
   const submitClose = () => {
+    if (!window.confirm('Va a bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
     try {
       closeAccountingPeriod(closedDate);
       setFeedback({kind:'success', message:'Período cerrado hasta '+closedDate+'. No se admitirán nuevos asientos ni facturas con fecha igual o anterior.'});

@@ -227,6 +227,7 @@ export const LibroComprasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
                       {p.invoiceNumber}
+                      {p.isCancelled && <span title={p.cancellationNote || 'Pendiente regularización fiscal'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">REVERSADA CONTABLE</span>}
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
                       {p.controlNumber}
