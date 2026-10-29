@@ -237,6 +237,8 @@ export interface InventoryMovement {
   balanceTotalBs: number;
   balanceTotalUsd: number;
   journalEntryId?: string;
+  /** Enlace explícito entre una corrección/devolución y el movimiento original del Kardex. */
+  correctionForMovementId?: string;
   /** Tasa BCV aplicable a la fecha del movimiento, conservada como dato histórico. */
   bcvRate?: number;
   documentType?: string;
