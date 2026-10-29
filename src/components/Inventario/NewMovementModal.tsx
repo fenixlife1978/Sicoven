@@ -14,7 +14,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
   onClose,
   defaultProductId
 }) => {
-  const { currentCompany, products, movements, addMovement } = useAccounting();
+  const { currentCompany, products, movements, purchases, journalEntries, addMovement } = useAccounting();
 
   const [productId, setProductId] = useState<string>(
     defaultProductId || products[0]?.id || ''
@@ -75,6 +75,27 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       if (selectedProduct.costingMethod === 'PEPS') { setError('La devolución con PEPS requiere identificar el lote de origen; permanece bloqueada hasta disponer de ese dato.'); return; }
       if (selectedProduct.currentStock + 1e-8 < quantity) { setError('No hay existencia suficiente para descargar la devolución física al proveedor.'); return; }
       if (Math.abs(Number(selectedProduct.avgCostBs || 0) - Number(selectedReturnSource.unitCostBs || 0)) > 0.01) { setError('El costo promedio actual difiere del costo de la entrada original. No se registró la devolución porque la contrapartida CxP podría no coincidir con la nota de crédito; requiere conciliación contable manual.'); return; }
+      const linkedPurchase = purchases.find(p => p.companyId === currentCompany.id &&
+        ('FAC-' + p.invoiceNumber).trim().toUpperCase() === selectedReturnSource.documentRef.trim().toUpperCase());
+      const purchaseLine = linkedPurchase?.inventoryLines?.find(line => line.productId === selectedProduct.id &&
+        Math.abs(Number(line.quantity)-Number(selectedReturnSource.quantity)) <= 1e-8 &&
+        Math.abs(Number(line.unitCostBs)-Number(selectedReturnSource.unitCostBs)) <= 0.02);
+      const purchaseJournal = linkedPurchase?.journalEntryId
+        ? journalEntries.find(entry => entry.id === linkedPurchase.journalEntryId) : undefined;
+      const journalInventoryDebit = purchaseJournal?.items.filter(item=>item.accountCode==='1.1.4.01')
+        .reduce((sum,item)=>sum+Number(item.debitBs||0)-Number(item.creditBs||0),0);
+      const expectedInventoryDebit = linkedPurchase
+        ? Number(linkedPurchase.taxableBaseBs||0)+Number(linkedPurchase.exemptAmountBs||0) : 0;
+      if (!linkedPurchase || !purchaseLine || !purchaseJournal ||
+          !Number.isFinite(journalInventoryDebit) || Math.abs(Number(journalInventoryDebit)-expectedInventoryDebit)>0.02) {
+        setError('Devolución bloqueada: no hay conciliación verificable entre la línea de compra, la entrada de Kardex y el débito de inventario del asiento original. Las facturas históricas sin líneas vinculadas requieren conciliación manual documentada.');
+        return;
+      }
+      if (Number(linkedPurchase.vatAmountBs||0)>0 || Number(linkedPurchase.vatWithheldBs||0)>0 ||
+          Number(linkedPurchase.islrWithheldBs||0)>0 || Number(linkedPurchase.igtfAmountBs||0)>0) {
+        setError('Devolución bloqueada para esta factura: el flujo actual no calcula de forma completa la nota de crédito fiscal ni sus efectos en IVA, retenciones o IGTF. No se generó movimiento ni asiento parcial; requiere el flujo fiscal completo.');
+        return;
+      }
     }
     try {
     addMovement({
