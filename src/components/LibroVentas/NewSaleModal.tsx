@@ -47,7 +47,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfApplicable = igtfAgent && paymentTerm === 'CONTADO' && paymentCurrency !== 'BS';
+  const igtfApplicable = igtfAgent && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = clientIsSpecial
@@ -357,7 +357,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <span className="text-slate-600">IGTF estimado (3% cuando el cobro es de contado en medio sujeto, sujeto a validación fiscal):</span>
               <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
             </div>
-            <p className="text-[11px] text-slate-600">El IGTF se calcula aquí solo para cobros de contado declarados en un medio sujeto. En ventas a crédito debe registrarse al momento del cobro, según el medio efectivamente utilizado; no se anticipa ni se duplica en la factura. Confirme con su contador la base imponible y los supuestos legales aplicables antes de emitir el comprobante.</p>
+            <p className="text-[11px] text-slate-600">Este formulario estima la percepción del 3% solo para cobros de contado en efectivo en moneda extranjera o criptoactivos, cuando la empresa esté designada agente de percepción. No calcula automáticamente transferencias bancarias en divisas: su tratamiento depende del supuesto legal concreto. En ventas a crédito, registre la percepción cuando ocurra el cobro sujeto, sin anticiparla ni duplicarla. Valide el caso con su contador antes de emitir el comprobante.</p>
           </div>
 
           {/* Summary Box */}
