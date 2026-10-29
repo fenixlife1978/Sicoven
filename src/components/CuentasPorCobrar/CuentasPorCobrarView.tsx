@@ -11,7 +11,7 @@ export const CuentasPorCobrarView: React.FC = () => {
  const [query,setQuery]=useState('');
  const [historyFor,setHistoryFor]=useState<string|null>(null);
  const [selected,setSelected]=useState<(typeof sales)[number]|null>(null);
- const rows=useMemo(()=>sales.filter(p=>p.companyId===currentCompany.id).filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
+ const rows=useMemo(()=>sales.filter(p=>p.companyId===currentCompany.id).filter(p=>!p.isCancelled).filter(p=>p.paymentTerm==='CREDITO').filter(p=>{
   const q=query.trim().toLowerCase();
   return !q || [p.customerName,p.customerRif,p.invoiceNumber,p.controlNumber].some(v=>String(v||'').toLowerCase().includes(q));
  }).map(p=>({p,b:getCreditBalance(p.id,'SALE_COLLECTION')})).sort((a,b)=>String(a.p.dueDate||'9999').localeCompare(String(b.p.dueDate||'9999'))),[sales,query,getCreditBalance,currentCompany.id]);

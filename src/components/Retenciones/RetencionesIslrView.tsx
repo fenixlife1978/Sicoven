@@ -231,7 +231,7 @@ export const RetencionesIslrView: React.FC = () => {
                 filteredVouchers.map(v => (
                   <tr key={v.id} className="hover:bg-slate-50 transition">
                     <td className="py-2.5 px-4 font-mono font-bold text-indigo-900 bg-indigo-50/30 whitespace-nowrap">
-                      {v.voucherNumber}
+                      {v.voucherNumber}{v.requiresFiscalCorrection && <span title={v.correctionNote || 'Revisar regularización fiscal'} className="ml-1 rounded bg-amber-100 px-1 py-0.5 text-[9px] font-bold text-amber-800">REVISAR</span>}
                     </td>
                     <td className="py-2.5 px-4 font-mono text-slate-600 whitespace-nowrap">
                       {formatDate(v.date)}

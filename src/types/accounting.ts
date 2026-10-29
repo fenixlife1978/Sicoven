@@ -272,6 +272,10 @@ export interface VatRetentionVoucher {
   bcvRate: number;
   totalAmountUsd: number;
   vatWithheldUsd: number;
+  /** No borrar el comprobante: requiere conciliación/rectificación fiscal posterior a una reversión. */
+  requiresFiscalCorrection?: boolean;
+  correctionEntryId?: string;
+  correctionNote?: string;
 }
 
 export interface IslrConcept {

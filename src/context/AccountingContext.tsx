@@ -408,6 +408,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id
       ? { ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : purchase));
+    if (linkedPurchase) {
+      setVatVouchers(prev => prev.map(voucher => voucher.purchaseRecordId === linkedPurchase.id
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id, correctionNote: reason.trim() }
+        : voucher));
+      setIslrVouchers(prev => prev.map(voucher => voucher.id === 'vouch-islr-' + linkedPurchase.id
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id, correctionNote: reason.trim() }
+        : voucher));
+    }
     setCreditSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
       ? { ...settlement, isReversed: true, reversedByJournalEntryId: reversal.id }
       : settlement));
