@@ -45,6 +45,23 @@ test('AIA exige una cuenta de patrimonio de movimiento',()=>{
  assert.throws(()=>buildReversalItems(source,accounts,true,'1.1'),/cuenta de patrimonio/);
 });
 
+test('bloquea la reversión si el asiento original está descuadrado en Bs o USD',()=>{
+ const unbalanced = { ...source, items: source.items.map((item,index)=>index===0 ? {...item,debitBs:item.debitBs+1} : item) };
+ assert.throws(()=>buildReversalItems(unbalanced,accounts),/no cuadra simultáneamente/i);
+});
+
+test('bloquea líneas negativas o con Debe y Haber simultáneos',()=>{
+ const negative = { ...source, items: source.items.map((item,index)=>index===0 ? {...item,debitBs:-1} : item) };
+ assert.throws(()=>buildReversalItems(negative,accounts),/líneas inválidas/i);
+ const bothSides = { ...source, items: source.items.map((item,index)=>index===0 ? {...item,creditBs:1} : item) };
+ assert.throws(()=>buildReversalItems(bothSides,accounts),/líneas inválidas/i);
+});
+
+test('bloquea cuentas que ya no admiten movimientos',()=>{
+ const blockedAccounts = accounts.map(account => account.code==='1.1' ? {...account,isMovement:false} : account);
+ assert.throws(()=>buildReversalItems(source,blockedAccounts),/no admite movimientos/i);
+});
+
 test('rechaza una reversión si el plan ya no contiene la cuenta original',()=>{
  assert.throws(()=>buildReversalItems(source,accounts.filter(a=>a.code!=='4.1')),/No se encuentra la cuenta contable 4.1/);
 });
