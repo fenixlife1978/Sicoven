@@ -5,7 +5,6 @@ import {
   Plus,
   Printer,
   Search,
-  Trash2,
   Calendar,
   CheckCircle2,
   Receipt,
@@ -21,7 +20,6 @@ export const LibroVentasView: React.FC = () => {
   const {
     currentCompany,
     sales,
-    deleteSale,
     displayCurrency
   } = useAccounting();
 
