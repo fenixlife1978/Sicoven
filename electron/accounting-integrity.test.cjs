@@ -152,6 +152,23 @@ test('SQLite rejects a fiscal cancellation without an actual contra-entry', () =
   ), /cancelación del documento fiscal.*contra-asiento enlazado/i);
 });
 
+test('SQLite allows repairing a missing invoice-to-entry link only to the matching original entry', () => {
+  const original = { ...sourceEntry(), type: 'VENTA', referenceDoc: 'FAC-400' };
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  const oldSale = { id: 'sale-4', companyId: 'company-1', invoiceNumber: '400', isCancelled: false };
+  const cancelledSale = {
+    ...oldSale, journalEntryId: original.id, isCancelled: true,
+    cancelledByJournalEntryId: reversal.id,
+    cancellationReason: 'Factura con vínculo histórico incompleto',
+    cancellationNote: 'Se verificó la referencia original y el contra-asiento'
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState([original]), sales: [oldSale] },
+    { ...emptyState([linkedOriginal, reversal]), sales: [cancelledSale] }
+  ));
+});
+
 test('SQLite accepts reversal of a settlement only when the settlement points to its contra-entry', () => {
   const original = sourceEntry();
   const reversal = reversalEntry();
