@@ -10,6 +10,8 @@ export interface Company {
   email: string;
   taxpayerType: TaxpayerType;
   defaultIvaRetentionRate: number; // 75 or 100
+  /** Configuración expresa de designación como agente de percepción IGTF. */
+  isIgtfPerceptionAgent?: boolean;
   fiscalYear: number; // e.g. 2026
   bcvRate: number; // Tasa oficial BCV Bs/$
   lastRateUpdate?: string;
