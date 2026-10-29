@@ -149,6 +149,65 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
     }
   }
+
+  for (const collectionName of ['purchases', 'sales']) {
+    const oldDocuments = asArray(priorState[collectionName]);
+    const newDocuments = asArray(nextState[collectionName]);
+    const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
+    const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
+    for (const document of newDocuments) {
+      const oldDocument = oldById.get(String(document.id));
+      if (!document.isCancelled || (oldDocument && oldDocument.isCancelled)) continue;
+      if (!oldDocument) throw new Error('SQLite bloqueó la creación directa de un documento ya marcado como reversado.');
+      const originalEntry = oldDocument.journalEntryId
+        ? priorById.get(String(oldDocument.journalEntryId))
+        : priorEntries.find(entry => entry.companyId === document.companyId &&
+            entry.type === expectedEntryType && entry.referenceDoc === 'FAC-' + document.invoiceNumber);
+      const reversal = document.cancelledByJournalEntryId
+        ? nextById.get(String(document.cancelledByJournalEntryId))
+        : undefined;
+      if (!originalEntry || !reversal || reversal.companyId !== document.companyId ||
+          reversal.reversalOfEntryId !== originalEntry.id ||
+          String(document.cancellationReason || '').trim().length < 10 ||
+          String(document.cancellationNote || '').trim().length < 10) {
+        throw new Error('SQLite rechazó la cancelación del documento fiscal: falta el contra-asiento enlazado, el motivo o el papel de trabajo.');
+      }
+    }
+  }
+
+  const oldSettlements = new Map(asArray(priorState.creditSettlements).map(item => [String(item.id), item]));
+  for (const settlement of asArray(nextState.creditSettlements)) {
+    const oldSettlement = oldSettlements.get(String(settlement.id));
+    if (!oldSettlement || oldSettlement.isReversed || !settlement.isReversed) continue;
+    const reversal = settlement.reversedByJournalEntryId
+      ? nextById.get(String(settlement.reversedByJournalEntryId))
+      : undefined;
+    if (!reversal || reversal.companyId !== settlement.companyId ||
+        reversal.reversalOfEntryId !== oldSettlement.journalEntryId) {
+      throw new Error('SQLite rechazó la reversión de una liquidación sin contra-asiento vinculado.');
+    }
+  }
+
+  const purchaseById = new Map(asArray(nextState.purchases).map(item => [String(item.id), item]));
+  for (const voucher of asArray(nextState.vatVouchers)) {
+    if (!voucher.requiresFiscalCorrection) continue;
+    const purchase = purchaseById.get(String(voucher.purchaseRecordId));
+    const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
+    const source = purchase?.journalEntryId ? priorById.get(String(purchase.journalEntryId)) : undefined;
+    if (!purchase?.isCancelled || !correction || !source || correction.reversalOfEntryId !== source.id) {
+      throw new Error('SQLite rechazó una marca de corrección de retención IVA sin factura y contra-asiento conciliados.');
+    }
+  }
+  for (const voucher of asArray(nextState.islrVouchers)) {
+    if (!voucher.requiresFiscalCorrection) continue;
+    const purchase = asArray(nextState.purchases).find(item =>
+      item.companyId === voucher.companyId && item.invoiceNumber === voucher.invoiceNumber);
+    const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
+    const source = purchase?.journalEntryId ? priorById.get(String(purchase.journalEntryId)) : undefined;
+    if (!purchase?.isCancelled || !correction || !source || correction.reversalOfEntryId !== source.id) {
+      throw new Error('SQLite rechazó una marca de corrección de retención ISLR sin factura y contra-asiento conciliados.');
+    }
+  }
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
