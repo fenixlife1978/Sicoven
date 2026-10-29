@@ -477,30 +477,33 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const result = await fetchBcvTodayRate();
       // Si falla el proveedor, conserva la última tasa conocida en la vista; el estado
       // sigue siendo "error" y el mensaje de error deja claro que no hubo actualización.
-      setBcvSyncResult(result.success && result.usd > 0 ? result : {
-        ...result,
-        usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
-        effectiveDate: currentCompany.lastRateUpdate || '',
-      });
+      // Un fallo nunca borra la última tasa válida ni la fecha de su publicación.
+      // Se devuelve el mismo resultado conservado que ve la interfaz, para que ningún
+      // consumidor pueda interpretar el fallo como una tasa cero.
+      const visibleResult: BcvSyncResult = result.success && result.usd > 0
+        ? result
+        : {
+            ...result,
+            usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
+            effectiveDate: currentCompany.lastRateUpdate || '',
+          };
+      setBcvSyncResult(visibleResult);
       if (result.success && result.usd > 0) {
         setBcvSyncStatus('synced');
-        // Actualizar la tasa en la empresa actual automáticamente
+        // Si el proveedor no publica fecha, conserva la fecha conocida; no inventa "hoy".
         setCompanies(prev =>
-          prev.map(c => {
-            if (c.id === currentCompanyId) {
-              return {
+          prev.map(c => c.id === currentCompanyId
+            ? {
                 ...c,
                 bcvRate: result.usd,
-                lastRateUpdate: result.effectiveDate || new Date().toISOString().slice(0, 10),
-              };
-            }
-            return c;
-          })
+                lastRateUpdate: result.effectiveDate || c.lastRateUpdate || '',
+              }
+            : c)
         );
       } else {
         setBcvSyncStatus('error');
       }
-      return result;
+      return visibleResult;
     } catch (err: any) {
       const failResult: BcvSyncResult = {
         success: false,
