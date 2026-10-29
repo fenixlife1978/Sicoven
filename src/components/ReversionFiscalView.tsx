@@ -7,7 +7,7 @@ import { buildReversalItems } from '../types/journalReversal';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement,
-    bankStatementMovements, creditSettlements, reverseJournalEntry, closeAccountingPeriod
+    bankStatementMovements, creditSettlements, getCreditBalance, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -69,6 +69,9 @@ export const ReversionFiscalView: React.FC = () => {
     : [];
   const linkedDocumentId = linkedSale?.id || linkedPurchase?.id;
   const linkedSettlementKind = linkedSale ? 'SALE_COLLECTION' : linkedPurchase ? 'PURCHASE_PAYMENT' : undefined;
+  const linkedCreditBalance = linkedDocumentId && linkedSettlementKind
+    ? (() => { try { return getCreditBalance(linkedDocumentId, linkedSettlementKind); } catch { return null; } })()
+    : null;
   const activeLinkedSettlements = linkedDocumentId && linkedSettlementKind
     ? creditSettlements.filter(item => item.companyId === currentCompany.id &&
         item.documentId === linkedDocumentId && item.kind === linkedSettlementKind && !item.isReversed)
@@ -319,6 +322,7 @@ export const ReversionFiscalView: React.FC = () => {
                   </table>
                 </div>
                 {(linkedBankMovements.length > 0 || activeLinkedSettlements.length > 0) && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Conciliación de auxiliares pendiente</strong><p>Movimientos bancarios conciliados: {linkedBankMovements.length}</p><p>Cobros/pagos vigentes vinculados: {activeLinkedSettlements.length}</p><p>Estos importes no se compensarán por el solo hecho de generar un contra-asiento del Libro Diario.</p></div>}
+                {linkedCreditBalance && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 space-y-1"><strong>Auxiliar {linkedSale ? 'Cuentas por Cobrar' : 'Cuentas por Pagar'}</strong><p>Principal original: {formatBs(linkedCreditBalance.originalAmountBs)} · {formatUsd(linkedCreditBalance.originalAmountUsd)}</p><p>Liquidado vigente: {formatBs(linkedCreditBalance.settledAmountBs)} · {formatUsd(linkedCreditBalance.settledAmountUsd)}</p><p>Saldo pendiente actual: <strong>{formatBs(linkedCreditBalance.outstandingBsAtInvoiceRate)} · {formatUsd(linkedCreditBalance.outstandingUsd)}</strong></p><p className="text-xs text-slate-600">La reversión sólo se habilita cuando no existan liquidaciones vigentes; el saldo auxiliar no se considera cancelado por una simple simulación.</p></div>}
                 <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-950 space-y-1">
                   <p className="font-semibold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Balance previsto</p>
                   <p>La contrapartida invierte Debe/Haber por línea y conserva la partida doble en Bs. y USD.</p>
