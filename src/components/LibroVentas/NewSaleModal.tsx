@@ -332,7 +332,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">4. Condiciones de pago/cobro y ajuste cambiario</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Condición de la operación</label><select value={paymentTerm} onChange={e => setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO">Contado</option><option value="CREDITO">A crédito</option></select></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Condición de la operación</label><select value={paymentTerm} onChange={e => { setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO'); setApplyIgtf(false); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO">Contado</option><option value="CREDITO">A crédito</option></select></div>
               {paymentTerm === 'CREDITO' && <div><label className="block font-semibold text-slate-700 mb-1">Plazo del crédito (días)</label><input type="number" min="1" max="3650" value={creditDays} onChange={e => setCreditDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><span className="text-[11px] text-slate-600">Vencimiento calculado: {dueDate}</span></div>}
             </div>
             {paymentTerm === 'CREDITO' && <>
