@@ -701,9 +701,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
       throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
     }
+    const igtfAmount = Number(purchaseData.igtfAmountBs || 0);
+    const eligibleIgtfMethods = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'];
+    if (igtfAmount > 0 && (!purchaseData.igtfApplicable || !eligibleIgtfMethods.includes(purchaseData.paymentMethod || ''))) {
+      throw new Error('El IGTF requiere un medio de pago elegible y confirmación expresa.');
+    }
+    if (purchaseData.igtfApplicable) {
+      if (!eligibleIgtfMethods.includes(purchaseData.paymentMethod || '')) {
+        throw new Error('El medio de pago seleccionado no corresponde a los medios configurados para IGTF.');
+      }
+      const expectedIgtf = Math.round((purchaseData.taxableBaseBs + purchaseData.exemptAmountBs + purchaseData.vatAmountBs) * 0.03 * 100) / 100;
+      if (Math.abs(igtfAmount - expectedIgtf) > 0.01 || Number(purchaseData.igtfRate || 0) !== 3) {
+        throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
+      }
+    } else if (igtfAmount !== 0) {
+      throw new Error('No se permite registrar un importe IGTF sin confirmación expresa.');
+    }
+
     const expectedTotal = Math.round((
       purchaseData.taxableBaseBs + purchaseData.exemptAmountBs +
-      purchaseData.vatAmountBs + (purchaseData.igtfAmountBs || 0)
+      purchaseData.vatAmountBs + igtfAmount
     ) * 100) / 100;
     if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
       throw new Error('El total de la compra no coincide con base imponible, exento, IVA e IGTF.');
