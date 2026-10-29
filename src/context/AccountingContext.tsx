@@ -334,8 +334,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (reason.trim().length < 10 || workpaperNote.trim().length < 10) {
       throw new Error('La causa y el papel de trabajo deben contener al menos 10 caracteres cada uno.');
     }
-    const linkedSale = sales.find(sale => sale.companyId === currentCompany.id && sale.journalEntryId === source.id);
-    const linkedPurchase = purchases.find(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id);
+    const linkedSale = sales.find(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)));
+    const linkedPurchase = purchases.find(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)));
     if (linkedSale || linkedPurchase) {
       const documentId = linkedSale?.id || linkedPurchase?.id;
       const kind = linkedSale ? 'SALE_COLLECTION' : 'PURCHASE_PAYMENT';
@@ -378,10 +378,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setJournalEntries(prev => prev.map(entry => entry.id === source.id
       ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
       : entry));
-    setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && sale.journalEntryId === source.id
+    setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber))
       ? { ...sale, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : sale));
-    setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id
+    setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber))
       ? { ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : purchase));
     if (linkedPurchase) {

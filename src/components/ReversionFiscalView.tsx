@@ -51,8 +51,24 @@ export const ReversionFiscalView: React.FC = () => {
     !effectiveDate || effectiveDate < (source?.date || today) ||
     Boolean(currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate);
 
-  const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id) : undefined;
-  const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id) : undefined;
+  const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
+  const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
+  const balanceSheetImpactBs = preview.reduce((sum, item) => {
+    const type = accountMap.get(item.targetCode)?.type;
+    return ['ACTIVO','PASIVO','PATRIMONIO'].includes(type || '') ? sum + item.debitBs - item.creditBs : sum;
+  }, 0);
+  const balanceSheetImpactUsd = preview.reduce((sum, item) => {
+    const type = accountMap.get(item.targetCode)?.type;
+    return ['ACTIVO','PASIVO','PATRIMONIO'].includes(type || '') ? sum + item.debitUsd - item.creditUsd : sum;
+  }, 0);
+  const profitLossImpactBs = preview.reduce((sum, item) => {
+    const type = accountMap.get(item.targetCode)?.type;
+    return ['INGRESOS','COSTOS','GASTOS'].includes(type || '') ? sum + item.debitBs - item.creditBs : sum;
+  }, 0);
+  const profitLossImpactUsd = preview.reduce((sum, item) => {
+    const type = accountMap.get(item.targetCode)?.type;
+    return ['INGRESOS','COSTOS','GASTOS'].includes(type || '') ? sum + item.debitUsd - item.creditUsd : sum;
+  }, 0);
 
   const submitReversal = () => {
     if (!source || reversalDisabled) return;
@@ -143,8 +159,9 @@ export const ReversionFiscalView: React.FC = () => {
                 <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-950 space-y-1">
                   <p className="font-semibold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Balance previsto</p>
                   <p>La contrapartida invierte Debe/Haber por línea y conserva la partida doble en Bs. y USD.</p>
-                  <p>Libro Diario: asiento original más reversión enlazada. Balance General y Estado de Resultados: el efecto se refleja por las cuentas afectadas.</p>
-                  <p>Libro de Compras/Ventas e IVA: el documento original se marca como reversado contablemente; la regularización fiscal debe vincularse al comprobante legal correspondiente y no se inventa automáticamente.</p>
+                  <p><strong>Balance General · movimiento neto:</strong> {formatBs(balanceSheetImpactBs)} · {formatUsd(balanceSheetImpactUsd)}. Es el efecto de las líneas del contra-asiento en cuentas de activo, pasivo y patrimonio; no sustituye el balance completo.</p>
+                  <p><strong>Estado de Resultados · movimiento neto:</strong> {formatBs(profitLossImpactBs)} · {formatUsd(profitLossImpactUsd)} en ingresos, costos y gastos. En AIA esas cuentas se reclasifican a resultados acumulados.</p>
+                  <p><strong>Libro de Compras/Ventas e IVA:</strong> {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · base '+formatBs(linkedSale.taxableBaseBs)+' · IVA '+formatBs(linkedSale.vatAmountBs) : linkedPurchase ? 'Compra '+linkedPurchase.invoiceNumber+' · base '+formatBs(linkedPurchase.taxableBaseBs)+' · IVA '+formatBs(linkedPurchase.vatAmountBs) : 'No se detectó una factura fiscal vinculada directamente.'} La factura se marca reversada contablemente; los importes del libro legal permanecen auditables hasta la regularización con el documento fiscal válido.</p>
                 </div>
               </>}
             </div>
