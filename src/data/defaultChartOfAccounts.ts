@@ -109,5 +109,6 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '6.1.1.07', name: 'Comisiones y Gastos Bancarios', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.08', name: 'Pérdida en Diferencial Cambiario', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
   { code: '6.1.1.09', name: 'Artículos de Oficina y Papelería', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
-  { code: '6.1.1.10', name: 'Tributos Municipales y Tasas Públicas', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' }
+  { code: '6.1.1.10', name: 'Tributos Municipales y Tasas Públicas', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' },
+  { code: '6.1.1.11', name: 'Gasto por IGTF en compras', type: 'GASTOS', level: 4, isMovement: true, parentCode: '6.1' }
 ];
