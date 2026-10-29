@@ -80,15 +80,20 @@ test('SQLite keeps inventory movements append-only', () => {
 });
 
 test('SQLite allows reversal metadata on a settlement but not edits to its amount', () => {
-  const settlement = { id: 's-1', companyId: 'company-1', documentId: 'purchase-1', amountUsd: 10, amountBs: 1000, isReversed: false };
-  const reversed = { ...settlement, isReversed: true, reversedByJournalEntryId: 'entry-2' };
-  assert.doesNotThrow(() => validateAccountingSnapshot(
-    { ...emptyState(), creditSettlements: [settlement] },
-    { ...emptyState(), creditSettlements: [reversed] }
-  ));
+  const original = sourceEntry();
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  const settlement = {
+    id: 's-1', companyId: 'company-1', documentId: 'purchase-1',
+    journalEntryId: original.id, amountUsd: 10, amountBs: 1000, isReversed: false
+  };
+  const reversed = { ...settlement, isReversed: true, reversedByJournalEntryId: reversal.id };
+  const previous = { ...emptyState([original]), creditSettlements: [settlement] };
+  const next = { ...emptyState([linkedOriginal, reversal]), creditSettlements: [reversed] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(
-    { ...emptyState(), creditSettlements: [settlement] },
-    { ...emptyState(), creditSettlements: [{ ...reversed, amountUsd: 11 }] }
+    previous,
+    { ...next, creditSettlements: [{ ...reversed, amountUsd: 11 }] }
   ), /modificación de un registro histórico en creditSettlements/);
 });
 
