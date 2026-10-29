@@ -269,6 +269,12 @@ export const LibroDiarioView: React.FC = () => {
             const sumDebitUsd = entry.items.reduce((s, it) => s + (it.debitUsd || 0), 0);
             const sumCreditUsd = entry.items.reduce((s, it) => s + (it.creditUsd || 0), 0);
             const isEntrySquare = Math.abs(sumDebitBs - sumCreditBs) < 0.01 && sumDebitBs > 0;
+            const reversalSource = entry.reversalOfEntryId
+              ? journalEntries.find(candidate => candidate.id === entry.reversalOfEntryId)
+              : undefined;
+            const reversalEntry = entry.reversedByEntryId
+              ? journalEntries.find(candidate => candidate.id === entry.reversedByEntryId)
+              : undefined;
 
             return (
               <div
@@ -320,6 +326,14 @@ export const LibroDiarioView: React.FC = () => {
                   <span className="text-slate-500 font-normal">Descripción: </span>
                   {entry.description}
                 </div>
+                {(entry.reversalOfEntryId || entry.reversedByEntryId) && <div className="px-4 py-3 border-b border-indigo-100 bg-indigo-50/60 text-xs text-indigo-950 space-y-1">
+                  <div className="flex flex-wrap items-center gap-2 font-bold"><ShieldCheck className="w-3.5 h-3.5" /> Trazabilidad de reversión</div>
+                  {entry.reversalOfEntryId && <p>Contra-asiento del asiento original #{reversalSource?.entryNumber ?? 'no localizado'} · ID {entry.reversalOfEntryId}</p>}
+                  {entry.reversedByEntryId && <p>Este asiento fue reversado por el contra-asiento #{reversalEntry?.entryNumber ?? 'no localizado'} · ID {entry.reversedByEntryId}</p>}
+                  {entry.reversalReason && <p><strong>Motivo:</strong> {entry.reversalReason}</p>}
+                  {entry.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {entry.workpaperNote}</p>}
+                  {entry.priorPeriodAdjustment && <p className="font-semibold">Ajuste de ejercicio anterior (AIA).</p>}
+                </div>}
 
                 {/* Entry Accounts Table */}
                 <div className="overflow-x-auto">
