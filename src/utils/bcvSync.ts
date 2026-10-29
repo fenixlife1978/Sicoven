@@ -1,9 +1,7 @@
 /**
- * Sincronización Oficial de Tasa BCV con bcv.today
- * Fuente Oficial API: https://bcv.today/api/rate.json
- * Endpoint activo v1: https://bcv.today/api/v1/rate.json
+ * Sincronización de tasa BCV mediante bcv.today.
+ * Una respuesta inválida o un fallo de red nunca debe sustituir la última tasa válida.
  */
-
 export interface BcvSyncResult {
   success: boolean;
   usd: number;
@@ -16,78 +14,100 @@ export interface BcvSyncResult {
   error?: string;
 }
 
-// Endpoints prioritarios según requerimiento oficial
 const BCV_API_ENDPOINTS = [
   'https://bcv.today/api/rate.json',
   'https://bcv.today/api/v1/rate.json',
 ];
 
-/**
- * Consulta la tasa oficial del Banco Central de Venezuela a través de la API de bcv.today
- */
+type UnknownRecord = Record<string, unknown>;
+
+function asRecord(value: unknown): UnknownRecord {
+  return value !== null && typeof value === 'object' && !Array.isArray(value)
+    ? value as UnknownRecord
+    : {};
+}
+
+function positiveRate(...values: unknown[]): number | undefined {
+  for (const value of values) {
+    const parsed = typeof value === 'number'
+      ? value
+      : typeof value === 'string' && value.trim() !== ''
+        ? Number(value)
+        : NaN;
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+  return undefined;
+}
+
+function validDate(value: unknown): string | undefined {
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return undefined;
+  const parsed = new Date(value + 'T00:00:00Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value
+    ? value
+    : undefined;
+}
+
+/** Consulta la tasa publicada; no inventa una fecha ni acepta tasas cero, negativas o no finitas. */
 export async function fetchBcvTodayRate(): Promise<BcvSyncResult> {
-  let lastError: string = 'No se pudo conectar a los servidores de bcv.today';
+  let lastError = 'No se pudo conectar a los servidores de bcv.today';
 
   for (const endpoint of BCV_API_ENDPOINTS) {
-    try {
-      const controller = new AbortController();
-      const timeoutId = setTimeout(() => controller.abort(), 7000);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 7000);
 
+    try {
       const response = await fetch(endpoint, {
         method: 'GET',
-        headers: {
-          'Accept': 'application/json',
-        },
+        headers: { Accept: 'application/json' },
         signal: controller.signal,
       });
-
-      clearTimeout(timeoutId);
 
       if (!response.ok) {
         lastError = `HTTP ${response.status} en ${endpoint}`;
         continue;
       }
 
-      const data = await response.json();
-
-      // bcv.today retorna formato: { USD: 881.0664, EUR: 991.16, effective_date: "2026-10-19", ... }
-      // o { rates: { USD: ... } } o { usd: ... }
-      let usdRate: number | undefined;
-      let eurRate: number | undefined;
-      let cnyRate: number | undefined;
-
-      if (typeof data.USD === 'number' && data.USD > 0) {
-        usdRate = data.USD;
-      } else if (typeof data.usd === 'number' && data.usd > 0) {
-        usdRate = data.usd;
-      } else if (data.rates && typeof data.rates.USD === 'number') {
-        usdRate = data.rates.USD;
-      } else if (data.rate && typeof data.rate === 'number') {
-        usdRate = data.rate;
+      let payload: unknown;
+      try {
+        payload = await response.json();
+      } catch {
+        lastError = `Respuesta JSON inválida en ${endpoint}`;
+        continue;
       }
 
-      if (typeof data.EUR === 'number') eurRate = data.EUR;
-      if (typeof data.CNY === 'number') cnyRate = data.CNY;
+      const data = asRecord(payload);
+      const rates = asRecord(data.rates);
+      const usdRate = positiveRate(data.USD, data.usd, rates.USD, data.rate);
+      if (!usdRate) {
+        lastError = `La respuesta de ${endpoint} no contiene una tasa USD válida`;
+        continue;
+      }
 
-      if (usdRate && usdRate > 0) {
-        const todayStr = new Date().toISOString().slice(0, 10);
-        return {
-          success: true,
-          usd: Number(usdRate.toFixed(4)),
-          eur: eurRate ? Number(eurRate.toFixed(4)) : undefined,
-          cny: cnyRate ? Number(cnyRate.toFixed(4)) : undefined,
-          effectiveDate: data.effective_date || data.date || todayStr,
-          updatedAt: data.updated_at || new Date().toISOString(),
-          sourceUrl: endpoint,
-          syncedAt: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-        };
-      }
-    } catch (err: any) {
-      if (err.name === 'AbortError') {
-        lastError = `Tiempo de espera agotado al conectar con ${endpoint}`;
-      } else {
-        lastError = err?.message || String(err);
-      }
+      const eurRate = positiveRate(data.EUR, rates.EUR);
+      const cnyRate = positiveRate(data.CNY, rates.CNY);
+      const publishedDate = validDate(data.effective_date) || validDate(data.date);
+      const updatedAt = typeof data.updated_at === 'string' && Number.isFinite(Date.parse(data.updated_at))
+        ? data.updated_at
+        : new Date().toISOString();
+
+      return {
+        success: true,
+        usd: Number(usdRate.toFixed(4)),
+        eur: eurRate ? Number(eurRate.toFixed(4)) : undefined,
+        cny: cnyRate ? Number(cnyRate.toFixed(4)) : undefined,
+        // Si el proveedor no informa la fecha, no fingimos que la tasa es de hoy.
+        effectiveDate: publishedDate || '',
+        updatedAt,
+        sourceUrl: endpoint,
+        syncedAt: new Date().toLocaleTimeString('es-VE', { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      };
+    } catch (err: unknown) {
+      const error = err as { name?: string; message?: string };
+      lastError = error?.name === 'AbortError'
+        ? `Tiempo de espera agotado al conectar con ${endpoint}`
+        : error?.message || String(err);
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 
