@@ -41,13 +41,18 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
+  const [paymentMethod, setPaymentMethod] = useState<'BS' | 'FOREIGN_CASH' | 'ZELLE' | 'INTERNATIONAL_TRANSFER' | 'CRYPTO'>('BS');
+  const [applyIgtf, setApplyIgtf] = useState(false);
   const dueDate = (() => { const d = new Date(invoiceDate + 'T12:00:00'); d.setDate(d.getDate() + creditDays); return d.toISOString().slice(0, 10); })();
 
   if (!isOpen) return null;
 
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
-  const totalAmountBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
+  const igtfApplicable = applyIgtf && ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'].includes(paymentMethod);
+  const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
+  const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = Math.round(vatAmountBs * (retentionRate / 100) * 100) / 100;
 
   // ISLR calculation
@@ -88,6 +93,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       documentType,
       affectedInvoiceNumber: affectedInvoiceNumber.trim() || undefined,
       totalAmountBs,
+      paymentMethod,
+      igtfApplicable,
+      igtfRate: igtfApplicable ? 3 : 0,
+      igtfAmountBs,
+      igtfAmountUsd: bcvRate > 0 ? igtfAmountBs / bcvRate : 0,
       exemptAmountBs,
       taxableBaseBs,
       taxRate,
@@ -304,6 +314,20 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
             </div>
           </div>
 
+          <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
+            <span className="font-bold text-slate-800 uppercase tracking-wider block">3. Método de pago e IGTF</span>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div><label className="block font-semibold text-slate-700 mb-1">Método de pago previsto</label>
+                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as typeof paymentMethod)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+                  <option value="BS">Bolívares / medios nacionales</option><option value="FOREIGN_CASH">Divisas en efectivo</option><option value="ZELLE">Zelle</option><option value="INTERNATIONAL_TRANSFER">Transferencia internacional</option><option value="CRYPTO">Criptoactivos</option>
+                </select>
+              </div>
+              <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
+            </div>
+            <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
+            <p className="text-[11px] text-amber-900">Confirme que la operación está legalmente sujeta al IGTF antes de activarlo. El método de pago por sí solo no determina la obligación fiscal.</p>
+          </div>
+
           {/* ISLR Withholding Option */}
           <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
             <div className="flex items-center justify-between">
@@ -354,6 +378,22 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 </div>
               </div>
             )}
+          </div>
+
+          <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-2">
+            <span className="font-bold text-slate-800 uppercase tracking-wider block">Vista previa del asiento contable</span>
+            <div className="grid grid-cols-3 gap-2 font-semibold text-slate-600 border-b border-sky-200 pb-1"><span>Cuenta / concepto</span><span className="text-right">Debe (Bs.)</span><span className="text-right">Haber (Bs.)</span></div>
+            {[
+              {name: taxableBaseBs > 0 ? 'Inventario / compra' : 'Gasto / operación', debit: taxableBaseBs, credit: 0},
+              ...(exemptAmountBs > 0 ? [{name:'Monto exento', debit:exemptAmountBs, credit:0}] : []),
+              ...(vatAmountBs > 0 ? [{name:'Crédito fiscal IVA', debit:vatAmountBs, credit:0}] : []),
+              ...(igtfAmountBs > 0 ? [{name:'Gasto por IGTF', debit:igtfAmountBs, credit:0}] : []),
+              ...(vatWithheldBs > 0 ? [{name:'Retención IVA por enterar', debit:0, credit:vatWithheldBs}] : []),
+              ...(islrWithheldBs > 0 ? [{name:'Retención ISLR por enterar', debit:0, credit:islrWithheldBs}] : []),
+              {name:'Cuenta por pagar proveedor', debit:0, credit:Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs)}
+            ].map((line, index) => <div key={index} className="grid grid-cols-3 gap-2 text-slate-700"><span>{line.name}</span><span className="text-right font-mono">{formatBs(line.debit)}</span><span className="text-right font-mono">{formatBs(line.credit)}</span></div>)}
+            <div className="grid grid-cols-3 gap-2 border-t border-sky-200 pt-2 font-bold"><span>Totales</span><span className="text-right font-mono">{formatBs(taxableBaseBs+exemptAmountBs+vatAmountBs+igtfAmountBs)}</span><span className="text-right font-mono">{formatBs(vatWithheldBs+islrWithheldBs+Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs))}</span></div>
+            <p className="text-[11px] text-slate-600">Vista previa estimada; la validación definitiva se ejecuta al guardar.</p>
           </div>
 
           {/* Condiciones de crédito y ajuste cambiario */}
