@@ -830,22 +830,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const deleteJournalEntry = (id: string) => {
     const entry = journalEntries.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!entry) return;
-    // Un asiento que respalda una factura o una liquidación es parte del historial
-    // contable: no se elimina físicamente, aunque un registro antiguo haya perdido
-    // el vínculo journalEntryId. Su corrección requiere un asiento reverso.
-    const linkedToDocument =
-      sales.some(item => item.companyId === entry.companyId && item.journalEntryId === id) ||
-      purchases.some(item => item.companyId === entry.companyId && item.journalEntryId === id) ||
-      creditSettlements.some(item => item.companyId === entry.companyId && item.journalEntryId === id);
-    const protectedType = entry.type === 'VENTA' || entry.type === 'COMPRA' ||
-      /^Cobro de cuenta por cobrar|^Pago de cuenta por pagar/i.test(entry.description || '');
-    if (linkedToDocument || protectedType) {
-      if (typeof window !== 'undefined') {
-        window.alert('Este asiento respalda una factura o liquidación contabilizada y no puede eliminarse físicamente. Registre una reversión contable para corregirlo.');
-      }
-      return;
+    // Inmutabilidad estricta: todo asiento contabilizado forma parte del Libro
+    // Diario, incluso los manuales y los contra-asientos. La corrección se hace
+    // exclusivamente con un nuevo asiento enlazado, nunca borrando el original.
+    if (typeof window !== 'undefined') {
+      window.alert('El Libro Diario es inmutable: ningún asiento contabilizado puede eliminarse físicamente. Registre un asiento de reversión o ajuste con su justificación y papel de trabajo.');
     }
-    setJournalEntries(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
