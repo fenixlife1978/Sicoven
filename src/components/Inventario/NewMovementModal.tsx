@@ -77,7 +77,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       if (Math.abs(Number(selectedProduct.avgCostBs || 0) - Number(selectedReturnSource.unitCostBs || 0)) > 0.01) { setError('El costo promedio actual difiere del costo de la entrada original. No se registró la devolución porque la contrapartida CxP podría no coincidir con la nota de crédito; requiere conciliación contable manual.'); return; }
       const linkedPurchase = purchases.find(p => p.companyId === currentCompany.id &&
         ('FAC-' + p.invoiceNumber).trim().toUpperCase() === selectedReturnSource.documentRef.trim().toUpperCase());
-      const purchaseLine = linkedPurchase?.inventoryLines?.find(line => line.productId === selectedProduct.id &&
+      const purchaseLines = linkedPurchase?.inventoryLines || [];
+      const purchaseLine = purchaseLines.find(line => line.productId === selectedProduct.id &&
         Math.abs(Number(line.quantity)-Number(selectedReturnSource.quantity)) <= 1e-8 &&
         Math.abs(Number(line.unitCostBs)-Number(selectedReturnSource.unitCostBs)) <= 0.02);
       const purchaseJournal = linkedPurchase?.journalEntryId
@@ -86,7 +87,19 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
         .reduce((sum,item)=>sum+Number(item.debitBs||0)-Number(item.creditBs||0),0);
       const expectedInventoryDebit = linkedPurchase
         ? Number(linkedPurchase.taxableBaseBs||0)+Number(linkedPurchase.exemptAmountBs||0) : 0;
-      if (!linkedPurchase || !purchaseLine || !purchaseJournal ||
+      const lineTotal = purchaseLines.reduce((sum,line)=>sum+Number(line.quantity||0)*Number(line.unitCostBs||0),0);
+      const invoiceMovements = linkedPurchase ? movements.filter(m=>m.companyId===currentCompany.id &&
+        m.type==='ENTRADA' && m.concept==='COMPRA' &&
+        m.documentRef.trim().toUpperCase()===('FAC-'+linkedPurchase.invoiceNumber).trim().toUpperCase() &&
+        !m.correctionForMovementId) : [];
+      const allLinesMatchKardex = purchaseLines.length>0 && invoiceMovements.length===purchaseLines.length &&
+        purchaseLines.every(line => {
+          const matches=invoiceMovements.filter(m=>m.productId===line.productId);
+          return matches.length===1 && Math.abs(Number(matches[0].quantity)-Number(line.quantity))<=1e-8 &&
+            Math.abs(Number(matches[0].totalCostBs)-Number(line.quantity)*Number(line.unitCostBs))<=0.02;
+        }) && Math.abs(lineTotal-expectedInventoryDebit)<=0.02 &&
+        Math.abs(invoiceMovements.reduce((sum,m)=>sum+Number(m.totalCostBs||0),0)-lineTotal)<=0.02;
+      if (!linkedPurchase || !purchaseLine || !purchaseJournal || !allLinesMatchKardex ||
           !Number.isFinite(journalInventoryDebit) || Math.abs(Number(journalInventoryDebit)-expectedInventoryDebit)>0.02) {
         setError('Devolución bloqueada: no hay conciliación verificable entre la línea de compra, la entrada de Kardex y el débito de inventario del asiento original. Las facturas históricas sin líneas vinculadas requieren conciliación manual documentada.');
         return;
