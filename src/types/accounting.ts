@@ -129,6 +129,12 @@ export interface SaleRecord {
   vatWithheldBs: number; // Retenido por cliente si es contribuyente especial
   retentionRate?: number;
   retentionVoucherNumber?: string;
+  retentionVoucherDate?: string; // Fecha del comprobante de retención recibido
+  igtfApplicable?: boolean;
+  igtfRate?: number;
+  igtfAmountBs?: number;
+  igtfAmountUsd?: number;
+  paymentCurrency?: 'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO';
   bcvRate: number;
   totalAmountUsd: number;
   taxableBaseUsd: number;
