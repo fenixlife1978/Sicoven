@@ -424,6 +424,7 @@ app.whenReady().then(async () => {
         const oldItems = Array.isArray(priorState[collectionName]) ? priorState[collectionName] : [];
         const newItems = Array.isArray(state[collectionName]) ? state[collectionName] : [];
         const newById = new Map(newItems.map(item => [String(item.id), item]));
+        if (newById.size !== newItems.length) throw new Error('Hay identificadores duplicados en el historial ' + collectionName + '.');
         const stripMutable = item => {
           const copy = { ...item };
           for (const key of mutableKeys) delete copy[key];
@@ -443,6 +444,17 @@ app.whenReady().then(async () => {
               throw new Error('No se puede retirar ni modificar la marca histórica ' + key + ' del registro ' + oldItem.id + '.');
             }
           }
+          const freezeWhenActive = (flag, detailKeys) => {
+            if (!oldItem[flag]) return;
+            for (const key of detailKeys) {
+              if ((oldItem[key] || null) !== (nextItem[key] || null)) {
+                throw new Error('No se puede modificar el soporte histórico ' + key + ' del registro ' + oldItem.id + '.');
+              }
+            }
+          };
+          freezeWhenActive('isCancelled', ['cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote']);
+          freezeWhenActive('isReversed', ['reversedByJournalEntryId']);
+          freezeWhenActive('requiresFiscalCorrection', ['correctionEntryId', 'correctionNote']);
         }
       };
       assertAppendOnlyCollection('purchases',
