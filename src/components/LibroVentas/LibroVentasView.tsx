@@ -65,6 +65,7 @@ export const LibroVentasView: React.FC = () => {
   const totalBaseBs = filteredSales.reduce((s, x) => s + x.taxableBaseBs, 0);
   const totalIvaDebitoBs = filteredSales.reduce((s, x) => s + x.vatAmountBs, 0);
   const totalIvaRetenidoBs = filteredSales.reduce((s, x) => s + (x.vatWithheldBs || 0), 0);
+  const totalIgtfBs = filteredSales.reduce((s, x) => s + (x.igtfAmountBs || 0), 0);
 
   const totalVentasConIvaUsd = filteredSales.reduce((s, x) => s + x.totalAmountUsd, 0);
   const totalBaseUsd = filteredSales.reduce((s, x) => s + x.taxableBaseUsd, 0);
@@ -166,13 +167,15 @@ export const LibroVentasView: React.FC = () => {
                 <th className="py-2.5 px-3 text-right w-28 text-emerald-800">IVA (Débito)</th>
                 <th className="py-2.5 px-3 text-right w-28 text-purple-800">IVA Retenido</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
+                <th className="py-2.5 px-3 w-28">Fecha Ret.</th>
+                <th className="py-2.5 px-3 text-right w-28">IGTF (Bs.)</th>
                 <th className="py-2.5 px-2 text-center w-12 no-print">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
               {filteredSales.length === 0 ? (
                 <tr>
-                  <td colSpan={15} className="py-12 text-center text-slate-400">
+                  <td colSpan={17} className="py-12 text-center text-slate-400">
                     <TrendingUp className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de ventas emitidas en este período.
                   </td>
@@ -243,6 +246,12 @@ export const LibroVentasView: React.FC = () => {
                     </td>
                     <td className="py-2 px-3 font-mono text-xs text-purple-700 whitespace-nowrap">
                       {s.retentionVoucherNumber || '-'}
+                    </td>
+                    <td className="py-2 px-3 font-mono text-xs text-purple-700 whitespace-nowrap">
+                      {s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-'}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono text-sky-700 whitespace-nowrap">
+                      {(s.igtfAmountBs || 0) > 0 ? formatBs(s.igtfAmountBs || 0) : '-'}
                     </td>
                     <td className="py-2 px-2 text-center no-print">
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
