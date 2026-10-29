@@ -82,8 +82,26 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) return;
-    if (totalAmountBs <= 0) return;
+    if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) {
+      window.alert('Completa el RIF, nombre del proveedor y número de factura.');
+      return;
+    }
+    if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
+      window.alert('No se puede registrar la compra sin una tasa BCV manual válida mayor que cero. Verifica la tasa de la empresa e inténtalo de nuevo.');
+      return;
+    }
+    if (!Number.isFinite(totalAmountBs) || totalAmountBs <= 0) {
+      window.alert('El total de la factura debe ser un importe válido mayor que cero.');
+      return;
+    }
+    if (![taxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
+      window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
+      return;
+    }
+    if (vatWithheldBs + islrWithheldBs > totalAmountBs + 0.005) {
+      window.alert('Las retenciones no pueden superar el total de la factura.');
+      return;
+    }
 
     addPurchase({
       invoiceDate,
