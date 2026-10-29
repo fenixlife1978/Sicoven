@@ -361,6 +361,7 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'journal_entry_posted' ? 'Asiento contabilizado'
               : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
               : event.eventType === 'credit_settlement_reversed' ? 'Liquidación de crédito reversada'
+              : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
               : event.eventType.replace(/_/g, ' ');
@@ -373,6 +374,7 @@ export const ReversionFiscalView: React.FC = () => {
               {Boolean(details.workpaperNote) && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
               {Boolean(details.cancellationReason) && <p><strong>Motivo de regularización:</strong> {String(details.cancellationReason)}</p>}
               {Boolean(details.documentId) && <p>Documento vinculado: {String(details.documentId)}</p>}
+              {Boolean(details.closedThroughDate) && <p>Cierre hasta: {String(details.closedThroughDate)}</p>}
             </article>;
           })}
         </div>
