@@ -8,7 +8,8 @@ import {
   Calendar,
   CheckCircle2,
   Receipt,
-  Download
+  Download,
+  AlertTriangle
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewSaleModal } from './NewSaleModal';
@@ -258,7 +259,7 @@ export const LibroVentasView: React.FC = () => {
                         className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
                         title="Anulación con reversión contable pendiente"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <AlertTriangle className="w-3.5 h-3.5" />
                       </button>
                     </td>
                   </tr>
