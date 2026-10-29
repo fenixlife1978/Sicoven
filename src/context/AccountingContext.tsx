@@ -149,7 +149,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [accounts, setAccounts] = useState<Account[]>(() => {
     try {
       const saved = readBrowserStorage(`${STORAGE_KEY}_accounts`);
-      return saved ? JSON.parse(saved) : DEFAULT_CHART_OF_ACCOUNTS;
+      if (!saved) return DEFAULT_CHART_OF_ACCOUNTS;
+      const existing: Account[] = JSON.parse(saved);
+      // Migración aditiva segura: incorpora cuentas base nuevas sin borrar cuentas personalizadas.
+      const existingCodes = new Set(existing.map(account => account.code));
+      const missingDefaults = DEFAULT_CHART_OF_ACCOUNTS.filter(account => !existingCodes.has(account.code));
+      return [...existing, ...missingDefaults];
     } catch {
       return DEFAULT_CHART_OF_ACCOUNTS;
     }
