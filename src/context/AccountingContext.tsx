@@ -1675,6 +1675,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
+    if (!isValidIsoDate(movData.date)) throw new Error('La fecha del movimiento no es válida.');
+    if (currentCompany.closedThroughDate && movData.date <= currentCompany.closedThroughDate) {
+      throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
+    }
+    const supplierReturn = movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
+    if (supplierReturn && !movData.correctionForMovementId) {
+      throw new Error('La devolución a proveedor debe vincularse obligatoriamente con la entrada original de compra.');
+    }
+    if (supplierReturn && movements.some(m => m.companyId === currentCompany.id && m.concept === 'DEVOLUCION_COMPRA' &&
+      m.documentRef.trim().toUpperCase() === String(movData.documentRef || '').trim().toUpperCase())) {
+      throw new Error('El documento de devolución ya fue utilizado; no se permite contabilizarlo dos veces.');
+    }
     if (movData.correctionForMovementId) {
       const original = movements.find(m => m.id === movData.correctionForMovementId && m.companyId === currentCompany.id);
       if (!original || original.correctionForMovementId) {
@@ -1702,6 +1714,59 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (isSupplierReturn && prod.costingMethod === 'PEPS') {
         throw new Error('La devolución a proveedor con costeo PEPS requiere identificación del lote de origen. No se registró el movimiento para evitar descargar un lote incorrecto.');
       }
+      if (isSupplierReturn) {
+        const purchase = purchases.find(p => p.companyId === currentCompany.id &&
+          ('FAC-' + p.invoiceNumber).trim().toUpperCase() === original.documentRef.trim().toUpperCase());
+        if (!purchase || purchase.isCancelled || !purchase.inventoryLines?.length) {
+          throw new Error('Devolución bloqueada: la entrada no tiene una factura vigente con líneas de mercancía estructuradas.');
+        }
+        const lines = purchase.inventoryLines;
+        const linkedLine = lines.find(line => line.productId === prod.id &&
+          Math.abs(Number(line.quantity) - Number(original.quantity)) <= 1e-8 &&
+          Math.abs(Number(line.unitCostBs) - Number(original.unitCostBs)) <= 0.02);
+        const invoiceMovements = movements.filter(m => m.companyId === currentCompany.id &&
+          m.type === 'ENTRADA' && m.concept === 'COMPRA' &&
+          m.documentRef.trim().toUpperCase() === original.documentRef.trim().toUpperCase() &&
+          !m.correctionForMovementId);
+        const lineTotal = lines.reduce((sum,line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0);
+        const expectedInventory = Number(purchase.taxableBaseBs || 0) + Number(purchase.exemptAmountBs || 0);
+        const allLinesMatch = invoiceMovements.length === lines.length &&
+          lines.every(line => {
+            const matches = invoiceMovements.filter(m => m.productId === line.productId);
+            return matches.length === 1 &&
+              Math.abs(Number(matches[0].quantity) - Number(line.quantity)) <= 1e-8 &&
+              Math.abs(Number(matches[0].totalCostBs) - Number(line.quantity) * Number(line.unitCostBs)) <= 0.02;
+          }) &&
+          Math.abs(lineTotal - expectedInventory) <= 0.02 &&
+          Math.abs(invoiceMovements.reduce((sum,m) => sum + Number(m.totalCostBs || 0),0) - lineTotal) <= 0.02;
+        const originalJournal = purchase.journalEntryId
+          ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === currentCompany.id)
+          : undefined;
+        const journalInventory = originalJournal?.items
+          .filter(item => item.accountCode === '1.1.4.01')
+          .reduce((sum,item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+        if (!linkedLine || !allLinesMatch || !originalJournal ||
+            !Number.isFinite(journalInventory) || Math.abs(Number(journalInventory) - expectedInventory) > 0.02) {
+          throw new Error('Devolución bloqueada: no coincide la factura original con todas sus líneas, entradas de Kardex y débito de inventario del asiento.');
+        }
+        if (Number(purchase.vatAmountBs || 0) > 0 || Number(purchase.vatWithheldBs || 0) > 0 ||
+            Number(purchase.islrWithheldBs || 0) > 0 || Number(purchase.igtfAmountBs || 0) > 0) {
+          throw new Error('Devolución bloqueada: falta emitir y vincular la nota de crédito con el ajuste completo de IVA, retenciones e IGTF. No se generó asiento parcial.');
+        }
+        if (Math.abs(Number(prod.avgCostBs || 0) - Number(original.unitCostBs || 0)) > 0.01) {
+          throw new Error('Devolución bloqueada: el costo promedio actual difiere del costo de la entrada original.');
+        }
+        if (purchase.paymentTerm !== 'CREDITO') {
+          throw new Error('Devolución bloqueada: la factura no tiene un saldo de CxP de crédito conciliable. Debe implementarse primero el tratamiento de anticipos o saldos a favor del proveedor.');
+        }
+        const payableBalance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
+        const returnValueUsd = Number(movData.quantity) * Number(original.unitCostBs) / Number(purchase.bcvRate || currentCompany.bcvRate);
+        if (!Number.isFinite(returnValueUsd) || returnValueUsd > payableBalance.outstandingUsd + 0.005) {
+          throw new Error('Devolución bloqueada: el valor de la mercancía supera el saldo pendiente de CxP de la factura. Requiere tratamiento de saldo a favor del proveedor.');
+        }
+      }
+    } else if (supplierReturn) {
+      throw new Error('La devolución a proveedor debe conservar el vínculo con su entrada original.');
     }
     const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
     const isAdjustment = movData.type === 'AJUSTE';
