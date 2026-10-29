@@ -387,6 +387,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La vista previa de reversión no cuadra en ambas monedas; no se registró ningún cambio.');
     }
     const reversal = addJournalEntry({
+      entryNumber: 0, // addJournalEntry asigna el siguiente correlativo inmutable.
       date: effectiveDate,
       description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + reason.trim(),
       type: 'AJUSTE',
