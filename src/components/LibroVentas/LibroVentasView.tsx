@@ -256,13 +256,9 @@ export const LibroVentasView: React.FC = () => {
                     <td className="py-2 px-2 text-center no-print">
                       {s.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:s.id, number:s.invoiceNumber, party:s.customerName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar cobro parcial o total">Cobrar</button>}
                       <button
-                        onClick={() => {
-                          if (confirm(`¿Eliminar factura de venta N° ${s.invoiceNumber}?`)) {
-                            deleteSale(s.id);
-                          }
-                        }}
-                        className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                        title="Eliminar registro"
+                        onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
+                        className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
+                        title="Anulación con reversión contable pendiente"
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
