@@ -1018,6 +1018,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         !String(saleData.customerName || '').trim()) {
       throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
     }
+    if (saleData.documentType !== '01') {
+      throw new Error('Las notas de débito/crédito de clientes requieren un flujo de reversión fiscal y contable que aún no está habilitado. Registra solo facturas (01) en este módulo.');
+    }
     if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
       throw new Error('La alícuota de IVA de la venta no es válida.');
     }
