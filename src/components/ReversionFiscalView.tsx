@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
+import { buildReversalItems } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
@@ -31,25 +32,26 @@ export const ReversionFiscalView: React.FC = () => {
   const hasReversal = (entryId: string) => journalEntries.some(entry => entry.reversalOfEntryId === entryId) ||
     Boolean(journalEntries.find(entry => entry.id === entryId)?.reversedByEntryId);
 
-  const preview = useMemo(() => {
-    if (!source) return [];
-    const retained = accountMap.get(retainedEarningsCode);
-    return source.items.map(item => {
-      const originalAccount = accountMap.get(item.accountCode);
-      const toRetained = Boolean(isPriorPeriod && retained && originalAccount &&
-        ['INGRESOS','COSTOS','GASTOS'].includes(originalAccount.type));
+  const previewResult = useMemo(() => {
+    if (!source) return { items: [], error: null as string | null };
+    try {
+      const items = buildReversalItems(source, accounts, isPriorPeriod, retainedEarningsCode)
+        .map(item => ({
+          ...item,
+          targetCode: item.accountCode,
+          targetName: item.accountName,
+          toRetained: Boolean(item.description?.startsWith('AIA · '))
+        }));
+      return { items, error: null as string | null };
+    } catch (error) {
       return {
-        ...item,
-        targetCode: toRetained ? retained!.code : item.accountCode,
-        targetName: toRetained ? retained!.name : (originalAccount?.name || item.accountName),
-        debitBs: item.creditBs,
-        creditBs: item.debitBs,
-        debitUsd: item.creditUsd,
-        creditUsd: item.debitUsd,
-        toRetained
+        items: [],
+        error: error instanceof Error ? error.message : 'No se pudo validar el asiento original.'
       };
-    });
-  }, [source, accountMap, isPriorPeriod, retainedEarningsCode]);
+    }
+  }, [source, accounts, isPriorPeriod, retainedEarningsCode]);
+  const preview = previewResult.items;
+  const previewError = previewResult.error;
 
   const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
@@ -76,7 +78,7 @@ export const ReversionFiscalView: React.FC = () => {
     ...(linkedBankMovements.length ? ['Hay movimientos bancarios conciliados con este asiento; primero debe ejecutarse el flujo de reversión bancaria autorizado.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
-  const reversalDisabled = !source || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
+  const reversalDisabled = !source || Boolean(previewError) || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
     reason.trim().length < 10 || workpaperNote.trim().length < 10 ||
     (isPriorPeriod && !retainedEarningsAccounts.some(account => account.code === retainedEarningsCode)) ||
     !effectiveDate || effectiveDate < (source?.date || today) ||
@@ -299,6 +301,7 @@ export const ReversionFiscalView: React.FC = () => {
               <textarea value={reason} onChange={event=>setReason(event.target.value)} rows={2} maxLength={1000} placeholder="Ej. Factura emitida con RIF incorrecto; documento soporte…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
               <label className="block text-sm font-semibold text-slate-700">4. Nota explicativa / papel de trabajo (mínimo 10 caracteres)</label>
               <textarea value={workpaperNote} onChange={event=>setWorkpaperNote(event.target.value)} rows={3} maxLength={5000} placeholder="Fundamento técnico, soporte revisado, responsable y efecto fiscal pendiente…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
+              {previewError && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900"><strong>No se puede simular una reversión válida:</strong> {previewError}</div>}
               {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con marcar una revisión manual: el sistema debe comprobar la reversión de los auxiliares y su asiento vinculado antes de permitir la aprobación.</p></div>}
                             <button disabled={reversalDisabled} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> Aprobar y registrar contra-asiento</button>
             </div>
