@@ -1028,6 +1028,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
     }
     if (saleData.igtfApplicable) {
+      const eligibleSaleIgtf = currentCompany.isIgtfPerceptionAgent === true &&
+        saleData.paymentTerm === 'CONTADO' &&
+        (saleData.paymentCurrency === 'FOREIGN_CASH' || saleData.paymentCurrency === 'CRYPTO');
+      if (!eligibleSaleIgtf) {
+        throw new Error('El IGTF en ventas requiere agente de percepción configurado y cobro de contado en un medio elegible.');
+      }
       const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs) * 3) / 100;
       if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
         throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
