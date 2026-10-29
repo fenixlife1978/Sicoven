@@ -35,7 +35,9 @@ export const BcvRateModal: React.FC<BcvRateModalProps> = ({ isOpen, onClose }) =
       setValidationError('Ingrese una tasa BCV numérica mayor que cero.');
       return;
     }
-    if (!effectiveDate || !/^\\d{4}-\\d{2}-\\d{2}$/.test(effectiveDate)) {
+    const parsedDate = effectiveDate ? new Date(`${effectiveDate}T00:00:00`) : null;
+    const validDate = Boolean(parsedDate && Number.isFinite(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === effectiveDate && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate));
+    if (!validDate) {
       setValidationError('Seleccione la fecha valor correspondiente a la tasa.');
       return;
     }
