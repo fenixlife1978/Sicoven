@@ -482,6 +482,17 @@ app.whenReady().then(async () => {
           }));
         }
       }
+      const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
+      for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
+        const oldCompany = oldCompanies.get(String(company.id));
+        if (company.closedThroughDate && company.closedThroughDate !== oldCompany?.closedThroughDate) {
+          auditInsert.run('accounting_period_closed', JSON.stringify({
+            companyId: company.id, companyName: company.name,
+            previousClosedThroughDate: oldCompany?.closedThroughDate || null,
+            closedThroughDate: company.closedThroughDate
+          }));
+        }
+      }
       db.prepare(`INSERT INTO app_state(state_key,state_json,updated_at) VALUES(?,?,datetime('now'))
         ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at`)
         .run('accounting', json);
