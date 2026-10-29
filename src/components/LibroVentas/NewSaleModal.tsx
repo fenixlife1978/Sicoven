@@ -30,7 +30,6 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [retentionRate, setRetentionRate] = useState<number>(75);
   const [retentionVoucherNumber, setRetentionVoucherNumber] = useState<string>('');
   const [retentionVoucherDate, setRetentionVoucherDate] = useState<string>('');
-  const [igtfAgent, setIgtfAgent] = useState<boolean>(false);
   const [paymentCurrency, setPaymentCurrency] = useState<'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO'>('BS');
 
   // Currency
@@ -47,7 +46,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfApplicable = igtfAgent && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
+  const igtfApplicable = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = clientIsSpecial
@@ -337,12 +336,12 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               <div className="rounded-lg bg-white border border-amber-200 p-3 text-[11px] text-slate-700">{currencyPricingMode === 'USD_FIJO' ? 'Se conserva el importe contractual en USD; se evaluará la diferencia cambiaria al liquidar.' : currencyPricingMode === 'BS_AJUSTABLE' ? 'Se calculará una variación preliminar del precio en Bs.; el efecto fiscal debe validarse antes de emitir documentos.' : 'La liquidación y el ajuste quedarán sujetos a revisión manual.'} La selección no modifica la factura original ni autoriza por sí sola emitir notas fiscales.</div>
             </>}
           </div>
-          {/* IGTF: se calcula solo cuando se declara agente de percepción y pago en moneda extranjera/cripto */}
+          {/* IGTF: depende de la configuración permanente de la empresa y del medio de pago */}
           <div className="p-3.5 bg-sky-50 border border-sky-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">5. IGTF — percepción de grandes transacciones financieras</span>
             <label className="flex items-start gap-2 font-semibold text-slate-700 cursor-pointer">
-              <input type="checkbox" checked={igtfAgent} onChange={e => setIgtfAgent(e.target.checked)} className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
-              <span>La empresa está designada agente de percepción del IGTF y esta operación está sujeta al impuesto.</span>
+              <input type="checkbox" checked={currentCompany.isIgtfPerceptionAgent === true} readOnly disabled className="mt-0.5 rounded text-sky-600 focus:ring-sky-500" />
+              <span>Agente de percepción configurado: <strong>{currentCompany.isIgtfPerceptionAgent === true ? 'Sí' : 'No'}</strong>. Para cambiarlo, vaya a Configuración de la empresa.</span>
             </label>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
