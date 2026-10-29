@@ -22,6 +22,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
   const [email, setEmail] = useState('');
   const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
+  const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
   const [bcvRate, setBcvRate] = useState<string>('');
   const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
 
