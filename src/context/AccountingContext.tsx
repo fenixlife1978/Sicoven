@@ -419,10 +419,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
       : entry));
     setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber))
-      ? { ...sale, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      ? { ...sale, journalEntryId: sale.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : sale));
     setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber))
-      ? { ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      ? { ...purchase, journalEntryId: purchase.journalEntryId || source.id, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
       : purchase));
     if (linkedPurchase) {
       setVatVouchers(prev => prev.map(voucher => voucher.purchaseRecordId === linkedPurchase.id
