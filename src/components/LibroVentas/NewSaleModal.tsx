@@ -31,6 +31,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [retentionVoucherNumber, setRetentionVoucherNumber] = useState<string>('');
   const [retentionVoucherDate, setRetentionVoucherDate] = useState<string>('');
   const [paymentCurrency, setPaymentCurrency] = useState<'BS' | 'FOREIGN_CASH' | 'FOREIGN_TRANSFER' | 'CRYPTO'>('BS');
+  const [applyIgtf, setApplyIgtf] = useState(false);
 
   // Currency
   const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
@@ -46,7 +47,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfApplicable = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
+  const igtfEligible = currentCompany.isIgtfPerceptionAgent === true && paymentTerm === 'CONTADO' && (paymentCurrency === 'FOREIGN_CASH' || paymentCurrency === 'CRYPTO');
+  const igtfApplicable = igtfEligible && applyIgtf;
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = clientIsSpecial
@@ -348,13 +350,17 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </label>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Moneda / medio de pago</label>
-              <select value={paymentCurrency} onChange={e => setPaymentCurrency(e.target.value as typeof paymentCurrency)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
+              <select value={paymentCurrency} onChange={e => { setPaymentCurrency(e.target.value as typeof paymentCurrency); setApplyIgtf(false); }} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white">
                 <option value="BS">Bolívares (no calcular IGTF)</option>
                 <option value="FOREIGN_CASH">Efectivo en moneda extranjera</option>
                 <option value="FOREIGN_TRANSFER">Pago/transferencia en moneda extranjera</option>
                 <option value="CRYPTO">Criptoactivos</option>
               </select>
             </div>
+            <label className="flex items-start gap-2 text-slate-700 text-xs font-semibold">
+              <input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={!igtfEligible} className="mt-0.5 rounded text-sky-600" />
+              <span>Confirmo que esta operación está sujeta a percepción de IGTF (3%), validada según el medio de pago y la condición fiscal de la empresa.</span>
+            </label>
             <div className="flex flex-wrap justify-between gap-2 text-xs">
               <span className="text-slate-600">IGTF estimado (3% cuando el cobro es de contado en medio sujeto, sujeto a validación fiscal):</span>
               <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
