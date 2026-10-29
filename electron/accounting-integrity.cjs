@@ -135,17 +135,17 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     if (entry.reversalOfEntryId) {
       const source = nextById.get(String(entry.reversalOfEntryId));
+      const otherReversal = nextEntries.find(candidate => candidate.id !== entry.id &&
+        candidate.companyId === entry.companyId && candidate.reversalOfEntryId === entry.reversalOfEntryId);
+      if (otherReversal) {
+        throw new Error('SQLite bloqueó una segunda reversión del mismo asiento original.');
+      }
       if (!source || source.companyId !== entry.companyId || source.reversalOfEntryId ||
           source.reversedByEntryId !== entry.id || !source.isAdjusted ||
           String(entry.reversalReason || '').trim().length < 10 ||
           String(entry.workpaperNote || '').trim().length < 10 ||
           String(entry.date || '') < String(source.date || '')) {
         throw new Error('SQLite rechazó un contra-asiento sin origen, enlace recíproco, justificación, papel de trabajo o fecha válida.');
-      }
-      const otherReversal = nextEntries.find(candidate => candidate.id !== entry.id &&
-        candidate.companyId === entry.companyId && candidate.reversalOfEntryId === source.id);
-      if (otherReversal) {
-        throw new Error('SQLite bloqueó una segunda reversión del mismo asiento original.');
       }
     }
   }
