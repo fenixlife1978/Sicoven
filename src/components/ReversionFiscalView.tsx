@@ -1,13 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
-import { useAccounting } from '../context/AccountingContext';
+import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement,
-    bankStatementMovements, creditSettlements, getCreditBalance, reverseJournalEntry, closeAccountingPeriod
+    bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -22,6 +22,22 @@ export const ReversionFiscalView: React.FC = () => {
   const [correctionDocumentRef, setCorrectionDocumentRef] = useState('');
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
+
+  const [auditEvents, setAuditEvents] = useState<AccountingAuditEvent[]>([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditError, setAuditError] = useState<string | null>(null);
+  const refreshAuditEvents = async () => {
+    setAuditLoading(true);
+    try {
+      setAuditEvents(await getAuditEvents(200));
+      setAuditError(null);
+    } catch (error) {
+      setAuditError(error instanceof Error ? error.message : 'No se pudo leer el historial de auditoría.');
+    } finally {
+      setAuditLoading(false);
+    }
+  };
+  useEffect(() => { void refreshAuditEvents(); }, []);
 
   const source = journalEntries.find(entry => entry.id === selectedId);
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
@@ -329,6 +345,38 @@ export const ReversionFiscalView: React.FC = () => {
         <div className="rounded-lg bg-slate-50 border p-3 text-sm">Estado actual: {currentCompany.closedThroughDate ? <strong>cerrado hasta {currentCompany.closedThroughDate}</strong> : <strong>sin período cerrado</strong>}</div>
         <div className="flex flex-col sm:flex-row gap-3 items-end"><div className="w-full sm:max-w-xs"><label className="block text-sm font-semibold text-slate-700 mb-1">Cerrar hasta</label><input type="date" max={today} value={closedDate} onChange={event=>setClosedDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" /></div><button disabled={!closedDate || Boolean(currentCompany.closedThroughDate && closedDate < currentCompany.closedThroughDate) || closedDate > today} onClick={submitClose} className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"><LockKeyhole className="w-4 h-4" /> Confirmar cierre irreversible</button></div>
         <p className="text-xs text-slate-500">El cierre es progresivo e irreversible desde esta pantalla. Para reabrir un período debe existir autorización formal y un procedimiento auditado de administrador; no se habilita una reapertura informal.</p>
+      </section>
+
+      <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3"><ShieldCheck className="w-6 h-6 text-emerald-700" /><div><h2 className="font-bold text-slate-900">Pista de auditoría local SQLite</h2><p className="text-sm text-slate-500">Eventos append-only de asientos, reversiones, documentos fiscales y liquidaciones.</p></div></div>
+          <button type="button" onClick={() => void refreshAuditEvents()} disabled={auditLoading} className="rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50">{auditLoading ? 'Actualizando…' : 'Actualizar historial'}</button>
+        </div>
+        {auditError && <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800">{auditError}</div>}
+        {!auditError && auditEvents.length === 0 && <p className="rounded-lg border border-dashed border-slate-300 p-5 text-center text-sm text-slate-500">{auditLoading ? 'Consultando eventos locales…' : 'Todavía no hay eventos de auditoría registrados.'}</p>}
+        <div className="space-y-2">
+          {auditEvents.map(event => {
+            const details = event.details || {};
+            const title = event.eventType === 'journal_entry_reversed' ? 'Contra-asiento registrado'
+              : event.eventType === 'journal_entry_posted' ? 'Asiento contabilizado'
+              : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
+              : event.eventType === 'credit_settlement_reversed' ? 'Liquidación de crédito reversada'
+              : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
+              : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
+              : event.eventType.replaceAll('_', ' ');
+            return <article key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{title}</strong><span className="font-mono text-slate-500">#{event.id} · {event.createdAt}</span></div>
+              {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
+              {details.reversalOfEntryId && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
+              {details.invoiceNumber && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
+              {details.reversalReason && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
+              {details.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
+              {details.cancellationReason && <p><strong>Motivo de regularización:</strong> {String(details.cancellationReason)}</p>}
+              {details.documentId && <p>Documento vinculado: {String(details.documentId)}</p>}
+            </article>;
+          })}
+        </div>
+        <p className="text-[11px] text-slate-500">Se muestran los últimos 200 eventos. El historial se almacena en SQLite y el reinicio operativo no lo elimina.</p>
       </section>
     </div>
   );
