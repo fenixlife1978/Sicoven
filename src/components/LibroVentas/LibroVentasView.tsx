@@ -273,7 +273,7 @@ export const LibroVentasView: React.FC = () => {
             </tbody>
             <tfoot>
               <tr className="bg-slate-900 text-white font-bold border-t border-slate-800 whitespace-nowrap">
-                <td colSpan={6} className="py-3 px-3 text-right text-slate-300">
+                <td colSpan={7} className="py-3 px-3 text-right text-slate-300">
                   TOTALES LIBRO DE VENTAS (SENIAT):
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
@@ -305,6 +305,8 @@ export const LibroVentasView: React.FC = () => {
                   )}
                 </td>
                 <td></td>
+                <td></td>
+                <td className="py-3 px-3 text-right font-mono text-sky-300 bg-slate-850">{formatBs(totalIgtfBs)}</td>
                 <td className="no-print"></td>
               </tr>
             </tfoot>
