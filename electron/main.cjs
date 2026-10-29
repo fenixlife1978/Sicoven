@@ -408,11 +408,130 @@ app.whenReady().then(async () => {
     const json = JSON.stringify(state);
     if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
     const save = db.transaction(() => {
+      const priorRow = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      let priorState = {};
+      if (priorRow) {
+        try { priorState = JSON.parse(priorRow.state_json) || {}; }
+        catch { throw new Error('La base SQLite contiene un estado contable ilegible; se bloqueó la escritura para proteger el historial.'); }
+      }
+      const priorEntries = Array.isArray(priorState.journalEntries) ? priorState.journalEntries : [];
+      const nextEntries = Array.isArray(state.journalEntries) ? state.journalEntries : [];
+      const priorById = new Map(priorEntries.map(entry => [String(entry.id), entry]));
+      const nextById = new Map(nextEntries.map(entry => [String(entry.id), entry]));
+      if (nextById.size !== nextEntries.length) throw new Error('Hay identificadores de asientos duplicados; SQLite rechazó el guardado.');
+      const immutableEntry = entry => {
+        const { reversedByEntryId, isAdjusted, ...immutable } = entry;
+        return immutable;
+      };
+      // La protección se aplica también en la frontera SQLite, no sólo en React:
+      // un estado antiguo/importado no puede borrar ni reescribir asientos ya persistidos.
+      for (const prior of priorEntries) {
+        const next = nextById.get(String(prior.id));
+        if (!next) throw new Error('SQLite bloqueó la eliminación del asiento histórico #' + prior.entryNumber + '. El Libro Diario es inmutable.');
+        if (JSON.stringify(immutableEntry(prior)) !== JSON.stringify(immutableEntry(next))) {
+          throw new Error('SQLite bloqueó la modificación del contenido histórico del asiento #' + prior.entryNumber + '. Registre un contra-asiento.');
+        }
+        if (prior.reversedByEntryId && prior.reversedByEntryId !== next.reversedByEntryId) {
+          throw new Error('No se puede cambiar ni retirar el enlace de reversión del asiento #' + prior.entryNumber + '.');
+        }
+        if (next.reversedByEntryId && !prior.reversedByEntryId) {
+          const reversal = nextById.get(String(next.reversedByEntryId));
+          if (!reversal || reversal.reversalOfEntryId !== prior.id) {
+            throw new Error('El enlace de reversión del asiento #' + prior.entryNumber + ' no tiene un contra-asiento válido.');
+          }
+        }
+        if (prior.isAdjusted && !next.isAdjusted) {
+          throw new Error('No se puede retirar la marca de ajuste del asiento #' + prior.entryNumber + '.');
+        }
+      }
+      const seenNumbers = new Set();
+      for (const entry of nextEntries) {
+        const numberKey = String(entry.companyId) + ':' + String(entry.entryNumber);
+        if (seenNumbers.has(numberKey)) throw new Error('Hay números de asiento duplicados en la empresa ' + entry.companyId + '.');
+        seenNumbers.add(numberKey);
+        if (!priorById.has(String(entry.id))) {
+          if (!Array.isArray(entry.items) || entry.items.length < 2) throw new Error('Un nuevo asiento no contiene líneas contables suficientes.');
+          const totals = entry.items.reduce((sum, item) => {
+            const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
+            if (values.some(value => !Number.isFinite(value) || value < 0) ||
+                (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+                (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)) {
+              throw new Error('SQLite rechazó un asiento con importes o lados contables inválidos.');
+            }
+            sum.debitBs += Number(item.debitBs); sum.creditBs += Number(item.creditBs);
+            sum.debitUsd += Number(item.debitUsd); sum.creditUsd += Number(item.creditUsd);
+            return sum;
+          }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+          if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
+              Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
+              totals.debitBs <= 0 || totals.debitUsd <= 0) {
+            throw new Error('SQLite rechazó el asiento #' + entry.entryNumber + ': no cuadra simultáneamente en Bs. y USD.');
+          }
+          if (entry.reversalOfEntryId) {
+            const source = nextById.get(String(entry.reversalOfEntryId));
+            if (!source || source.companyId !== entry.companyId || source.reversalOfEntryId ||
+                (source.reversedByEntryId && source.reversedByEntryId !== entry.id) ||
+                String(entry.reversalReason || '').trim().length < 10 ||
+                String(entry.workpaperNote || '').trim().length < 10 ||
+                String(entry.date || '') < String(source.date || '')) {
+              throw new Error('SQLite rechazó un contra-asiento sin origen, justificación, papel de trabajo o fecha válida.');
+            }
+            const otherReversal = nextEntries.find(candidate => candidate.id !== entry.id &&
+              candidate.companyId === entry.companyId && candidate.reversalOfEntryId === source.id);
+            if (otherReversal) throw new Error('SQLite bloqueó una segunda reversión del mismo asiento original.');
+          }
+        }
+      }
+
+      const auditInsert = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)');
+      for (const entry of nextEntries) {
+        if (priorById.has(String(entry.id))) continue;
+        const totals = entry.items.reduce((sum, item) => ({
+          debitBs: sum.debitBs + Number(item.debitBs || 0),
+          creditBs: sum.creditBs + Number(item.creditBs || 0),
+          debitUsd: sum.debitUsd + Number(item.debitUsd || 0),
+          creditUsd: sum.creditUsd + Number(item.creditUsd || 0)
+        }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+        auditInsert.run(entry.reversalOfEntryId ? 'journal_entry_reversed' : 'journal_entry_posted', JSON.stringify({
+          entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
+          date: entry.date, type: entry.type, referenceDoc: entry.referenceDoc || null,
+          description: entry.description, reversalOfEntryId: entry.reversalOfEntryId || null,
+          reversalReason: entry.reversalReason || null, workpaperNote: entry.workpaperNote || null,
+          priorPeriodAdjustment: Boolean(entry.priorPeriodAdjustment), totals
+        }));
+      }
+      for (const collectionName of ['purchases', 'sales']) {
+        const oldDocuments = new Map((Array.isArray(priorState[collectionName]) ? priorState[collectionName] : [])
+          .map(document => [String(document.id), document]));
+        for (const document of (Array.isArray(state[collectionName]) ? state[collectionName] : [])) {
+          const oldDocument = oldDocuments.get(String(document.id));
+          if (oldDocument && !oldDocument.isCancelled && document.isCancelled) {
+            auditInsert.run('fiscal_document_reversal_marked', JSON.stringify({
+              collection: collectionName, documentId: document.id, companyId: document.companyId,
+              invoiceNumber: document.invoiceNumber, documentType: document.documentType,
+              cancelledByJournalEntryId: document.cancelledByJournalEntryId || null,
+              cancellationReason: document.cancellationReason || null,
+              cancellationNote: document.cancellationNote || null
+            }));
+          }
+        }
+      }
+      const oldSettlements = new Map((Array.isArray(priorState.creditSettlements) ? priorState.creditSettlements : [])
+        .map(item => [String(item.id), item]));
+      for (const settlement of (Array.isArray(state.creditSettlements) ? state.creditSettlements : [])) {
+        const oldSettlement = oldSettlements.get(String(settlement.id));
+        if (oldSettlement && !oldSettlement.isReversed && settlement.isReversed) {
+          auditInsert.run('credit_settlement_reversed', JSON.stringify({
+            settlementId: settlement.id, companyId: settlement.companyId,
+            documentId: settlement.documentId, journalEntryId: settlement.journalEntryId,
+            reversedByJournalEntryId: settlement.reversedByJournalEntryId || null
+          }));
+        }
+      }
       db.prepare(`INSERT INTO app_state(state_key,state_json,updated_at) VALUES(?,?,datetime('now'))
         ON CONFLICT(state_key) DO UPDATE SET state_json=excluded.state_json, updated_at=excluded.updated_at`)
         .run('accounting', json);
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('state_saved', JSON.stringify({ bytes: Buffer.byteLength(json) }));
+      auditInsert.run('state_saved', JSON.stringify({ bytes: Buffer.byteLength(json) }));
     });
     save();
     return { ok: true, savedAt: new Date().toISOString() };
