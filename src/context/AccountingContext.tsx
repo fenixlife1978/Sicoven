@@ -718,7 +718,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (purchaseData.vatWithheldBs > purchaseData.vatAmountBs + 0.01) {
       throw new Error('La retención de IVA no puede superar el IVA causado en la factura.');
     }
-    const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\\s+/g, '');
+    const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const normalizeRif = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
     const duplicateInvoice = purchases.some(existing =>
       existing.companyId === currentCompany.id &&
