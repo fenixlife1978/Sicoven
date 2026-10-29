@@ -57,7 +57,9 @@ export function calculateCreditBalance(
   originalAmountBs: number,
   settlements: CreditSettlement[]
 ): CreditBalance {
-  const relevant = settlements.filter(item => item.documentId === documentId);
+  // Una liquidación reversada permanece en el historial, pero no puede seguir
+  // reduciendo el principal ni inflar el contador de pagos/cobros vigentes.
+  const relevant = settlements.filter(item => item.documentId === documentId && !item.isReversed);
   const settledAmountUsd = relevant.reduce((sum, item) => sum + item.amountUsd, 0);
   const settledAmountBs = relevant.reduce((sum, item) => sum + item.amountBs, 0);
   const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
