@@ -57,7 +57,7 @@ export const ReversionFiscalView: React.FC = () => {
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
   const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
   const linkedInventoryMovements = source
-    ? movements.filter(movement => movement.companyId === currentCompany.id && !movement.correctionForMovementId &&
+    ? movements.filter(movement => movement.companyId === currentCompany.id &&
         (movement.journalEntryId === source.id || Boolean(linkedInvoiceNumber &&
           (movement.documentRef.trim().toLocaleUpperCase() === linkedInvoiceNumber.trim().toLocaleUpperCase() ||
            movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))))
@@ -65,7 +65,7 @@ export const ReversionFiscalView: React.FC = () => {
   const requiresInventoryReview = linkedInventoryMovements.length > 0;
   const linkedBankMovements = source
     ? bankStatementMovements.filter(movement => movement.companyId === currentCompany.id &&
-        movement.isReconciled && movement.reconciledWithJournalEntryId === source.id)
+        movement.reconciledWithJournalEntryId === source.id)
     : [];
   const linkedDocumentId = linkedSale?.id || linkedPurchase?.id;
   const linkedSettlementKind = linkedSale ? 'SALE_COLLECTION' : linkedPurchase ? 'PURCHASE_PAYMENT' : undefined;
