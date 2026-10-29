@@ -16,8 +16,6 @@ export const ReversionFiscalView: React.FC = () => {
   const [reason, setReason] = useState('');
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
-  const [inventoryReviewed, setInventoryReviewed] = useState(false);
-  const [inventoryCorrectionRef, setInventoryCorrectionRef] = useState('');
   const [correctionMovementId, setCorrectionMovementId] = useState('');
   const [correctionQuantity, setCorrectionQuantity] = useState('1');
   const [correctionDate, setCorrectionDate] = useState(today);
@@ -188,7 +186,7 @@ export const ReversionFiscalView: React.FC = () => {
         balanceTotalUsd: product.currentStock * product.avgCostUsd,
         correctionForMovementId: original.id
       });
-      setFeedback({kind:'success', message:'Devolución registrada y enlazada al movimiento original del Kardex. Revise el nuevo asiento y el saldo antes de continuar con la reversión de la factura.'});
+      setFeedback({kind:'success', message:'Devolución física registrada y enlazada al movimiento original del Kardex. La reversión de la factura sigue bloqueada hasta que el motor coordine y concilie el impacto contable y fiscal completo.'});
       setCorrectionQuantity('1');
       setCorrectionMovementId('');
       setCorrectionDocumentRef('');
@@ -199,14 +197,6 @@ export const ReversionFiscalView: React.FC = () => {
 
   const submitReversal = () => {
     if (!source || reversalDisabled) return;
-    if (requiresInventoryReview && !inventoryReviewed) {
-      setFeedback({kind:'error', message:'Confirme la revisión del Kardex y la necesidad de registrar movimientos compensatorios por separado antes de reversar la factura.'});
-      return;
-    }
-    if (requiresInventoryReview && inventoryCorrectionRef.trim().length < 4) {
-      setFeedback({kind:'error', message:'Indique el número de documento o papel de trabajo que soporta la conciliación/corrección del inventario (mínimo 4 caracteres).'});
-      return;
-    }
     const confirmed = window.confirm(
       'Se registrará un contra-asiento nuevo e inmutable. No se borrará el asiento original. La reversión contable no sustituye la nota de crédito ni la rectificación fiscal que legalmente corresponda. ¿Desea continuar?'
     );
@@ -214,15 +204,13 @@ export const ReversionFiscalView: React.FC = () => {
     try {
       const entry = reverseJournalEntry(
         source.id, effectiveDate, reason,
-        requiresInventoryReview ? workpaperNote.trim() + '\nReferencia de conciliación/corrección de inventario: ' + inventoryCorrectionRef.trim() : workpaperNote,
+        workpaperNote,
         isPriorPeriod, isPriorPeriod ? retainedEarningsCode : undefined
       );
       setFeedback({kind:'success', message:'Contra-asiento '+entry.entryNumber+' registrado y enlazado al asiento '+source.entryNumber+'. El original permanece en el historial.'});
       setReason('');
       setWorkpaperNote('');
       setSelectedId('');
-      setInventoryReviewed(false);
-      setInventoryCorrectionRef('');
     } catch (error) {
       setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión.'});
     }
@@ -257,7 +245,7 @@ export const ReversionFiscalView: React.FC = () => {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="space-y-3">
               <label className="block text-sm font-semibold text-slate-700">1. Seleccione el asiento original</label>
-              <select value={selectedId} onChange={event=>{setSelectedId(event.target.value);setFeedback(null);setInventoryReviewed(false);}} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white">
+              <select value={selectedId} onChange={event=>{setSelectedId(event.target.value);setFeedback(null);}} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white">
                 <option value="">Seleccionar asiento contabilizado…</option>
                 {journalEntries.filter(entry=>!entry.reversalOfEntryId && !hasReversal(entry.id)).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.entryNumber-a.entryNumber).map(entry=>(
                   <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · {entry.description.slice(0,90)}</option>
@@ -292,7 +280,7 @@ export const ReversionFiscalView: React.FC = () => {
                     <button type="button" onClick={registerInventoryCorrection} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700">Registrar devolución y asiento de inventario</button>
                   </> : <p className="text-xs text-slate-600">No hay unidades pendientes que coincidan con una salida por venta o una entrada por compra. Si la mercancía no regresó físicamente, documente su disposición en el papel de trabajo sin alterar existencias.</p>}
                 </div>
-                <label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y la disposición física de cada uno; cualquier devolución real se registró arriba o se documentará por separado.</span></label><label className="block font-semibold">Referencia del soporte de conciliación/corrección de inventario</label><input value={inventoryCorrectionRef} onChange={event=>setInventoryCorrectionRef(event.target.value)} maxLength={160} placeholder="Ej. AJ-KARDEX-2026-004 / papel de trabajo" className="w-full rounded-lg border border-red-300 bg-white p-2 text-sm" /><p className="text-xs">Esta referencia quedará anexada al papel de trabajo de la reversión. El sistema no verifica por sí solo que la compensación haya sido contabilizada.</p></div>}
+                <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900"><strong>Control de seguridad:</strong> una casilla o una referencia escrita no sustituyen la conciliación técnica. Mientras existan movimientos de Kardex vinculados, el contra-asiento de la factura permanecerá bloqueado hasta completar el flujo coordinado de inventario, costo y documento fiscal.</div></div>}
                 {hasReversal(source.id) && <p className="text-red-700 font-semibold">Este asiento ya fue reversado.</p>}
               </div>}
               <label className="block text-sm font-semibold text-slate-700">2. Fecha del contra-asiento</label>
