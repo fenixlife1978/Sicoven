@@ -210,6 +210,17 @@ test('SQLite requires fiscal retention correction flags to link to the document 
   ));
 });
 
+test('SQLite rejects reopening or deleting a closed accounting period', () => {
+  const previous = { ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa', closedThroughDate: '2026-09-30' }] };
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa', closedThroughDate: '2026-08-31' }]
+  }), /bloqueó la reapertura/);
+  assert.throws(() => validateAccountingSnapshot(previous, emptyState()), /bloqueó la reapertura/);
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, {
+    ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa', closedThroughDate: '2026-10-31' }]
+  }));
+});
+
 test('SQLite audit_events table rejects UPDATE and DELETE operations', () => {
   const db = new Database(':memory:');
   try {
