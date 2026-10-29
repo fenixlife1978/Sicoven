@@ -883,6 +883,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
+    const saleDebitBs = items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
+    const saleCreditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const saleDebitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
+    const saleCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
+    if (Math.abs(saleDebitBs - saleCreditBs) > 0.01 || Math.abs(saleDebitUsd - saleCreditUsd) > 0.01) {
+      throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
+    }
+
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
@@ -996,13 +1004,59 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
+    const rate = Number(saleData.bcvRate || currentCompany.bcvRate);
+    const saleAmounts = [
+      saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
+      saleData.vatAmountBs, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0
+    ];
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
+    if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
+      throw new Error('La venta contiene importes inválidos o negativos.');
+    }
+    if (!isValidIsoDate(saleData.invoiceDate) || !String(saleData.invoiceNumber || '').trim() ||
+        !String(saleData.customerName || '').trim()) {
+      throw new Error('La venta requiere fecha válida, número de factura y nombre del cliente.');
+    }
+    if (!Number.isFinite(saleData.taxRate) || saleData.taxRate < 0 || saleData.taxRate > 100) {
+      throw new Error('La alícuota de IVA de la venta no es válida.');
+    }
+    const expectedVat = Math.round(saleData.taxableBaseBs * saleData.taxRate) / 100;
+    if (Math.abs(expectedVat - saleData.vatAmountBs) > 0.01) {
+      throw new Error('El IVA de la venta no coincide con la base imponible y la alícuota declarada.');
+    }
+    if ((saleData.vatWithheldBs || 0) > saleData.vatAmountBs + 0.01) {
+      throw new Error('La retención de IVA del cliente no puede superar el IVA causado.');
+    }
+    const saleIgtf = Number(saleData.igtfAmountBs || 0);
+    if (saleIgtf > 0 && !saleData.igtfApplicable) {
+      throw new Error('No se permite registrar IGTF en una venta sin confirmación expresa.');
+    }
+    if (saleData.igtfApplicable) {
+      const expectedIgtf = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs) * 3) / 100;
+      if (Math.abs(saleIgtf - expectedIgtf) > 0.01 || Number(saleData.igtfRate || 0) !== 3) {
+        throw new Error('El importe o la tasa del IGTF no coincide con el cálculo confirmado del 3%.');
+      }
+    } else if (saleIgtf !== 0) {
+      throw new Error('No se permite registrar IGTF sin confirmación expresa.');
+    }
+    const expectedSaleTotal = Math.round((saleData.taxableBaseBs + saleData.exemptAmountBs + saleData.vatAmountBs + saleIgtf) * 100) / 100;
+    if (Math.abs(expectedSaleTotal - saleData.totalAmountBs) > 0.01) {
+      throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
+    }
+    const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\\s+/g, '');
+    const duplicateSale = sales.some(existing =>
+      existing.companyId === currentCompany.id &&
+      existing.documentType === saleData.documentType &&
+      normalizeSaleDocument(existing.invoiceNumber) === normalizeSaleDocument(saleData.invoiceNumber)
+    );
+    if (duplicateSale) throw new Error('Ya existe una venta registrada con ese tipo de documento y número de factura.');
+
     const companySales = sales.filter(s => s.companyId === currentCompany.id);
     const companyKey = currentCompany.id;
     const nextOp = Math.max(companySales.reduce((max, sale) => Math.max(max, sale.opNumber || 0), 0), saleSequenceRef.current[companyKey] || 0) + 1;
     saleSequenceRef.current[companyKey] = nextOp;
     const saleId = `sale-${companyKey}-${nextOp}-${Date.now()}`;
-    const rate = saleData.bcvRate || currentCompany.bcvRate;
-
     // Asiento contable
     const items: JournalEntryItem[] = [];
 
