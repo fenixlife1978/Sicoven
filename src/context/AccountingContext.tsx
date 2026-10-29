@@ -441,7 +441,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!currentCompany || !Number.isFinite(newRate) || newRate <= 0) return;
 
     const today = effectiveDate || new Date().toISOString().slice(0, 10);
-    const dateMatch = /^\\d{4}-\\d{2}-\\d{2}$/.test(today);
+    const dateMatch = /^\d{4}-\d{2}-\d{2}$/.test(today);
     const parsedDate = dateMatch ? new Date(`${today}T00:00:00.000Z`) : null;
     const validDate = Boolean(
       parsedDate &&
