@@ -775,6 +775,7 @@ export async function exportComprasPdf(
   let totalBase = 0;
   let totalIva = 0;
   let totalRetenido = 0;
+  let totalIgtf = 0;
 
   const tableBody: any[] = purchases.map(p => {
     totalMonto += p.totalAmountBs || 0;
@@ -892,6 +893,7 @@ export async function exportVentasPdf(
     totalBase += s.taxableBaseBs || 0;
     totalIva += s.vatAmountBs || 0;
     totalRetenido += s.vatWithheldBs || 0;
+    totalIgtf += s.igtfAmountBs || 0;
 
     return [
       s.opNumber,
@@ -906,7 +908,9 @@ export async function exportVentasPdf(
       `${s.taxRate}%`,
       formatNumberVe(s.vatAmountBs),
       s.vatWithheldBs > 0 ? formatNumberVe(s.vatWithheldBs) : '-',
-      s.retentionVoucherNumber || '-'
+      s.retentionVoucherNumber || '-',
+      s.retentionVoucherDate ? formatDate(s.retentionVoucherDate) : '-',
+      (s.igtfAmountBs || 0) > 0 ? formatNumberVe(s.igtfAmountBs || 0) : '-'
     ];
   });
 
@@ -919,7 +923,9 @@ export async function exportVentasPdf(
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: formatNumberVe(totalIva), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [52, 211, 153] } },
     { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
-    { content: '', styles: { fillColor: [15, 23, 42] } }
+    { content: '', styles: { fillColor: [15, 23, 42] } },
+    { content: '', styles: { fillColor: [15, 23, 42] } },
+    { content: formatNumberVe(totalIgtf), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [125, 211, 252] } }
   ]);
 
   autoTable(doc, {
@@ -937,7 +943,9 @@ export async function exportVentasPdf(
       '% Alíc.',
       'IVA Débito (Bs.)',
       'IVA Retenido (Bs.)',
-      'Comprobante Ret.'
+      'Comprobante Ret.',
+      'Fecha Ret.',
+      'IGTF (Bs.)'
     ]],
     body: tableBody,
     theme: 'grid',
@@ -956,7 +964,9 @@ export async function exportVentasPdf(
       9: { cellWidth: 12, halign: 'center' },
       10: { cellWidth: 22, halign: 'right', font: 'courier' },
       11: { cellWidth: 22, halign: 'right', font: 'courier' },
-      12: { cellWidth: 26, font: 'courier' }
+      12: { cellWidth: 24, font: 'courier' },
+      13: { cellWidth: 18, font: 'courier' },
+      14: { cellWidth: 18, halign: 'right', font: 'courier' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
