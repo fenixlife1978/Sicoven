@@ -205,7 +205,7 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tipo y número de documento</label>
               <select value={documentType} onChange={e => setDocumentType(e.target.value)} className="w-full px-3 py-1.5 border border-slate-300 rounded-lg">
-                <option>Factura de compra</option><option>Factura de venta</option><option>Nota de débito</option><option>Nota de crédito</option><option>Guía de despacho</option><option>Acta de ajuste</option><option>Inventario inicial</option>
+                <option>Factura de compra</option><option>Factura de venta</option><option>Nota de débito</option><option>Nota de crédito</option><option>Nota de crédito proveedor</option><option>Guía de despacho</option><option>Acta de ajuste</option><option>Inventario inicial</option>
               </select>
             </div>
             <div>
