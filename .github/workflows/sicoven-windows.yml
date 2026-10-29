@@ -2,20 +2,6 @@ name: SICOVEN Windows validation
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - main
-    paths:
-      - "src/**"
-      - "electron/**"
-      - "build/**"
-      - "scripts/**"
-      - "index.html"
-      - "package.json"
-      - "bun.lock"
-      - "vite.config.*"
-      - "tsconfig.json"
-      - ".github/workflows/sicoven-windows.yml"
 
 permissions:
   contents: read
