@@ -103,7 +103,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       return;
     }
 
-    addPurchase({
+    try {
+      addPurchase({
       invoiceDate,
       supplierRif: formatRif(supplierRif),
       supplierName: supplierName.trim().toUpperCase(),
@@ -141,9 +142,11 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
       fiscalAdjustmentMode
-    });
-
-    onClose();
+      });
+      onClose();
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
+    }
   };
 
   return (
