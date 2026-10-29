@@ -363,16 +363,16 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'credit_settlement_reversed' ? 'Liquidación de crédito reversada'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
-              : event.eventType.replaceAll('_', ' ');
+              : event.eventType.replace(/_/g, ' ');
             return <article key={event.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs space-y-1">
               <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">{title}</strong><span className="font-mono text-slate-500">#{event.id} · {event.createdAt}</span></div>
               {details.entryNumber != null && <p>Asiento #{String(details.entryNumber)} · {String(details.date || '')} · {String(details.referenceDoc || '')}</p>}
-              {details.reversalOfEntryId && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
-              {details.invoiceNumber && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
-              {details.reversalReason && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
-              {details.workpaperNote && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
-              {details.cancellationReason && <p><strong>Motivo de regularización:</strong> {String(details.cancellationReason)}</p>}
-              {details.documentId && <p>Documento vinculado: {String(details.documentId)}</p>}
+              {Boolean(details.reversalOfEntryId) && <p>Asiento original: {String(details.reversalOfEntryId)}</p>}
+              {Boolean(details.invoiceNumber) && <p>Factura: {String(details.invoiceNumber)} · {String(details.collection || '')}</p>}
+              {Boolean(details.reversalReason) && <p><strong>Motivo:</strong> {String(details.reversalReason)}</p>}
+              {Boolean(details.workpaperNote) && <p className="whitespace-pre-wrap"><strong>Papel de trabajo:</strong> {String(details.workpaperNote)}</p>}
+              {Boolean(details.cancellationReason) && <p><strong>Motivo de regularización:</strong> {String(details.cancellationReason)}</p>}
+              {Boolean(details.documentId) && <p>Documento vinculado: {String(details.documentId)}</p>}
             </article>;
           })}
         </div>
