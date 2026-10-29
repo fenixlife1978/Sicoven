@@ -1680,6 +1680,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('No se permiten movimientos ni devoluciones en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
     const supplierReturn = movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
+    if (supplierReturn) {
+      // Fail closed: addMovement can post inventory/AP but cannot atomically create
+      // the supplier credit note, reverse the proportional tax/withholdings/IGTF,
+      // and reduce the linked PURCHASE_PAYMENT balance. Do not allow a partial posting.
+      throw new Error('Devolución a proveedor aún no habilitada: falta el flujo atómico de nota de crédito que ajuste Kardex, CxP, IVA, retenciones e IGTF y vincule todos los documentos. No se registró ningún movimiento ni asiento.');
+    }
     if (supplierReturn && !movData.correctionForMovementId) {
       throw new Error('La devolución a proveedor debe vincularse obligatoriamente con la entrada original de compra.');
     }
