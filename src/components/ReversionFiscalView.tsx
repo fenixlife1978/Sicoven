@@ -51,12 +51,6 @@ export const ReversionFiscalView: React.FC = () => {
     });
   }, [source, accountMap, isPriorPeriod, retainedEarningsCode]);
 
-  const reversalDisabled = !source || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
-    reason.trim().length < 10 || workpaperNote.trim().length < 10 ||
-    (isPriorPeriod && !retainedEarningsAccounts.some(account => account.code === retainedEarningsCode)) ||
-    !effectiveDate || effectiveDate < (source?.date || today) ||
-    Boolean(currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate);
-
   const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
   const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
@@ -82,6 +76,12 @@ export const ReversionFiscalView: React.FC = () => {
     ...(linkedBankMovements.length ? ['Hay movimientos bancarios conciliados con este asiento; primero debe ejecutarse el flujo de reversión bancaria autorizado.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
+  const reversalDisabled = !source || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
+    reason.trim().length < 10 || workpaperNote.trim().length < 10 ||
+    (isPriorPeriod && !retainedEarningsAccounts.some(account => account.code === retainedEarningsCode)) ||
+    !effectiveDate || effectiveDate < (source?.date || today) ||
+    Boolean(currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate);
+
   const purchaseLineReconciliation = useMemo(() => {
     if (!linkedPurchase) return null;
     const lines = linkedPurchase.inventoryLines || [];
