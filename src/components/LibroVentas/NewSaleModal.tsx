@@ -63,7 +63,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
     e.preventDefault();
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
     if (totalAmountBs <= 0) return;
-    if (clientIsSpecial && !/^\\d{14}$/.test(retentionVoucherNumber.trim())) {
+    if (clientIsSpecial && !/^[0-9]{14}$/.test(retentionVoucherNumber.trim())) {
       alert('El número del comprobante de retención debe contener exactamente 14 dígitos.');
       return;
     }
@@ -302,7 +302,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
                     required
                     placeholder="20261000001234"
                     value={retentionVoucherNumber}
-                    onChange={e => setRetentionVoucherNumber(e.target.value.replace(/\\D/g, '').slice(0, 14))}
+                    onChange={e => setRetentionVoucherNumber(e.target.value.replace(/[^0-9]/g, '').slice(0, 14))}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg font-mono focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   />
                 </div>
