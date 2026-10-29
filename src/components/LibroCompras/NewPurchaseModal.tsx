@@ -36,7 +36,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [islrConceptCode, setIslrConceptCode] = useState<string>('011');
 
   // Currency
-  const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
+  const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 0);
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [creditDays, setCreditDays] = useState<number>(7);
@@ -327,7 +327,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
             </div>
             <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
-            <p className="text-[11px] text-amber-900">Advertencia: Antes de activar el cálculo del IGTF, el contador debe validar que la operación esté legalmente sujeta, la base imponible aplicable y el tratamiento contable y tributario vigente. El método de pago por sí solo no determina la obligación fiscal; marque esta opción únicamente después de esa revisión.</p>
+            <p className="text-[11px] text-amber-900">Antes de activar el cálculo del IGTF, el contador debe validar que la operación esté sujeta al impuesto, la base imponible aplicable y el tratamiento contable y tributario vigente. El método de pago por sí solo no determina la obligación fiscal; active esta opción únicamente después de esa revisión.</p>
           </div>
 
           {/* ISLR Withholding Option */}
