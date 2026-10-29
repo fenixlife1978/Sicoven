@@ -508,11 +508,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  // Sincronización automática de tasa BCV al inicio
+  // Sincroniza al iniciar y al recuperar conectividad/enfocar la app, máximo una vez por día.
+  const lastAutoSyncDayRef = useRef<string>('');
   useEffect(() => {
-    if (autoSyncBcv && companies.length > 0) {
-      syncBcvRate();
-    }
+    if (!autoSyncBcv || companies.length === 0) return;
+    const maybeSyncToday = () => {
+      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
+      const today = new Date().toLocaleDateString('en-CA');
+      if (lastAutoSyncDayRef.current === today) return;
+      lastAutoSyncDayRef.current = today;
+      void syncBcvRate();
+    };
+    maybeSyncToday();
+    window.addEventListener('online', maybeSyncToday);
+    window.addEventListener('focus', maybeSyncToday);
+    return () => {
+      window.removeEventListener('online', maybeSyncToday);
+      window.removeEventListener('focus', maybeSyncToday);
+    };
   }, [companies.length, autoSyncBcv]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
