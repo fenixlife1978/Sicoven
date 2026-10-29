@@ -2089,11 +2089,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteVatVoucher = (id: string) => {
-    setVatVouchers(prev => prev.filter(v => v.id !== id));
+    const voucher = vatVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!voucher) return;
+    if (typeof window !== 'undefined') window.alert('El comprobante de retención de IVA es un soporte fiscal histórico y no puede eliminarse. Registre la corrección mediante el procedimiento fiscal correspondiente.');
   };
 
   const deleteIslrVoucher = (id: string) => {
-    setIslrVouchers(prev => prev.filter(v => v.id !== id));
+    const voucher = islrVouchers.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!voucher) return;
+    if (typeof window !== 'undefined') window.alert('El comprobante de retención de ISLR es un soporte fiscal histórico y no puede eliminarse. Registre la corrección mediante el procedimiento fiscal correspondiente.');
   };
 
   // Tesorería: alta bancaria y creación automática del auxiliar contable.
@@ -2267,8 +2271,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteBankStatementMovement = (id: string) => {
-    // No permitir que una operación de una empresa afecte los datos de otra.
-    setBankStatementMovements(prev => prev.filter(m => !(m.id === id && m.companyId === currentCompany.id)));
+    const movement = bankStatementMovements.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!movement) return;
+    if (typeof window !== 'undefined') {
+      window.alert('Los movimientos importados del extracto bancario se conservan como soporte histórico. Si existe un error, documente la incidencia y excluya/reconcilie mediante un procedimiento trazable; no se permite borrar la fila.');
+    }
   };
 
   const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
