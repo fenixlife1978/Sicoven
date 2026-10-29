@@ -73,6 +73,8 @@ export const NewMovementModal: React.FC<NewMovementModalProps> = ({
       if (quantity > selectedReturnSource.remaining + 1e-8) { setError('La cantidad supera las unidades recibidas menos devoluciones previas (' + selectedReturnSource.remaining + ').'); return; }
       if (documentRef.trim().length < 4) { setError('Indique el número real de nota de crédito del proveedor o soporte autorizado (mínimo 4 caracteres).'); return; }
       if (selectedProduct.costingMethod === 'PEPS') { setError('La devolución con PEPS requiere identificar el lote de origen; permanece bloqueada hasta disponer de ese dato.'); return; }
+      if (selectedProduct.currentStock + 1e-8 < quantity) { setError('No hay existencia suficiente para descargar la devolución física al proveedor.'); return; }
+      if (Math.abs(Number(selectedProduct.avgCostBs || 0) - Number(selectedReturnSource.unitCostBs || 0)) > 0.01) { setError('El costo promedio actual difiere del costo de la entrada original. No se registró la devolución porque la contrapartida CxP podría no coincidir con la nota de crédito; requiere conciliación contable manual.'); return; }
     }
     try {
     addMovement({
