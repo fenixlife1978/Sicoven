@@ -983,6 +983,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const deletePurchase = (id: string) => {
     const purchase = purchases.find(p => p.id === id);
     if (!purchase || purchase.companyId !== currentCompany.id) return;
+    // Una factura contabilizada no se elimina físicamente: requiere anulación con asiento reverso.
+    if (purchase.journalEntryId) return;
     setPurchases(prev => prev.filter(p => p.id !== id));
     if (purchase.journalEntryId) {
       setJournalEntries(prev => prev.filter(entry => entry.id !== purchase.journalEntryId));
@@ -1180,6 +1182,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const deleteSale = (id: string) => {
     const sale = sales.find(item => item.id === id);
     if (!sale || sale.companyId !== currentCompany.id) return;
+    // Una factura contabilizada no se elimina físicamente: requiere anulación con asiento reverso.
+    if (sale.journalEntryId) return;
     setSales(prev => prev.filter(item => item.id !== id));
     if (sale.journalEntryId) {
       setJournalEntries(prev => prev.filter(entry => entry.id !== sale.journalEntryId));
