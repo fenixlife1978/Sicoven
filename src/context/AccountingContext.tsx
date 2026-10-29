@@ -27,7 +27,6 @@ import {
   INITIAL_STATEMENT_MOVEMENTS
 } from '../data/initialData';
 import { formatVoucherNumber } from '../utils/formatters';
-import { fetchBcvTodayRate, BcvSyncResult } from '../utils/bcvSync';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
@@ -42,14 +41,6 @@ interface AccountingContextType {
   addCompany: (comp: Omit<Company, 'id'>) => Company;
   updateCompany: (comp: Company) => void;
   updateBcvRate: (newRate: number, effectiveDate?: string) => void;
-
-  // Sincronización oficial con bcv.today
-  isSyncingBcv: boolean;
-  bcvSyncStatus: 'synced' | 'syncing' | 'error' | 'idle';
-  bcvSyncResult: BcvSyncResult | null;
-  syncBcvRate: () => Promise<BcvSyncResult>;
-  autoSyncBcv: boolean;
-  setAutoSyncBcv: (enabled: boolean) => void;
 
   // Cuentas
   accounts: Account[];
@@ -291,38 +282,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
-  const [autoSyncBcv, setAutoSyncBcv] = useState<boolean>(() => {
-    try {
-      const saved = readBrowserStorage(`${STORAGE_KEY}_autoSyncBcv`);
-      return saved !== null ? JSON.parse(saved) : true;
-    } catch {
-      return true;
-    }
-  });
-
-  const [isSyncingBcv, setIsSyncingBcv] = useState<boolean>(false);
-  const [bcvSyncStatus, setBcvSyncStatus] = useState<'synced' | 'syncing' | 'error' | 'idle'>('idle');
-  const [bcvSyncResult, setBcvSyncResult] = useState<BcvSyncResult | null>(() => {
-    try {
-      const saved = readBrowserStorage(`${STORAGE_KEY}_bcvSyncResult`);
-      return saved ? JSON.parse(saved) : null;
-    } catch {
-      return null;
-    }
-  });
-
-  useEffect(() => {
-    if (!window.sicovenStore) {
-      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
-    }
-  }, [autoSyncBcv]);
-
-  useEffect(() => {
-    if (!window.sicovenStore && bcvSyncResult) {
-      localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
-    }
-  }, [bcvSyncResult]);
-
   // SQLite local es la persistencia operativa en la versión de escritorio.
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -331,7 +290,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency
   };
 
   useEffect(() => {
@@ -396,8 +355,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
             if (Array.isArray(saved.creditSettlements)) setCreditSettlements(saved.creditSettlements as CreditSettlement[]);
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
-            if (typeof saved.autoSyncBcv === 'boolean') setAutoSyncBcv(saved.autoSyncBcv);
-            if (saved.bcvSyncResult && typeof saved.bcvSyncResult === 'object') setBcvSyncResult(saved.bcvSyncResult as BcvSyncResult);
           } else {
             // Arranque limpio sin datos ficticios para ambas ediciones (completa y DEMO)
             setCompanies([]);
@@ -463,85 +420,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
       localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
       localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
-      localStorage.setItem(`${STORAGE_KEY}_autoSyncBcv`, JSON.stringify(autoSyncBcv));
-      if (bcvSyncResult) localStorage.setItem(`${STORAGE_KEY}_bcvSyncResult`, JSON.stringify(bcvSyncResult));
     } catch (error) {
       console.error('Error guardando datos locales de desarrollo:', error);
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency, autoSyncBcv, bcvSyncResult]);
-
-  const syncBcvRate = async (): Promise<BcvSyncResult> => {
-    setIsSyncingBcv(true);
-    setBcvSyncStatus('syncing');
-    try {
-      const result = await fetchBcvTodayRate();
-      // Si falla el proveedor, conserva la última tasa conocida en la vista; el estado
-      // sigue siendo "error" y el mensaje de error deja claro que no hubo actualización.
-      // Un fallo nunca borra la última tasa válida ni la fecha de su publicación.
-      // Se devuelve el mismo resultado conservado que ve la interfaz, para que ningún
-      // consumidor pueda interpretar el fallo como una tasa cero.
-      const visibleResult: BcvSyncResult = result.success && result.usd > 0
-        ? result
-        : {
-            ...result,
-            usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
-            effectiveDate: currentCompany.lastRateUpdate || '',
-          };
-      setBcvSyncResult(visibleResult);
-      if (result.success && result.usd > 0) {
-        setBcvSyncStatus('synced');
-        // Si el proveedor no publica fecha, conserva la fecha conocida; no inventa "hoy".
-        setCompanies(prev =>
-          prev.map(c => c.id === currentCompanyId
-            ? {
-                ...c,
-                bcvRate: result.usd,
-                lastRateUpdate: result.effectiveDate || c.lastRateUpdate || '',
-              }
-            : c)
-        );
-      } else {
-        setBcvSyncStatus('error');
-      }
-      return visibleResult;
-    } catch (err: any) {
-      const failResult: BcvSyncResult = {
-        success: false,
-        usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
-        effectiveDate: currentCompany.lastRateUpdate || '',
-        updatedAt: '',
-        sourceUrl: 'https://bcv.today/api/rate.json',
-        syncedAt: new Date().toLocaleTimeString('es-VE'),
-        error: err?.message || 'Error al sincronizar con bcv.today'
-      };
-      setBcvSyncResult(failResult);
-      setBcvSyncStatus('error');
-      return failResult;
-    } finally {
-      setIsSyncingBcv(false);
-    }
-  };
-
-  // Sincroniza al iniciar y al recuperar conectividad/enfocar la app, una vez por día y empresa.
-  const lastAutoSyncDayRef = useRef<string>('');
-  useEffect(() => {
-    if (!autoSyncBcv || companies.length === 0 || !currentCompanyId) return;
-    const maybeSyncToday = () => {
-      if (typeof navigator !== 'undefined' && !navigator.onLine) return;
-      const today = new Date().toLocaleDateString('en-CA');
-      const syncKey = `${currentCompanyId}:${today}`;
-      if (lastAutoSyncDayRef.current === syncKey) return;
-      lastAutoSyncDayRef.current = syncKey;
-      void syncBcvRate();
-    };
-    maybeSyncToday();
-    window.addEventListener('online', maybeSyncToday);
-    window.addEventListener('focus', maybeSyncToday);
-    return () => {
-      window.removeEventListener('online', maybeSyncToday);
-      window.removeEventListener('focus', maybeSyncToday);
-    };
-  }, [companies.length, autoSyncBcv, currentCompanyId]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
@@ -2244,7 +2126,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankStatementMovements([]);
     setCreditSettlements([]);
     setDisplayCurrency('DUAL');
-    setBcvSyncResult(null);
   };
 
   const exportBackupJson = (): string => {
@@ -2398,12 +2279,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addCompany,
         updateCompany,
         updateBcvRate,
-        isSyncingBcv,
-        bcvSyncStatus,
-        bcvSyncResult,
-        syncBcvRate,
-        autoSyncBcv,
-        setAutoSyncBcv,
         accounts,
         addAccount,
         journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
