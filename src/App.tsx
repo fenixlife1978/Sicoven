@@ -90,6 +90,7 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         activeTab={activeTab}
         setActiveTab={setActiveTab}
         onOpenCompanyModal={() => setIsCompanyModalOpen(true)}
+        onOpenBcvModal={() => setIsBcvModalOpen(true)}
       />
 
       {/* Main Container */}
