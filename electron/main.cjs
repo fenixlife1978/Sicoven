@@ -383,11 +383,10 @@ app.whenReady().then(async () => {
       db.prepare('DELETE FROM app_state').run();
       db.prepare("INSERT INTO app_state(state_key,state_json,updated_at) VALUES('accounting',?,datetime('now'))")
         .run(JSON.stringify(emptyState));
-      // Los eventos anteriores pueden contener metadatos de actividad de los módulos.
-      // Se elimina ese historial operativo; las cuentas y la licencia permanecen intactas.
-      db.prepare('DELETE FROM audit_events').run();
+      // El reinicio operativo no borra la pista de auditoría: se conserva todo
+      // el historial previo y se registra el reinicio como un evento adicional.
       db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'auth_sessions', 'license_state'], removed: ['app_state', 'operational_audit_events'] }));
+        .run('factory_reset', JSON.stringify({ preserved: ['auth_users', 'auth_sessions', 'license_state', 'audit_events'], removed: ['app_state'] }));
     });
     reset();
     const persisted = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
@@ -444,12 +443,15 @@ app.whenReady().then(async () => {
           throw new Error('No se puede retirar la marca de ajuste del asiento #' + prior.entryNumber + '.');
         }
       }
-      const seenNumbers = new Set();
+      const priorNumberKeys = new Set(priorEntries.map(entry => String(entry.companyId) + ':' + String(entry.entryNumber)));
+      const seenNewNumbers = new Set();
       for (const entry of nextEntries) {
         const numberKey = String(entry.companyId) + ':' + String(entry.entryNumber);
-        if (seenNumbers.has(numberKey)) throw new Error('Hay números de asiento duplicados en la empresa ' + entry.companyId + '.');
-        seenNumbers.add(numberKey);
         if (!priorById.has(String(entry.id))) {
+          if (priorNumberKeys.has(numberKey) || seenNewNumbers.has(numberKey)) {
+            throw new Error('SQLite bloqueó un número de asiento duplicado en la empresa ' + entry.companyId + '.');
+          }
+          seenNewNumbers.add(numberKey);
           if (!Array.isArray(entry.items) || entry.items.length < 2) throw new Error('Un nuevo asiento no contiene líneas contables suficientes.');
           const totals = entry.items.reduce((sum, item) => {
             const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
