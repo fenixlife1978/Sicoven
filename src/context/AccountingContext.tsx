@@ -689,12 +689,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
+    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
+    const rate = Number(purchaseData.bcvRate || currentCompany.bcvRate);
+    if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
+    const amounts = [
+      purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
+      purchaseData.vatAmountBs, purchaseData.vatWithheldBs, purchaseData.islrWithheldBs || 0,
+      purchaseData.igtfAmountBs || 0
+    ];
+    if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
+      throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
+    }
+    const expectedTotal = Math.round((
+      purchaseData.taxableBaseBs + purchaseData.exemptAmountBs +
+      purchaseData.vatAmountBs + (purchaseData.igtfAmountBs || 0)
+    ) * 100) / 100;
+    if (Math.abs(expectedTotal - purchaseData.totalAmountBs) > 0.01) {
+      throw new Error('El total de la compra no coincide con base imponible, exento, IVA e IGTF.');
+    }
+    if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
+      throw new Error('Las retenciones no pueden superar el total de la factura.');
+    }
+
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const companyKey = currentCompany.id;
     const nextOp = Math.max(companyPurchases.reduce((max, p) => Math.max(max, p.opNumber || 0), 0), purchaseSequenceRef.current[companyKey] || 0) + 1;
     purchaseSequenceRef.current[companyKey] = nextOp;
     const purchaseId = `pur-${companyKey}-${nextOp}-${Date.now()}`;
-    const rate = purchaseData.bcvRate || currentCompany.bcvRate;
 
     // Generar correlativo comprobante IVA si retiene
     let voucherNum = purchaseData.voucherNumber;
@@ -799,6 +821,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       creditUsd: netPayableBs / rate,
       description: `Neto a pagar Fac. ${purchaseData.invoiceNumber}`
     });
+
+    const debitBs = items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
+    const creditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const debitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
+    const creditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
+    if (Math.abs(debitBs - creditBs) > 0.01 || Math.abs(debitUsd - creditUsd) > 0.01) {
+      throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
+    }
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
