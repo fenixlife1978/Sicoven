@@ -1838,7 +1838,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const isSupplierReturn = movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
     const adjustmentDelta = Number(movData.balanceQty) - prod.currentStock;
     const isPositiveAdjustment = movData.type === 'AJUSTE' && adjustmentDelta > 0;
-    const shouldPost = isSale || isLoss || isCustomerReturn || isSupplierReturn || movData.type === 'AJUSTE';
+    const shouldPost = !movData.inventoryOnlyCorrection && (isSale || isLoss || isCustomerReturn || isSupplierReturn || movData.type === 'AJUSTE');
     if (shouldPost) {
       if (!inventoryAccount || !inventoryAccount.isMovement) throw new Error(`La cuenta de inventario ${inventoryAccountCode} no existe o no admite movimientos.`);
       const payableAccount = accounts.find(a => a.code === '2.1.1.01' && a.isMovement);
