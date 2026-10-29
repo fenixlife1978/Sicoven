@@ -248,6 +248,13 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
             )}
           </div>
 
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+            <label className="flex items-start gap-2 text-xs text-slate-800 cursor-pointer">
+              <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
+              <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-[11px] text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa.</span></span>
+            </label>
+          </div>
+
           {/* Domicilio Fiscal y Contacto */}
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">
