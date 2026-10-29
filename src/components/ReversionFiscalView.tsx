@@ -16,6 +16,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [workpaperNote, setWorkpaperNote] = useState('');
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
   const [inventoryReviewed, setInventoryReviewed] = useState(false);
+  const [inventoryCorrectionRef, setInventoryCorrectionRef] = useState('');
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
 
@@ -84,20 +85,26 @@ export const ReversionFiscalView: React.FC = () => {
       setFeedback({kind:'error', message:'Confirme la revisión del Kardex y la necesidad de registrar movimientos compensatorios por separado antes de reversar la factura.'});
       return;
     }
+    if (requiresInventoryReview && inventoryCorrectionRef.trim().length < 4) {
+      setFeedback({kind:'error', message:'Indique el número de documento o papel de trabajo que soporta la conciliación/corrección del inventario (mínimo 4 caracteres).'});
+      return;
+    }
     const confirmed = window.confirm(
       'Se registrará un contra-asiento nuevo e inmutable. No se borrará el asiento original. La reversión contable no sustituye la nota de crédito ni la rectificación fiscal que legalmente corresponda. ¿Desea continuar?'
     );
     if (!confirmed) return;
     try {
       const entry = reverseJournalEntry(
-        source.id, effectiveDate, reason, workpaperNote, isPriorPeriod,
-        isPriorPeriod ? retainedEarningsCode : undefined
+        source.id, effectiveDate, reason,
+        requiresInventoryReview ? workpaperNote.trim() + '\\nReferencia de conciliación/corrección de inventario: ' + inventoryCorrectionRef.trim() : workpaperNote,
+        isPriorPeriod, isPriorPeriod ? retainedEarningsCode : undefined
       );
       setFeedback({kind:'success', message:'Contra-asiento '+entry.entryNumber+' registrado y enlazado al asiento '+source.entryNumber+'. El original permanece en el historial.'});
       setReason('');
       setWorkpaperNote('');
       setSelectedId('');
       setInventoryReviewed(false);
+      setInventoryCorrectionRef('');
     } catch (error) {
       setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión.'});
     }
@@ -143,7 +150,7 @@ export const ReversionFiscalView: React.FC = () => {
                 <div><span className="text-slate-500">Tipo / referencia:</span> {source.type} · {source.referenceDoc || 'Sin referencia'}</div>
                 <div><span className="text-slate-500">Descripción:</span> {source.description}</div>
                 {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
-                {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y que la corrección del inventario se gestionará por separado con soporte documental.</span></label></div>}
+                {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y que la corrección del inventario se gestionará por separado con soporte documental.</span></label><label className="block font-semibold">Referencia del soporte de conciliación/corrección de inventario</label><input value={inventoryCorrectionRef} onChange={event=>setInventoryCorrectionRef(event.target.value)} maxLength={160} placeholder="Ej. AJ-KARDEX-2026-004 / papel de trabajo" className="w-full rounded-lg border border-red-300 bg-white p-2 text-sm" /><p className="text-xs">Esta referencia quedará anexada al papel de trabajo de la reversión. El sistema no verifica por sí solo que la compensación haya sido contabilizada.</p></div>}
                 {hasReversal(source.id) && <p className="text-red-700 font-semibold">Este asiento ya fue reversado.</p>}
               </div>}
               <label className="block text-sm font-semibold text-slate-700">2. Fecha del contra-asiento</label>
