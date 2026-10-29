@@ -5,7 +5,7 @@ import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
-    currentCompany, accounts, journalEntries, sales, purchases, movements,
+    currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement,
     reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
@@ -17,6 +17,10 @@ export const ReversionFiscalView: React.FC = () => {
   const [retainedEarningsCode, setRetainedEarningsCode] = useState('');
   const [inventoryReviewed, setInventoryReviewed] = useState(false);
   const [inventoryCorrectionRef, setInventoryCorrectionRef] = useState('');
+  const [correctionMovementId, setCorrectionMovementId] = useState('');
+  const [correctionQuantity, setCorrectionQuantity] = useState('1');
+  const [correctionDate, setCorrectionDate] = useState(today);
+  const [correctionDocumentRef, setCorrectionDocumentRef] = useState('');
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
 
@@ -57,11 +61,25 @@ export const ReversionFiscalView: React.FC = () => {
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
   const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
   const linkedInventoryMovements = source && linkedInvoiceNumber
-    ? movements.filter(movement => movement.companyId === currentCompany.id &&
+    ? movements.filter(movement => movement.companyId === currentCompany.id && !movement.correctionForMovementId &&
         (movement.journalEntryId === source.id || movement.documentRef.trim().toLocaleUpperCase() === linkedInvoiceNumber.trim().toLocaleUpperCase() ||
          movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))
     : [];
   const requiresInventoryReview = linkedInventoryMovements.length > 0;
+  const correctableMovements = linkedInventoryMovements.filter(movement => {
+    const matchesDocumentFlow = linkedSale
+      ? movement.type === 'SALIDA' && movement.concept === 'VENTA'
+      : linkedPurchase ? movement.type === 'ENTRADA' && movement.concept === 'COMPRA' : false;
+    if (!matchesDocumentFlow) return false;
+    const corrected = movements.filter(item => item.companyId === currentCompany.id && item.correctionForMovementId === movement.id)
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    return Number(movement.quantity) - corrected > 1e-8;
+  });
+  const selectedCorrectionSource = correctableMovements.find(movement => movement.id === correctionMovementId);
+  const remainingCorrectionQuantity = selectedCorrectionSource
+    ? Math.max(0, selectedCorrectionSource.quantity - movements.filter(item => item.companyId === currentCompany.id && item.correctionForMovementId === selectedCorrectionSource.id).reduce((sum, item) => sum + Number(item.quantity || 0), 0))
+    : 0;
+
   const balanceSheetImpactBs = preview.reduce((sum, item) => {
     const type = accountMap.get(item.targetCode)?.type;
     return ['ACTIVO','PASIVO','PATRIMONIO'].includes(type || '') ? sum + item.debitBs - item.creditBs : sum;
@@ -78,6 +96,55 @@ export const ReversionFiscalView: React.FC = () => {
     const type = accountMap.get(item.targetCode)?.type;
     return ['INGRESOS','COSTOS','GASTOS'].includes(type || '') ? sum + item.debitUsd - item.creditUsd : sum;
   }, 0);
+
+  const registerInventoryCorrection = () => {
+    const original = selectedCorrectionSource;
+    if (!original) {
+      setFeedback({kind:'error', message:'Seleccione un movimiento original de Kardex que admita devolución.'});
+      return;
+    }
+    const quantity = Number(correctionQuantity);
+    if (!Number.isFinite(quantity) || quantity <= 0 || quantity > remainingCorrectionQuantity + 1e-8) {
+      setFeedback({kind:'error', message:'La cantidad debe ser positiva y no superar las unidades pendientes del movimiento original (' + remainingCorrectionQuantity + ').'});
+      return;
+    }
+    if (!correctionDate || correctionDate < original.date || correctionDocumentRef.trim().length < 4) {
+      setFeedback({kind:'error', message:'Indique una fecha válida no anterior al movimiento original y una referencia documental de al menos 4 caracteres.'});
+      return;
+    }
+    const product = products.find(item => item.id === original.productId && item.companyId === currentCompany.id);
+    if (!product) {
+      setFeedback({kind:'error', message:'No se encontró el artículo original en la empresa activa.'});
+      return;
+    }
+    const isCustomerReturn = Boolean(linkedSale);
+    if (!isCustomerReturn && product.costingMethod === 'PEPS') {
+      setFeedback({kind:'error', message:'La devolución a proveedor con PEPS requiere identificar el lote de origen. No se registró el movimiento.'});
+      return;
+    }
+    try {
+      const rate = Number(original.bcvRate || currentCompany.bcvRate);
+      addMovement({
+        productId: original.productId, productName: original.productName, productCode: original.productCode,
+        date: correctionDate, type: isCustomerReturn ? 'ENTRADA' : 'SALIDA',
+        concept: isCustomerReturn ? 'DEVOLUCION_CLIENTE' : 'DEVOLUCION_COMPRA',
+        documentRef: correctionDocumentRef.trim(), documentType: 'Nota de crédito',
+        counterpartyRif: original.counterpartyRif || (linkedSale ? linkedSale.customerRif : linkedPurchase?.supplierRif) || '',
+        counterpartyName: original.counterpartyName || (linkedSale ? linkedSale.customerName : linkedPurchase?.supplierName) || '',
+        bcvRate: rate, quantity, unitCostBs: original.unitCostBs, unitCostUsd: original.unitCostUsd,
+        totalCostBs: quantity * original.unitCostBs, totalCostUsd: quantity * original.unitCostUsd,
+        balanceQty: product.currentStock, balanceTotalBs: product.currentStock * product.avgCostBs,
+        balanceTotalUsd: product.currentStock * product.avgCostUsd,
+        correctionForMovementId: original.id
+      });
+      setFeedback({kind:'success', message:'Devolución registrada y enlazada al movimiento original del Kardex. Revise el nuevo asiento y el saldo antes de continuar con la reversión de la factura.'});
+      setCorrectionQuantity('1');
+      setCorrectionMovementId('');
+      setCorrectionDocumentRef('');
+    } catch (error) {
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la corrección de inventario.'});
+    }
+  };
 
   const submitReversal = () => {
     if (!source || reversalDisabled) return;
@@ -150,7 +217,28 @@ export const ReversionFiscalView: React.FC = () => {
                 <div><span className="text-slate-500">Tipo / referencia:</span> {source.type} · {source.referenceDoc || 'Sin referencia'}</div>
                 <div><span className="text-slate-500">Descripción:</span> {source.description}</div>
                 {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
-                {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y que la corrección del inventario se gestionará por separado con soporte documental.</span></label><label className="block font-semibold">Referencia del soporte de conciliación/corrección de inventario</label><input value={inventoryCorrectionRef} onChange={event=>setInventoryCorrectionRef(event.target.value)} maxLength={160} placeholder="Ej. AJ-KARDEX-2026-004 / papel de trabajo" className="w-full rounded-lg border border-red-300 bg-white p-2 text-sm" /><p className="text-xs">Esta referencia quedará anexada al papel de trabajo de la reversión. El sistema no verifica por sí solo que la compensación haya sido contabilizada.</p></div>}
+                {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
+                  <p className="font-bold text-slate-900">Registrar devolución física trazable (si corresponde)</p>
+                  <p className="text-xs text-slate-600">Use esta acción solo para unidades que efectivamente regresaron del cliente o que efectivamente se devolvieron al proveedor. No registre aquí mercancía vendida, consumida, dañada o no localizada.</p>
+                  {correctableMovements.length > 0 ? <>
+                    <label className="block font-semibold">Movimiento original</label>
+                    <select value={correctionMovementId} onChange={event=>setCorrectionMovementId(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
+                      <option value="">Seleccione movimiento de Kardex…</option>
+                      {correctableMovements.map(movement => {
+                        const corrected = movements.filter(item => item.companyId === currentCompany.id && item.correctionForMovementId === movement.id).reduce((sum,item)=>sum+Number(item.quantity||0),0);
+                        return <option key={movement.id} value={movement.id}>{movement.productCode} · {movement.productName} · original {movement.quantity} · pendiente {Math.max(0,movement.quantity-corrected)}</option>;
+                      })}
+                    </select>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                      <div><label className="block text-xs font-semibold mb-1">Cantidad devuelta</label><input type="number" min="0.000001" max={remainingCorrectionQuantity || undefined} step="0.000001" value={correctionQuantity} onChange={event=>setCorrectionQuantity(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                      <div><label className="block text-xs font-semibold mb-1">Fecha del movimiento</label><input type="date" min={selectedCorrectionSource?.date} value={correctionDate} onChange={event=>setCorrectionDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                      <div><label className="block text-xs font-semibold mb-1">Ref. nota/soporte</label><input value={correctionDocumentRef} onChange={event=>setCorrectionDocumentRef(event.target.value)} maxLength={120} placeholder="NC-000123" className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
+                    </div>
+                    {selectedCorrectionSource && !linkedSale && products.find(item=>item.id===selectedCorrectionSource.productId)?.costingMethod === 'PEPS' && <p className="text-xs text-amber-800">PEPS: la devolución al proveedor queda bloqueada hasta identificar el lote original; no se descargará un lote aproximado.</p>}
+                    <button type="button" onClick={registerInventoryCorrection} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700">Registrar devolución y asiento de inventario</button>
+                  </> : <p className="text-xs text-slate-600">No hay unidades pendientes que coincidan con una salida por venta o una entrada por compra. Si la mercancía no regresó físicamente, documente su disposición en el papel de trabajo sin alterar existencias.</p>}
+                </div>
+                <label className="flex items-start gap-2 font-semibold"><input type="checkbox" checked={inventoryReviewed} onChange={event=>setInventoryReviewed(event.target.checked)} className="mt-1" /><span>Confirmo que revisé estos movimientos y la disposición física de cada uno; cualquier devolución real se registró arriba o se documentará por separado.</span></label><label className="block font-semibold">Referencia del soporte de conciliación/corrección de inventario</label><input value={inventoryCorrectionRef} onChange={event=>setInventoryCorrectionRef(event.target.value)} maxLength={160} placeholder="Ej. AJ-KARDEX-2026-004 / papel de trabajo" className="w-full rounded-lg border border-red-300 bg-white p-2 text-sm" /><p className="text-xs">Esta referencia quedará anexada al papel de trabajo de la reversión. El sistema no verifica por sí solo que la compensación haya sido contabilizada.</p></div>}
                 {hasReversal(source.id) && <p className="text-red-700 font-semibold">Este asiento ya fue reversado.</p>}
               </div>}
               <label className="block text-sm font-semibold text-slate-700">2. Fecha del contra-asiento</label>
