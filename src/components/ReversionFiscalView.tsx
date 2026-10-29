@@ -108,8 +108,11 @@ export const ReversionFiscalView: React.FC = () => {
       setFeedback({kind:'error', message:'La cantidad debe ser positiva y no superar las unidades pendientes del movimiento original (' + remainingCorrectionQuantity + ').'});
       return;
     }
-    if (!correctionDate || correctionDate < original.date || correctionDocumentRef.trim().length < 4) {
-      setFeedback({kind:'error', message:'Indique una fecha válida no anterior al movimiento original y una referencia documental de al menos 4 caracteres.'});
+    const latestProductMovementDate = movements
+      .filter(item => item.companyId === currentCompany.id && item.productId === original.productId)
+      .reduce((latest, item) => item.date > latest ? item.date : latest, original.date);
+    if (!correctionDate || correctionDate < original.date || correctionDate < latestProductMovementDate || correctionDocumentRef.trim().length < 4) {
+      setFeedback({kind:'error', message:'La fecha debe ser válida y no anterior al último movimiento del Kardex (' + latestProductMovementDate + '); indique también una referencia documental de al menos 4 caracteres.'});
       return;
     }
     const product = products.find(item => item.id === original.productId && item.companyId === currentCompany.id);
@@ -128,7 +131,7 @@ export const ReversionFiscalView: React.FC = () => {
         productId: original.productId, productName: original.productName, productCode: original.productCode,
         date: correctionDate, type: isCustomerReturn ? 'ENTRADA' : 'SALIDA',
         concept: isCustomerReturn ? 'DEVOLUCION_CLIENTE' : 'DEVOLUCION_COMPRA',
-        documentRef: correctionDocumentRef.trim(), documentType: 'Nota de crédito',
+        documentRef: correctionDocumentRef.trim(), documentType: 'Soporte de devolución física',
         counterpartyRif: original.counterpartyRif || (linkedSale ? linkedSale.customerRif : linkedPurchase?.supplierRif) || '',
         counterpartyName: original.counterpartyName || (linkedSale ? linkedSale.customerName : linkedPurchase?.supplierName) || '',
         bcvRate: rate, quantity, unitCostBs: original.unitCostBs, unitCostUsd: original.unitCostUsd,
