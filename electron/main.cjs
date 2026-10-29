@@ -368,6 +368,22 @@ app.whenReady().then(async () => {
     try { return JSON.parse(row.state_json); } catch { return null; }
   });
 
+  ipcMain.handle('sicoven:audit-list', (_event, token, requestedLimit = 100) => {
+    if (!licenseView().authorized || !getActiveSession(token)) {
+      return { ok: false, message: 'Sesión no válida o licencia no autorizada.', events: [] };
+    }
+    const limit = Math.min(500, Math.max(1, Math.floor(Number(requestedLimit) || 100)));
+    const rows = db.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id DESC LIMIT ?').all(limit);
+    return {
+      ok: true,
+      events: rows.map(row => {
+        let details = {};
+        try { details = JSON.parse(row.details_json) || {}; } catch {}
+        return { id: row.id, eventType: row.event_type, details, createdAt: row.created_at };
+      })
+    };
+  });
+
   ipcMain.handle('sicoven:reset-accounting', (_event, token) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
