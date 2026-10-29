@@ -150,6 +150,12 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </div>
 
+          {/* Tasa BCV visible y acceso a actualización manual */}
+          <button onClick={() => onOpenBcvModal?.()} className="flex items-center gap-1.5 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 hover:bg-slate-700 transition min-w-0" title="Consultar o actualizar tasa BCV manualmente">
+            <img src="./bcv-emblem.svg" alt="BCV" className="h-7 w-7 object-contain bg-white rounded-full p-0.5" />
+            <span className="text-left leading-tight"><span className="block text-[9px] uppercase tracking-wide text-slate-400">Tasa BCV</span><span className="block text-[11px] sm:text-xs font-bold text-emerald-300 whitespace-nowrap">Bs. {Number(currentCompany.bcvRate || 0).toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:4})}/$</span><span className="hidden sm:block text-[9px] text-slate-400">{currentCompany.lastRateUpdate || 'Sin fecha'}</span></span>
+          </button>
+
           {/* Company Switcher, Currency View & Mobile Menu Button */}
           <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
             {/* Multi-Company Selector */}
