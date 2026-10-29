@@ -110,3 +110,79 @@ test('one-time cleanup of legacy demo companies is permitted', () => {
     emptyState([demoEntry]), emptyState([])
   ));
 });
+
+test('SQLite accepts fiscal cancellation only when linked to its immutable contra-entry', () => {
+  const original = { ...sourceEntry(), type: 'VENTA', referenceDoc: 'FAC-100' };
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  const oldSale = {
+    id: 'sale-1', companyId: 'company-1', invoiceNumber: '100',
+    journalEntryId: original.id, isCancelled: false
+  };
+  const cancelledSale = {
+    ...oldSale, isCancelled: true, cancelledByJournalEntryId: reversal.id,
+    cancellationReason: 'Factura emitida con datos incorrectos',
+    cancellationNote: 'Soporte revisado y justificación archivada'
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState([original]), sales: [oldSale] },
+    { ...emptyState([linkedOriginal, reversal]), sales: [cancelledSale] }
+  ));
+});
+
+test('SQLite rejects a fiscal cancellation without an actual contra-entry', () => {
+  const original = { ...sourceEntry(), type: 'COMPRA', referenceDoc: 'FAC-200' };
+  const oldPurchase = {
+    id: 'purchase-1', companyId: 'company-1', invoiceNumber: '200',
+    journalEntryId: original.id, isCancelled: false
+  };
+  const cancelledPurchase = {
+    ...oldPurchase, isCancelled: true, cancelledByJournalEntryId: 'missing-entry',
+    cancellationReason: 'Documento incorrecto', cancellationNote: 'Soporte revisado y archivado'
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    { ...emptyState([original]), purchases: [oldPurchase] },
+    { ...emptyState([original]), purchases: [cancelledPurchase] }
+  ), /cancelación del documento fiscal.*contra-asiento enlazado/i);
+});
+
+test('SQLite accepts reversal of a settlement only when the settlement points to its contra-entry', () => {
+  const original = sourceEntry();
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  const oldSettlement = {
+    id: 'settlement-1', companyId: 'company-1', documentId: 'purchase-1',
+    journalEntryId: original.id, amountUsd: 10, amountBs: 1000, isReversed: false
+  };
+  const reversedSettlement = {
+    ...oldSettlement, isReversed: true, reversedByJournalEntryId: reversal.id
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState([original]), creditSettlements: [oldSettlement] },
+    { ...emptyState([linkedOriginal, reversal]), creditSettlements: [reversedSettlement] }
+  ));
+});
+
+test('SQLite requires fiscal retention correction flags to link to the document reversal', () => {
+  const original = { ...sourceEntry(), type: 'COMPRA', referenceDoc: 'FAC-300' };
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  const oldPurchase = {
+    id: 'purchase-3', companyId: 'company-1', invoiceNumber: '300',
+    journalEntryId: original.id, isCancelled: false
+  };
+  const cancelledPurchase = {
+    ...oldPurchase, isCancelled: true, cancelledByJournalEntryId: reversal.id,
+    cancellationReason: 'Factura con error de identificación',
+    cancellationNote: 'Documento de soporte revisado por el contador'
+  };
+  const oldVoucher = { id: 'vat-1', companyId: 'company-1', purchaseRecordId: oldPurchase.id, requiresFiscalCorrection: false };
+  const correctedVoucher = {
+    ...oldVoucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id,
+    correctionNote: 'Requiere rectificación fiscal documentada'
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState([original]), purchases: [oldPurchase], vatVouchers: [oldVoucher] },
+    { ...emptyState([linkedOriginal, reversal]), purchases: [cancelledPurchase], vatVouchers: [correctedVoucher] }
+  ));
+});
