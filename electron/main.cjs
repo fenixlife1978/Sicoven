@@ -414,8 +414,7 @@ app.whenReady().then(async () => {
         try { priorState = JSON.parse(priorRow.state_json) || {}; }
         catch { throw new Error('La base SQLite contiene un estado contable ilegible; se bloqueó la escritura para proteger el historial.'); }
       }
-      const { priorEntries, nextEntries, priorById, nextById } =
-        validateAccountingSnapshot(priorState, state);
+      const { nextEntries, priorById } = validateAccountingSnapshot(priorState, state);
       const auditInsert = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)');
       for (const entry of nextEntries) {
         if (priorById.has(String(entry.id))) continue;
