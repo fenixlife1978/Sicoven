@@ -65,6 +65,7 @@ export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) =
       email: email.trim() || 'contacto@empresa.com.ve',
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
+      isIgtfPerceptionAgent,
       fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
       bcvRate: Number(bcvRate) || 0,
       lastRateUpdate: new Date().toISOString().split('T')[0]
