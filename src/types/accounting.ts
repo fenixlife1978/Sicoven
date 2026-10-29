@@ -311,6 +311,9 @@ export interface IslrRetentionVoucher {
   bcvRate: number;
   baseAmountUsd: number;
   withheldAmountUsd: number;
+  requiresFiscalCorrection?: boolean;
+  correctionEntryId?: string;
+  correctionNote?: string;
 }
 
 export interface BankAccount {
