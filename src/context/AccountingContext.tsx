@@ -475,7 +475,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBcvSyncStatus('syncing');
     try {
       const result = await fetchBcvTodayRate();
-      setBcvSyncResult(result);
+      // Si falla el proveedor, conserva la última tasa conocida en la vista; el estado
+      // sigue siendo "error" y el mensaje de error deja claro que no hubo actualización.
+      setBcvSyncResult(result.success && result.usd > 0 ? result : {
+        ...result,
+        usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
+        effectiveDate: currentCompany.lastRateUpdate || '',
+      });
       if (result.success && result.usd > 0) {
         setBcvSyncStatus('synced');
         // Actualizar la tasa en la empresa actual automáticamente
@@ -498,8 +504,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     } catch (err: any) {
       const failResult: BcvSyncResult = {
         success: false,
-        usd: 0,
-        effectiveDate: '',
+        usd: currentCompany.bcvRate > 0 ? currentCompany.bcvRate : 0,
+        effectiveDate: currentCompany.lastRateUpdate || '',
         updatedAt: '',
         sourceUrl: 'https://bcv.today/api/rate.json',
         syncedAt: new Date().toLocaleTimeString('es-VE'),
