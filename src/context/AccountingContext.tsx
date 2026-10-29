@@ -1675,6 +1675,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addMovement = (movData: Omit<InventoryMovement, 'id' | 'companyId'>): InventoryMovement => {
     const prod = products.find(p => p.id === movData.productId && p.companyId === currentCompany.id);
     if (!prod) throw new Error('El artículo no existe en la empresa activa.');
+    if (movData.correctionForMovementId) {
+      const original = movements.find(m => m.id === movData.correctionForMovementId && m.companyId === currentCompany.id);
+      if (!original || original.correctionForMovementId) {
+        throw new Error('El movimiento original de la corrección no existe o ya es una corrección.');
+      }
+      if (original.productId !== movData.productId) {
+        throw new Error('La corrección debe afectar el mismo artículo del movimiento original.');
+      }
+      const isCustomerReturn = original.type === 'SALIDA' && original.concept === 'VENTA' &&
+        movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE';
+      const isSupplierReturn = original.type === 'ENTRADA' && original.concept === 'COMPRA' &&
+        movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
+      if (!isCustomerReturn && !isSupplierReturn) {
+        throw new Error('La corrección debe ser una devolución de cliente sobre una salida por venta o una devolución a proveedor sobre una entrada por compra.');
+      }
+      const correctedQuantity = movements
+        .filter(m => m.companyId === currentCompany.id && m.correctionForMovementId === original.id)
+        .reduce((sum, m) => sum + Number(m.quantity || 0), 0);
+      const requestedQuantity = Number(movData.quantity);
+      if (!Number.isFinite(requestedQuantity) || requestedQuantity <= 0 ||
+          correctedQuantity + requestedQuantity > Number(original.quantity) + 1e-8) {
+        throw new Error('La cantidad de correcciones supera la cantidad del movimiento original. Disponible para corregir: ' +
+          Math.max(0, Number(original.quantity) - correctedQuantity) + '.');
+      }
+      if (isSupplierReturn && prod.costingMethod === 'PEPS') {
+        throw new Error('La devolución a proveedor con costeo PEPS requiere identificación del lote de origen. No se registró el movimiento para evitar descargar un lote incorrecto.');
+      }
+    }
     const rate = Number(movData.bcvRate ?? currentCompany.bcvRate);
     const isAdjustment = movData.type === 'AJUSTE';
     const actualQuantity = isAdjustment ? Math.abs(Number(movData.balanceQty) - prod.currentStock) : Number(movData.quantity);
