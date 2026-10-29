@@ -101,6 +101,12 @@ export interface PurchaseRecord {
   journalEntryId?: string;
   voucherNumber?: string; // Formato SENIAT: AAAAMMDDDDDDDD (14 caracteres)
   notes?: string;
+  /** Medio declarado de pago; se conserva para auditoría de IGTF. */
+  paymentMethod?: 'BS' | 'FOREIGN_CASH' | 'ZELLE' | 'INTERNATIONAL_TRANSFER' | 'CRYPTO';
+  igtfApplicable?: boolean;
+  igtfRate?: number;
+  igtfAmountBs?: number;
+  igtfAmountUsd?: number;
   // Condiciones comerciales y fiscales del crédito (se preservan por documento)
   paymentTerm?: 'CONTADO' | 'CREDITO';
   creditDays?: number;
