@@ -886,6 +886,7 @@ export async function exportVentasPdf(
   let totalBase = 0;
   let totalIva = 0;
   let totalRetenido = 0;
+  let totalIgtf = 0;
 
   const tableBody: any[] = sales.map(s => {
     totalMonto += s.totalAmountBs || 0;
