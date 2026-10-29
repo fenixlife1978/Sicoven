@@ -33,7 +33,15 @@ import { buildReversalItems } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 
+export interface AccountingAuditEvent {
+  id: number;
+  eventType: string;
+  details: Record<string, unknown>;
+  createdAt: string;
+}
+
 interface AccountingContextType {
+  getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
   companies: Company[];
   isStorageReady: boolean;
   storageError: string | null;
@@ -283,6 +291,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const updateCompany = (updated: Company) => {
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+  };
+
+  const getAuditEvents = async (limit = 100): Promise<AccountingAuditEvent[]> => {
+    if (!window.sicovenStore?.listAuditEvents) {
+      throw new Error('El historial de auditoría está disponible en la edición de escritorio con SQLite local.');
+    }
+    const result = await window.sicovenStore.listAuditEvents(token, limit);
+    if (!result.ok) throw new Error(result.message || 'No se pudo consultar el historial de auditoría local.');
+    return result.events || [];
   };
 
   const closeAccountingPeriod = (closedThroughDate: string) => {
@@ -2730,6 +2747,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     <AccountingContext.Provider
       value={{
         companies,
+        getAuditEvents,
         isStorageReady: storageReady,
         storageError,
         currentCompany,
