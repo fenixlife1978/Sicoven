@@ -320,11 +320,15 @@ export const LibroVentasView: React.FC = () => {
           <CheckCircle2 className="w-4 h-4" />
           Resumen de Ventas para Declaración de IVA (Forma 30 SENIAT)
         </h4>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs font-mono-nums">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs font-mono-nums">
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Total Ventas Internas Gravadas:</span>
             <span className="text-base font-bold text-white mt-1 block">{formatBs(totalBaseBs)}</span>
             <span className="text-[10px] text-slate-400">{formatUsd(totalBaseUsd)}</span>
+          </div>
+          <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
+            <span className="text-[11px] text-slate-400 block">IGTF percibido (3%, si aplica):</span>
+            <span className="text-base font-bold text-sky-300 mt-1 block">{formatBs(totalIgtfBs)}</span>
           </div>
           <div className="bg-slate-800/60 p-3 rounded-xl border border-slate-700/60">
             <span className="text-[11px] text-slate-400 block">Débito Fiscal Generado (16%):</span>
