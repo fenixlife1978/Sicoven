@@ -11,7 +11,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, addPurchase } = useAccounting();
+  const { currentCompany, products, movements, addPurchase, addMovement } = useAccounting();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
@@ -38,6 +38,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Currency
   const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 0);
   const [notes, setNotes] = useState<string>('');
+  const [linkInventory, setLinkInventory] = useState(false);
+  const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
@@ -80,6 +82,16 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const vatWithheldUsd = bcvRate > 0 ? vatWithheldBs / bcvRate : 0;
   const islrWithheldUsd = bcvRate > 0 ? islrWithheldBs / bcvRate : 0;
 
+  const inventoryLineTotal = inventoryLines.reduce((sum,line) => sum + Math.max(0,Number(line.quantity)||0) * Math.max(0,Number(line.unitCostBs)||0),0);
+  const inventoryLinesValid = !linkInventory || (
+    inventoryLines.length > 0 &&
+    inventoryLines.every(line => products.some(p => p.id === line.productId && p.companyId === currentCompany.id) &&
+      Number.isFinite(Number(line.quantity)) && Number(line.quantity) > 0 &&
+      Number.isFinite(Number(line.unitCostBs)) && Number(line.unitCostBs) > 0) &&
+    Math.abs(inventoryLineTotal - (taxableBaseBs + exemptAmountBs)) <= 0.02 &&
+    new Set(inventoryLines.map(line=>line.productId)).size === inventoryLines.length
+  );
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) {
@@ -97,6 +109,22 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     if (![taxableBaseBs, exemptAmountBs, vatAmountBs, igtfAmountBs, vatWithheldBs, islrWithheldBs].every(value => Number.isFinite(value) && value >= 0)) {
       window.alert('Hay importes fiscales inválidos. Revisa base imponible, exento, IVA, IGTF y retenciones.');
       return;
+    }
+    if (!inventoryLinesValid) {
+      window.alert('Las líneas deben usar artículos existentes, cantidades y costos válidos, sin repetir artículos, y conciliar con la base imponible más el monto exento. Si hay gastos no inventariables, no marques la vinculación total al Kardex.');
+      return;
+    }
+    if (linkInventory) {
+      for (const line of inventoryLines) {
+        const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
+        if (!product) { window.alert('Un artículo seleccionado ya no existe en la empresa activa.'); return; }
+        const latest = movements.filter(m => m.companyId === currentCompany.id && m.productId === product.id)
+          .reduce((value,m) => m.date > value ? m.date : value, '');
+        if (latest && invoiceDate < latest) {
+          window.alert('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + ' (' + latest + '). Registra los períodos en orden cronológico.');
+          return;
+        }
+      }
     }
     if (vatWithheldBs + islrWithheldBs > totalAmountBs + 0.005) {
       window.alert('Las retenciones no pueden superar el total de la factura.');
@@ -141,8 +169,27 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       creditDays: paymentTerm === 'CREDITO' ? creditDays : 0,
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
-      fiscalAdjustmentMode
+      fiscalAdjustmentMode,
+      inventoryLines: linkInventory ? inventoryLines.map(line => ({productId:line.productId,quantity:Number(line.quantity),unitCostBs:Number(line.unitCostBs)})) : undefined
       });
+      if (linkInventory) {
+        for (const line of inventoryLines) {
+          const product = products.find(p => p.id === line.productId && p.companyId === currentCompany.id)!;
+          const quantity = Number(line.quantity);
+          const unitCostBs = Number(line.unitCostBs);
+          addMovement({
+            productId: product.id, productName: product.name, productCode: product.code,
+            date: invoiceDate, type: 'ENTRADA', concept: 'COMPRA',
+            documentRef: 'FAC-' + invoiceNumber.trim(), documentType: 'Factura de compra',
+            counterpartyRif: formatRif(supplierRif), counterpartyName: supplierName.trim().toUpperCase(),
+            bcvRate, quantity, unitCostBs, unitCostUsd: unitCostBs / bcvRate,
+            totalCostBs: quantity * unitCostBs, totalCostUsd: quantity * unitCostBs / bcvRate,
+            balanceQty: product.currentStock + quantity,
+            balanceTotalBs: (product.currentStock + quantity) * product.avgCostBs,
+            balanceTotalUsd: (product.currentStock + quantity) * product.avgCostUsd
+          });
+        }
+      }
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
@@ -432,6 +479,27 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               <div className="rounded-lg bg-white border border-amber-200 p-3 text-[11px] text-slate-700">{currencyPricingMode === 'USD_FIJO' ? 'Se conserva el importe contractual en USD; se evaluará la diferencia cambiaria al liquidar.' : currencyPricingMode === 'BS_AJUSTABLE' ? 'Se calculará una variación preliminar del precio en Bs.; el efecto fiscal debe validarse antes de emitir documentos.' : 'La liquidación y el ajuste quedarán sujetos a revisión manual.'} La selección no modifica la factura original ni autoriza por sí sola emitir notas fiscales.</div>
             </>}
           </div>
+          <div className="p-3.5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+            <div className="flex items-start gap-2">
+              <input id="linkInventory" type="checkbox" checked={linkInventory} onChange={e=>setLinkInventory(e.target.checked)} className="mt-1" />
+              <label htmlFor="linkInventory" className="font-bold text-slate-800">Vincular mercancía de esta factura con artículos existentes del Kardex</label>
+            </div>
+            <p className="text-[11px] text-slate-600">Actívalo solo si toda la base imponible y el monto exento corresponden a mercancía inventariable. Se crearán entradas de Kardex con referencia FAC-{invoiceNumber || 'número de factura'}; no se crearán artículos automáticamente.</p>
+            {linkInventory && <>
+              {inventoryLines.map((line,index)=><div key={index} className="grid grid-cols-1 sm:grid-cols-12 gap-2 items-end rounded-lg bg-white border border-indigo-100 p-2">
+                <div className="sm:col-span-6"><label className="block font-semibold mb-1">Artículo existente</label><select required value={line.productId} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,productId:e.target.value,unitCostBs:item.unitCostBs || String(products.find(p=>p.id===e.target.value)?.avgCostBs || 0)}:item))} className="w-full rounded border border-slate-300 p-2"><option value="">Seleccionar artículo…</option>{products.filter(p=>p.companyId===currentCompany.id).map(p=><option key={p.id} value={p.id}>{p.code} · {p.name} · Existencia {p.currentStock}</option>)}</select></div>
+                <div className="sm:col-span-2"><label className="block font-semibold mb-1">Cantidad</label><input required type="number" min="0.000001" step="0.000001" value={line.quantity} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
+                <div className="sm:col-span-3"><label className="block font-semibold mb-1">Costo unitario Bs.</label><input required type="number" min="0.000001" step="0.01" value={line.unitCostBs} onChange={e=>setInventoryLines(prev=>prev.map((item,i)=>i===index?{...item,unitCostBs:e.target.value}:item))} className="w-full rounded border border-slate-300 p-2"/></div>
+                <div className="sm:col-span-1"><button type="button" disabled={inventoryLines.length===1} onClick={()=>setInventoryLines(prev=>prev.filter((_,i)=>i!==index))} className="w-full rounded border border-red-200 px-2 py-2 text-red-700 disabled:opacity-30" aria-label="Eliminar línea">×</button></div>
+              </div>)}
+              <button type="button" onClick={()=>setInventoryLines(prev=>[...prev,{productId:'',quantity:'1',unitCostBs:''}])} className="rounded-lg border border-indigo-300 bg-white px-3 py-2 font-semibold text-indigo-800">+ Añadir artículo</button>
+              <div className={Math.abs(inventoryLineTotal-(taxableBaseBs+exemptAmountBs))<=0.02 && inventoryLinesValid?'text-emerald-700':'text-rose-700'}>
+                <strong>Total líneas:</strong> {formatBs(inventoryLineTotal)} · <strong>Base + exento:</strong> {formatBs(taxableBaseBs+exemptAmountBs)}
+              </div>
+              {!inventoryLinesValid && <p className="text-rose-700 font-semibold">Las líneas no concilian; no se permitirá guardar.</p>}
+            </>}
+          </div>
+
           {/* Summary Box */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="flex justify-between items-center text-xs">

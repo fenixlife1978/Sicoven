@@ -72,7 +72,15 @@ export interface JournalEntry {
   priorPeriodAdjustment?: boolean;
 }
 
+export interface PurchaseInventoryLine {
+  productId: string;
+  quantity: number;
+  unitCostBs: number;
+}
+
 export interface PurchaseRecord {
+  /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
+  inventoryLines?: PurchaseInventoryLine[];
   id: string;
   companyId: string;
   opNumber: number;
