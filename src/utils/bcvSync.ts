@@ -86,9 +86,11 @@ export async function fetchBcvTodayRate(): Promise<BcvSyncResult> {
       const eurRate = positiveRate(data.EUR, rates.EUR);
       const cnyRate = positiveRate(data.CNY, rates.CNY);
       const publishedDate = validDate(data.effective_date) || validDate(data.date);
+      // No atribuye al proveedor una fecha de actualización local si no la publica.
+      // syncedAt ya registra cuándo consultó SICOVEN; updatedAt queda vacío si la API no lo informa.
       const updatedAt = typeof data.updated_at === 'string' && Number.isFinite(Date.parse(data.updated_at))
         ? data.updated_at
-        : new Date().toISOString();
+        : '';
 
       return {
         success: true,
