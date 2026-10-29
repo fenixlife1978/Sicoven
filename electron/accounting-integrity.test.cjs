@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+const Database = require('better-sqlite3');
 
 const line = (debitBs, creditBs, debitUsd, creditUsd) => ({
   accountCode: debitBs > 0 || creditBs > 0 ? '1.1.1.01' : '4.1.1.01',
@@ -185,4 +186,30 @@ test('SQLite requires fiscal retention correction flags to link to the document 
     { ...emptyState([original]), purchases: [oldPurchase], vatVouchers: [oldVoucher] },
     { ...emptyState([linkedOriginal, reversal]), purchases: [cancelledPurchase], vatVouchers: [correctedVoucher] }
   ));
+});
+
+test('SQLite audit_events table rejects UPDATE and DELETE operations', () => {
+  const db = new Database(':memory:');
+  try {
+    db.exec(`
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        details_json TEXT NOT NULL
+      );
+      CREATE TRIGGER audit_events_no_update
+        BEFORE UPDATE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+      CREATE TRIGGER audit_events_no_delete
+        BEFORE DELETE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+    `);
+    const insert = db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)');
+    insert.run('journal_entry_reversed', JSON.stringify({ entryId: 'entry-2' }));
+    assert.throws(() => db.prepare("UPDATE audit_events SET event_type='changed' WHERE id=1").run(), /append-only/);
+    assert.throws(() => db.prepare('DELETE FROM audit_events WHERE id=1').run(), /append-only/);
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 1);
+  } finally {
+    db.close();
+  }
 });
