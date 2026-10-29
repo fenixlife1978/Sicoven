@@ -1021,6 +1021,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       description: `Por cobrar Fac. Venta ${saleData.invoiceNumber}`
     });
 
+    // Haber: IGTF percibido por cuenta del Fisco, cuando la venta lo incluye.
+    if (saleData.igtfApplicable && (saleData.igtfAmountBs || 0) > 0) {
+      const igtfBs = saleData.igtfAmountBs || 0;
+      items.push({
+        accountCode: '2.1.2.06',
+        accountName: 'Impuesto a las Grandes Transacciones Financieras (IGTF)',
+        debitBs: 0,
+        creditBs: igtfBs,
+        debitUsd: 0,
+        creditUsd: igtfBs / rate,
+        description: `IGTF percibido 3% Fac. ${saleData.invoiceNumber}`
+      });
+    }
+
     // Haber: Ventas de Mercancías (Base imponible)
     items.push({
       accountCode: '4.1.1.01',
