@@ -48,6 +48,7 @@ export const ConfiguracionView: React.FC = () => {
   const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(
     currentCompany.defaultIvaRetentionRate
   );
+  const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState<boolean>(currentCompany.isIgtfPerceptionAgent === true);
   const [address, setAddress] = useState(currentCompany.address);
   const [phone, setPhone] = useState(currentCompany.phone);
   const [email, setEmail] = useState(currentCompany.email);
@@ -62,6 +63,7 @@ export const ConfiguracionView: React.FC = () => {
     setRifError(null);
     setTaxpayerType(currentCompany.taxpayerType);
     setDefaultIvaRetentionRate(currentCompany.defaultIvaRetentionRate);
+    setIsIgtfPerceptionAgent(currentCompany.isIgtfPerceptionAgent === true);
     setAddress(currentCompany.address);
     setPhone(currentCompany.phone);
     setEmail(currentCompany.email);
@@ -101,6 +103,7 @@ export const ConfiguracionView: React.FC = () => {
       rif: rifValidation.formattedRif,
       taxpayerType,
       defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
+      isIgtfPerceptionAgent,
       address: address.trim(),
       phone: phone.trim(),
       email: email.trim(),
@@ -307,6 +310,12 @@ export const ConfiguracionView: React.FC = () => {
                 <option value={100}>100%</option>
                 <option value={0}>0%</option>
               </select>
+            </div>
+            <div className="sm:col-span-2 rounded-lg border border-sky-200 bg-sky-50 p-3">
+              <label className="flex items-start gap-2 text-sm text-slate-800 cursor-pointer">
+                <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
+                <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-xs text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa. Este parámetro habilita el cálculo en las facturas elegibles.</span></span>
+              </label>
             </div>
             <div>
               <label className="block font-semibold text-slate-700 mb-1">Tasa Oficial BCV (Bs/$)</label>
