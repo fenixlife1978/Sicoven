@@ -68,6 +68,17 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
 
+  const oldCompanies = new Map(asArray(priorState.companies).map(company => [String(company.id), company]));
+  const nextCompanies = new Map(asArray(nextState.companies).map(company => [String(company.id), company]));
+  for (const oldCompany of oldCompanies.values()) {
+    if (!oldCompany.closedThroughDate) continue;
+    const nextCompany = nextCompanies.get(String(oldCompany.id));
+    if (!nextCompany || !nextCompany.closedThroughDate ||
+        String(nextCompany.closedThroughDate) < String(oldCompany.closedThroughDate)) {
+      throw new Error('SQLite bloqueó la reapertura o eliminación del cierre contable de la empresa ' + oldCompany.name + '. Se requiere un procedimiento formal de reapertura.');
+    }
+  }
+
   const priorEntries = asArray(priorState.journalEntries);
   const nextEntries = asArray(nextState.journalEntries);
   const priorById = new Map(priorEntries.map(entry => [String(entry.id), entry]));
