@@ -214,8 +214,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 >
                   <option value="01">01 - Factura</option>
-                  <option value="02">02 - Nota de Débito</option>
-                  <option value="03">03 - Nota de Crédito</option>
+                  <option value="02" disabled>02 - Nota de Débito (flujo contable pendiente)</option>
+                  <option value="03" disabled>03 - Nota de Crédito (flujo contable pendiente)</option>
                 </select>
               </div>
               <div>
