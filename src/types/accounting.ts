@@ -15,6 +15,8 @@ export interface Company {
   fiscalYear: number; // e.g. 2026
   bcvRate: number; // Tasa oficial BCV Bs/$
   lastRateUpdate?: string;
+  /** Último día incluido en un período contable bloqueado. */
+  closedThroughDate?: string;
   logoUrl?: string; // URL o base64 del logo de la empresa
 }
 
@@ -62,6 +64,12 @@ export interface JournalEntry {
   isAdjusted?: boolean;
   referenceDoc?: string;
   createdAt: string;
+  /** Enlace de auditoría para contra-asientos inmutables. */
+  reversalOfEntryId?: string;
+  reversedByEntryId?: string;
+  reversalReason?: string;
+  workpaperNote?: string;
+  priorPeriodAdjustment?: boolean;
 }
 
 export interface PurchaseRecord {
@@ -113,6 +121,10 @@ export interface PurchaseRecord {
   dueDate?: string; // YYYY-MM-DD
   currencyPricingMode?: 'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL';
   fiscalAdjustmentMode?: 'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR';
+  isCancelled?: boolean;
+  cancelledByJournalEntryId?: string;
+  cancellationReason?: string;
+  cancellationNote?: string;
 }
 
 export interface SaleRecord {
@@ -156,6 +168,10 @@ export interface SaleRecord {
   dueDate?: string; // YYYY-MM-DD
   currencyPricingMode?: 'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL';
   fiscalAdjustmentMode?: 'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR';
+  isCancelled?: boolean;
+  cancelledByJournalEntryId?: string;
+  cancellationReason?: string;
+  cancellationNote?: string;
 }
 
 export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';

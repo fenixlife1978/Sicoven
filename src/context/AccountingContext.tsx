@@ -50,6 +50,8 @@ interface AccountingContextType {
   journalEntries: JournalEntry[];
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
+  reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => JournalEntry;
+  closeAccountingPeriod: (closedThroughDate: string) => void;
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
@@ -282,6 +284,104 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
+  const closeAccountingPeriod = (closedThroughDate: string) => {
+    if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
+    const today = new Date().toISOString().slice(0, 10);
+    if (closedThroughDate > today) throw new Error('No se puede cerrar un período con fecha futura.');
+    if (currentCompany.closedThroughDate && closedThroughDate < currentCompany.closedThroughDate) {
+      throw new Error('El cierre es irreversible desde esta pantalla: la fecha nueva no puede retroceder. Solicite reapertura formal al administrador contable.');
+    }
+    setCompanies(prev => prev.map(company => company.id === currentCompany.id
+      ? { ...company, closedThroughDate }
+      : company));
+  };
+
+  const reverseJournalEntry = (
+    id: string,
+    effectiveDate: string,
+    reason: string,
+    workpaperNote: string,
+    priorPeriodAdjustment = false,
+    retainedEarningsAccountCode?: string
+  ): JournalEntry => {
+    const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
+    if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
+    if (source.reversalOfEntryId) throw new Error('No se permite reversar un asiento que ya es un contra-asiento.');
+    if (source.reversedByEntryId || journalEntries.some(entry => entry.companyId === currentCompany.id && entry.reversalOfEntryId === id)) {
+      throw new Error('Este asiento ya tiene una reversión registrada.');
+    }
+    if (!isValidIsoDate(effectiveDate)) throw new Error('La fecha efectiva de reversión no es válida.');
+    if (effectiveDate < source.date) throw new Error('La reversión no puede tener fecha anterior al asiento original.');
+    if (currentCompany.closedThroughDate && effectiveDate <= currentCompany.closedThroughDate) {
+      throw new Error('La reversión debe registrarse después del último día cerrado (' + currentCompany.closedThroughDate + ').');
+    }
+    if (reason.trim().length < 10 || workpaperNote.trim().length < 10) {
+      throw new Error('La causa y el papel de trabajo deben contener al menos 10 caracteres cada uno.');
+    }
+    const sourceInClosedPeriod = Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
+    if (sourceInClosedPeriod && !priorPeriodAdjustment) {
+      throw new Error('El asiento pertenece a un período cerrado. Debe usar Ajuste de Ejercicio Anterior (AIA).');
+    }
+    if (priorPeriodAdjustment && !sourceInClosedPeriod) {
+      throw new Error('AIA solo se permite para asientos de un período ya cerrado.');
+    }
+    let retainedEarningsAccount: Account | undefined;
+    if (priorPeriodAdjustment) {
+      retainedEarningsAccount = accounts.find(account =>
+        account.code === retainedEarningsAccountCode && account.type === 'PATRIMONIO' && account.isMovement
+      );
+      if (!retainedEarningsAccount) throw new Error('Para AIA seleccione una cuenta de patrimonio de movimiento destinada a resultados acumulados.');
+    }
+    const reversedItems = source.items.map(item => {
+      const sourceAccount = accounts.find(account => account.code === item.accountCode);
+      const targetAccount = priorPeriodAdjustment && sourceAccount &&
+        ['INGRESOS', 'COSTOS', 'GASTOS'].includes(sourceAccount.type)
+        ? retainedEarningsAccount!
+        : sourceAccount;
+      if (!targetAccount) throw new Error('No se encuentra la cuenta contable ' + item.accountCode + ' del asiento original.');
+      return {
+        accountCode: targetAccount.code,
+        accountName: targetAccount.name,
+        debitBs: item.creditBs,
+        creditBs: item.debitBs,
+        debitUsd: item.creditUsd,
+        creditUsd: item.debitUsd,
+        description: priorPeriodAdjustment && targetAccount.code !== item.accountCode
+          ? 'AIA · ' + (item.description || item.accountName)
+          : 'Reversión · ' + (item.description || item.accountName)
+      };
+    });
+    const totalDebitBs = reversedItems.reduce((sum, item) => sum + item.debitBs, 0);
+    const totalCreditBs = reversedItems.reduce((sum, item) => sum + item.creditBs, 0);
+    const totalDebitUsd = reversedItems.reduce((sum, item) => sum + item.debitUsd, 0);
+    const totalCreditUsd = reversedItems.reduce((sum, item) => sum + item.creditUsd, 0);
+    if (Math.abs(totalDebitBs - totalCreditBs) >= 0.01 || Math.abs(totalDebitUsd - totalCreditUsd) >= 0.01) {
+      throw new Error('La vista previa de reversión no cuadra en ambas monedas; no se registró ningún cambio.');
+    }
+    const reversal = addJournalEntry({
+      date: effectiveDate,
+      description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + reason.trim(),
+      type: 'AJUSTE',
+      bcvRate: Number(source.bcvRate) > 0 ? source.bcvRate : currentCompany.bcvRate,
+      items: reversedItems,
+      referenceDoc: 'REV-' + source.entryNumber,
+      reversalOfEntryId: source.id,
+      reversalReason: reason.trim(),
+      workpaperNote: workpaperNote.trim(),
+      priorPeriodAdjustment
+    });
+    setJournalEntries(prev => prev.map(entry => entry.id === source.id
+      ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
+      : entry));
+    setSales(prev => prev.map(sale => sale.companyId === currentCompany.id && sale.journalEntryId === source.id
+      ? { ...sale, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      : sale));
+    setPurchases(prev => prev.map(purchase => purchase.companyId === currentCompany.id && purchase.journalEntryId === source.id
+      ? { ...purchase, isCancelled: true, cancelledByJournalEntryId: reversal.id, cancellationReason: reason.trim(), cancellationNote: workpaperNote.trim() }
+      : purchase));
+    return reversal;
+  };
+
   // SQLite local es la persistencia operativa en la versión de escritorio.
   const [storageReady, setStorageReady] = useState(false);
   const [storageError, setStorageError] = useState<string | null>(null);
@@ -467,6 +567,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
+    if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
+    if (currentCompany.closedThroughDate && entry.date <= currentCompany.closedThroughDate) {
+      throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
+    }
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
@@ -719,6 +823,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
     }
     // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
+    if (currentCompany.closedThroughDate && purchaseData.invoiceDate <= currentCompany.closedThroughDate) {
+      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
+    }
     if (!isValidIsoDate(purchaseData.invoiceDate) ||
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
@@ -1036,6 +1143,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La venta requiere una tasa BCV válida mayor que cero.');
     if (saleAmounts.some(value => !Number.isFinite(value) || value < 0) || saleData.totalAmountBs <= 0) {
       throw new Error('La venta contiene importes inválidos o negativos.');
+    }
+    if (currentCompany.closedThroughDate && saleData.invoiceDate <= currentCompany.closedThroughDate) {
+      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
     if (!isValidIsoDate(saleData.invoiceDate) || !String(saleData.invoiceNumber || '').trim() ||
         !String(saleData.customerName || '').trim()) {
@@ -2489,6 +2599,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
         addJournalEntry,
         deleteJournalEntry,
+        reverseJournalEntry,
+        closeAccountingPeriod,
         creditSettlements: creditSettlements.filter(s => s.companyId === currentCompany.id),
         getCreditBalance,
         addCreditSettlement,

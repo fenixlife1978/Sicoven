@@ -17,6 +17,7 @@ import { ConciliacionBancariaView } from './components/Conciliacion/Conciliacion
 import { TesoreriaView } from './components/Tesoreria/TesoreriaView';
 import { CuentasPorPagarView } from './components/CuentasPorPagar/CuentasPorPagarView';
 import { CuentasPorCobrarView } from './components/CuentasPorCobrar/CuentasPorCobrarView';
+import { ReversionFiscalView } from './components/ReversionFiscalView';
 import { ShieldCheck, Building2 } from 'lucide-react';
 import { LoginScreen, AuthUser } from './components/LoginScreen';
 import { AdminUsers } from './components/AdminUsers';
@@ -63,6 +64,8 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
         return <CatalogoView />;
       case 'config':
         return <ConfiguracionView />;
+      case 'reversiones':
+        return <ReversionFiscalView />;
       default:
         return <LibroDiarioView />;
     }
