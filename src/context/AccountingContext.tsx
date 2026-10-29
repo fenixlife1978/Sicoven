@@ -883,14 +883,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El asiento automático de la compra no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
-    const saleDebitBs = items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
-    const saleCreditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
-    const saleDebitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
-    const saleCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
-    if (Math.abs(saleDebitBs - saleCreditBs) > 0.01 || Math.abs(saleDebitUsd - saleCreditUsd) > 0.01) {
-      throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
-    }
-
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
     const nextEntryNum = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[companyKey] || 0) + 1;
     journalSequenceRef.current[companyKey] = nextEntryNum;
@@ -1047,7 +1039,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (Math.abs(expectedSaleTotal - saleData.totalAmountBs) > 0.01) {
       throw new Error('El total de la venta no coincide con base imponible, exento, IVA e IGTF.');
     }
-    const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\\s+/g, '');
+    const normalizeSaleDocument = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '');
     const duplicateSale = sales.some(existing =>
       existing.companyId === currentCompany.id &&
       existing.documentType === saleData.documentType &&
@@ -1138,6 +1130,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         creditUsd: saleData.vatAmountBs / rate,
         description: `Débito fiscal 16% Fac. ${saleData.invoiceNumber}`
       });
+    }
+
+    const saleDebitBs = items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
+    const saleCreditBs = items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
+    const saleDebitUsd = items.reduce((sum, item) => sum + (Number(item.debitUsd) || 0), 0);
+    const saleCreditUsd = items.reduce((sum, item) => sum + (Number(item.creditUsd) || 0), 0);
+    if (Math.abs(saleDebitBs - saleCreditBs) > 0.01 || Math.abs(saleDebitUsd - saleCreditUsd) > 0.01) {
+      throw new Error('El asiento automático de la venta no cuadra en Bs. y USD; la operación no se guardó.');
     }
 
     const companyEntries = journalEntries.filter(e => e.companyId === currentCompany.id);
