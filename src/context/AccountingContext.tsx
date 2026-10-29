@@ -666,6 +666,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? sales.find(item => item.id === documentId && item.companyId === currentCompany.id)
       : purchases.find(item => item.id === documentId && item.companyId === currentCompany.id);
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
+    if (document.isCancelled) throw new Error('La factura fue reversada y ya no tiene saldo exigible en este auxiliar.');
     const principal = getCreditPrincipal(document, kind);
     return calculateCreditBalance(
       documentId,
