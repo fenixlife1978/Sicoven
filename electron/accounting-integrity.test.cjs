@@ -1,0 +1,112 @@
+const test = require('node:test');
+const assert = require('node:assert/strict');
+const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
+
+const line = (debitBs, creditBs, debitUsd, creditUsd) => ({
+  accountCode: debitBs > 0 || creditBs > 0 ? '1.1.1.01' : '4.1.1.01',
+  accountName: 'Cuenta de prueba', debitBs, creditBs, debitUsd, creditUsd
+});
+const sourceEntry = () => ({
+  id: 'entry-1', companyId: 'company-1', entryNumber: 1, date: '2026-10-01',
+  description: 'Asiento original', type: 'MANUAL', bcvRate: 100,
+  items: [line(100, 0, 1, 0), line(0, 100, 0, 1)],
+  createdAt: '2026-10-01T10:00:00.000Z'
+});
+const reversalEntry = () => ({
+  id: 'entry-2', companyId: 'company-1', entryNumber: 2, date: '2026-10-02',
+  description: 'REVERSIÓN / Corrección documentada', type: 'AJUSTE', bcvRate: 100,
+  items: [line(0, 100, 0, 1), line(100, 0, 1, 0)],
+  createdAt: '2026-10-02T10:00:00.000Z', reversalOfEntryId: 'entry-1',
+  reversalReason: 'Corrección documentada de error', workpaperNote: 'Papel de trabajo y soporte revisado'
+});
+const emptyState = (journalEntries = []) => ({
+  journalEntries, purchases: [], sales: [], movements: [], creditSettlements: [],
+  bankStatementMovements: [], vatVouchers: [], islrVouchers: []
+});
+
+test('SQLite rejects physical deletion of a posted journal entry', () => {
+  assert.throws(
+    () => validateAccountingSnapshot(emptyState([sourceEntry()]), emptyState([])),
+    /eliminación del asiento histórico/
+  );
+});
+
+test('SQLite rejects changes to the financial content of an existing journal entry', () => {
+  const original = sourceEntry();
+  const edited = { ...original, description: 'Texto alterado' };
+  assert.throws(
+    () => validateAccountingSnapshot(emptyState([original]), emptyState([edited])),
+    /modificación del contenido histórico/
+  );
+});
+
+test('SQLite accepts one new, balanced contra-entry with reciprocal immutable linkage', () => {
+  const original = sourceEntry();
+  const reversal = reversalEntry();
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState([original]),
+    emptyState([linkedOriginal, reversal])
+  ));
+});
+
+test('SQLite rejects a contra-entry without reciprocal linkage or supporting paper', () => {
+  const original = sourceEntry();
+  const reversal = { ...reversalEntry(), workpaperNote: '' };
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState([original]), emptyState([linkedOriginal, reversal])
+  ), /contra-asiento sin origen, enlace recíproco, justificación, papel de trabajo o fecha válida/);
+});
+
+test('SQLite rejects a second contra-entry for the same original', () => {
+  const original = sourceEntry();
+  const first = reversalEntry();
+  const second = { ...reversalEntry(), id: 'entry-3', entryNumber: 3 };
+  const linkedOriginal = { ...original, reversedByEntryId: first.id, isAdjusted: true };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState([original]),
+    emptyState([linkedOriginal, first, second])
+  ), /segunda reversión/);
+});
+
+test('SQLite keeps inventory movements append-only', () => {
+  const movement = { id: 'mov-1', companyId: 'company-1', productId: 'p-1', quantity: 2, totalCostBs: 200 };
+  assert.throws(() => validateAccountingSnapshot(
+    { ...emptyState(), movements: [movement] },
+    { ...emptyState(), movements: [] }
+  ), /eliminación del registro histórico en movements/);
+});
+
+test('SQLite allows reversal metadata on a settlement but not edits to its amount', () => {
+  const settlement = { id: 's-1', companyId: 'company-1', documentId: 'purchase-1', amountUsd: 10, amountBs: 1000, isReversed: false };
+  const reversed = { ...settlement, isReversed: true, reversedByJournalEntryId: 'entry-2' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState(), creditSettlements: [settlement] },
+    { ...emptyState(), creditSettlements: [reversed] }
+  ));
+  assert.throws(() => validateAccountingSnapshot(
+    { ...emptyState(), creditSettlements: [settlement] },
+    { ...emptyState(), creditSettlements: [{ ...reversed, amountUsd: 11 }] }
+  ), /modificación de un registro histórico en creditSettlements/);
+});
+
+test('SQLite permits bank reconciliation metadata changes without changing imported statement facts', () => {
+  const statement = { id: 'bank-1', companyId: 'company-1', reference: 'TRX-1', amountBs: 1000, isReconciled: false };
+  const reconciled = { ...statement, isReconciled: true, reconciledWithJournalEntryId: 'entry-2', matchedBy: 'MANUAL' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState(), bankStatementMovements: [statement] },
+    { ...emptyState(), bankStatementMovements: [reconciled] }
+  ));
+  assert.throws(() => validateAccountingSnapshot(
+    { ...emptyState(), bankStatementMovements: [statement] },
+    { ...emptyState(), bankStatementMovements: [{ ...reconciled, amountBs: 1200 }] }
+  ), /modificación de un registro histórico en bankStatementMovements/);
+});
+
+test('one-time cleanup of legacy demo companies is permitted', () => {
+  const demoEntry = { ...sourceEntry(), id: 'demo-entry', companyId: 'comp-1' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState([demoEntry]), emptyState([])
+  ));
+});
