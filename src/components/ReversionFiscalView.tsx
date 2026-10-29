@@ -66,6 +66,29 @@ export const ReversionFiscalView: React.FC = () => {
          movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))
     : [];
   const requiresInventoryReview = linkedInventoryMovements.length > 0;
+  const purchaseLineReconciliation = useMemo(() => {
+    if (!linkedPurchase) return null;
+    const lines = linkedPurchase.inventoryLines || [];
+    const purchaseJournal = journalEntries.find(entry => entry.id === linkedPurchase.journalEntryId);
+    const lineTotal = lines.reduce((sum,line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0),0);
+    const baseTotal = Number(linkedPurchase.taxableBaseBs || 0) + Number(linkedPurchase.exemptAmountBs || 0);
+    const linkedMovements = movements.filter(m => m.companyId === currentCompany.id && m.type === 'ENTRADA' && m.concept === 'COMPRA' &&
+      m.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).trim().toUpperCase() && !m.correctionForMovementId);
+    const movementTotal = linkedMovements.reduce((sum,m)=>sum+Number(m.totalCostBs||0),0);
+    const movementQuantitiesMatch = lines.length > 0 && lines.every(line => {
+      const matching = linkedMovements.filter(m=>m.productId===line.productId);
+      return matching.length === 1 && Math.abs(Number(matching[0].quantity)-Number(line.quantity)) <= 1e-8 &&
+        Math.abs(Number(matching[0].totalCostBs)-Number(line.quantity)*Number(line.unitCostBs)) <= 0.02;
+    }) && linkedMovements.length === lines.length;
+    const journalInventoryDebit = purchaseJournal?.items.filter(item=>item.accountCode==='1.1.4.01')
+      .reduce((sum,item)=>sum+Number(item.debitBs||0)-Number(item.creditBs||0),0);
+    const hasLines = lines.length > 0;
+    const linesMatchInvoice = hasLines && Math.abs(lineTotal-baseTotal)<=0.02;
+    const journalMatchesInvoice = Number.isFinite(journalInventoryDebit) && Math.abs(Number(journalInventoryDebit)-baseTotal)<=0.02;
+    const movementMatchesLines = movementQuantitiesMatch && Math.abs(movementTotal-lineTotal)<=0.02;
+    return {hasLines,lineTotal,baseTotal,movementTotal,journalInventoryDebit:Number(journalInventoryDebit||0),linesMatchInvoice,journalMatchesInvoice,movementMatchesLines,ok:hasLines&&linesMatchInvoice&&journalMatchesInvoice&&movementMatchesLines};
+  }, [linkedPurchase, journalEntries, movements, currentCompany.id]);
+
   const correctableMovements = linkedInventoryMovements.filter(movement => {
     const matchesDocumentFlow = linkedSale
       ? movement.type === 'SALIDA' && movement.concept === 'VENTA'
@@ -227,7 +250,10 @@ export const ReversionFiscalView: React.FC = () => {
                 {requiresInventoryReview && <div className="mt-2 rounded-lg border border-red-300 bg-red-50 p-3 text-sm text-red-900 space-y-2"><p className="font-bold">Atención: hay {linkedInventoryMovements.length} movimiento(s) de inventario relacionado(s) con esta factura.</p><ul className="list-disc pl-5">{linkedInventoryMovements.map(movement=><li key={movement.id}>{movement.date} · {movement.type} · {movement.quantity} · {movement.productCode} · {movement.documentRef}{movement.journalEntryId ? ' · asiento de inventario vinculado' : ''}</li>)}</ul><p>La reversión de esta factura no modifica automáticamente el Kardex ni revierte sus asientos de costo de venta/ajuste. Debe conciliar y registrar por separado la compensación de cada movimiento, respetando las existencias disponibles y el método de costo.</p><div className="rounded-lg border border-slate-200 bg-white p-3 space-y-3">
                   <p className="font-bold text-slate-900">Registrar devolución física trazable (si corresponde)</p>
                   <p className="text-xs text-slate-600">Use esta acción solo para unidades que efectivamente regresaron del cliente o que efectivamente se devolvieron al proveedor. No registre aquí mercancía vendida, consumida, dañada o no localizada.</p>
-                  {linkedPurchase && !linkedSale ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950"><strong>Devolución a proveedor bloqueada en este asistente.</strong><p className="mt-1">La reversión de la factura ya genera el contra-asiento contable. Para evitar duplicar el efecto sobre CxP e inventario, primero debe conciliar el valor de las líneas de compra, el costo contabilizado y el movimiento físico. Registre la salida física desde el flujo de inventario autorizado, con referencia al lote cuando aplique, y adjunte aquí el papel de trabajo. No se generará automáticamente una devolución ni un asiento adicional desde esta pantalla.</p></div> : correctableMovements.length > 0 ? <>
+                  {linkedPurchase && !linkedSale ? <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 space-y-2"><strong>Devolución a proveedor: conciliación y flujo separado</strong>
+                    {purchaseLineReconciliation?.ok ? <p className="text-emerald-800">Conciliación técnica aprobada: líneas, entradas de Kardex y débito de inventario del asiento coinciden por artículo, cantidad y costo.</p> : <p className="text-rose-800">Conciliación no aprobada: faltan líneas de mercancía o existen diferencias entre factura, Kardex y asiento. No se habilitará devolución automática desde aquí.</p>}
+                    {purchaseLineReconciliation && <div className="grid grid-cols-1 sm:grid-cols-2 gap-1 text-xs"><span>Líneas registradas: <strong>{linkedPurchase?.inventoryLines?.length || 0}</strong></span><span>Base + exento: <strong>{formatBs(purchaseLineReconciliation.baseTotal)}</strong></span><span>Total líneas: <strong>{formatBs(purchaseLineReconciliation.lineTotal)}</strong></span><span>Total Kardex: <strong>{formatBs(purchaseLineReconciliation.movementTotal)}</strong></span><span>Débito inventario del asiento: <strong>{formatBs(purchaseLineReconciliation.journalInventoryDebit)}</strong></span><span>Resultado: <strong>{purchaseLineReconciliation.ok ? 'CONCILIADO' : 'PENDIENTE'}</strong></span></div>}
+                    <p>La reversión total de esta factura ya revierte CxP y el asiento original. No ejecute además una devolución que vuelva a debitar CxP: duplicaría el efecto. Para devoluciones parciales, registre la salida desde Inventario con la nota de crédito real del proveedor; el flujo valida cantidad contra la entrada original y bloquea PEPS o diferencias de costo no conciliadas. La regularización fiscal requiere el documento válido.</p></div> : correctableMovements.length > 0 ? <>
                     <label className="block font-semibold">Movimiento original</label>
                     <select value={correctionMovementId} onChange={event=>setCorrectionMovementId(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
                       <option value="">Seleccione movimiento de Kardex…</option>
