@@ -833,6 +833,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
+    // Debe: IGTF de compra explícitamente confirmado por el usuario.
+    if (Number(purchaseData.igtfAmountBs || 0) > 0) {
+      items.push({ accountCode: '6.1.1.04', accountName: 'Gasto por IGTF en compras', debitBs: Number(purchaseData.igtfAmountBs), creditBs: 0, debitUsd: Number(purchaseData.igtfAmountUsd || (Number(purchaseData.igtfAmountBs) / rate)), creditUsd: 0, description: `IGTF ${purchaseData.igtfRate || 3}% compra Fac. ${purchaseData.invoiceNumber}` });
+    }
+
     // Haber: Retención IVA por enterar al SENIAT (si la empresa retuvo)
     if (purchaseData.vatWithheldBs > 0) {
       items.push({
