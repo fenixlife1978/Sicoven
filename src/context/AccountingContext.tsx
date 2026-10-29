@@ -1695,6 +1695,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (original.productId !== movData.productId) {
         throw new Error('La corrección debe afectar el mismo artículo del movimiento original.');
       }
+      const isCustomerReturn = original.type === 'SALIDA' && original.concept === 'VENTA' &&
+        movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE';
+      const isSupplierReturn = original.type === 'ENTRADA' && original.concept === 'COMPRA' &&
+        movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
       if (isSupplierReturn && movData.date < original.date) {
         throw new Error('La devolución no puede tener fecha anterior a la entrada original de compra.');
       }
@@ -1702,10 +1706,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           String(movData.documentRef || '').trim().length < 4)) {
         throw new Error('La devolución requiere el número y tipo de una nota de crédito real del proveedor.');
       }
-      const isCustomerReturn = original.type === 'SALIDA' && original.concept === 'VENTA' &&
-        movData.type === 'ENTRADA' && movData.concept === 'DEVOLUCION_CLIENTE';
-      const isSupplierReturn = original.type === 'ENTRADA' && original.concept === 'COMPRA' &&
-        movData.type === 'SALIDA' && movData.concept === 'DEVOLUCION_COMPRA';
       if (!isCustomerReturn && !isSupplierReturn) {
         throw new Error('La corrección debe ser una devolución de cliente sobre una salida por venta o una devolución a proveedor sobre una entrada por compra.');
       }
