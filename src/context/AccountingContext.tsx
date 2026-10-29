@@ -701,6 +701,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
       throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
     }
+    // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
+    if (!isValidIsoDate(purchaseData.invoiceDate) ||
+        !String(purchaseData.invoiceNumber || '').trim() ||
+        !String(purchaseData.controlNumber || '').trim()) {
+      throw new Error('La compra requiere fecha válida, número de factura y número de control.');
+    }
+    if (!Number.isFinite(purchaseData.taxRate) || purchaseData.taxRate < 0 || purchaseData.taxRate > 100 ||
+        !Number.isFinite(purchaseData.retentionRate) || purchaseData.retentionRate < 0 || purchaseData.retentionRate > 100) {
+      throw new Error('La alícuota de IVA o la tasa de retención no es válida.');
+    }
+    const expectedVat = Math.round(purchaseData.taxableBaseBs * purchaseData.taxRate) / 100;
+    if (Math.abs(expectedVat - purchaseData.vatAmountBs) > 0.01) {
+      throw new Error('El IVA no coincide con la base imponible y la alícuota declarada.');
+    }
+    if (purchaseData.vatWithheldBs > purchaseData.vatAmountBs + 0.01) {
+      throw new Error('La retención de IVA no puede superar el IVA causado en la factura.');
+    }
+    const normalizeDocument = (value: string) => value.trim().toUpperCase().replace(/\\s+/g, '');
+    const normalizeRif = (value: string) => value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const duplicateInvoice = purchases.some(existing =>
+      existing.companyId === currentCompany.id &&
+      existing.documentType === purchaseData.documentType &&
+      normalizeDocument(existing.invoiceNumber) === normalizeDocument(purchaseData.invoiceNumber) &&
+      normalizeRif(existing.supplierRif) === normalizeRif(purchaseData.supplierRif)
+    );
+    if (duplicateInvoice) {
+      throw new Error('Ya existe una compra registrada con ese tipo de documento, proveedor y número de factura.');
+    }
     const igtfAmount = Number(purchaseData.igtfAmountBs || 0);
     const eligibleIgtfMethods = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'];
     if (igtfAmount > 0 && (!purchaseData.igtfApplicable || !eligibleIgtfMethods.includes(purchaseData.paymentMethod || ''))) {
