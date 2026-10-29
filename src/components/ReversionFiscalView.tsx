@@ -6,7 +6,7 @@ import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement,
-    reverseJournalEntry, closeAccountingPeriod
+    bankStatementMovements, creditSettlements, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -51,7 +51,7 @@ export const ReversionFiscalView: React.FC = () => {
     });
   }, [source, accountMap, isPriorPeriod, retainedEarningsCode]);
 
-  const reversalDisabled = !source || hasReversal(source.id) ||
+  const reversalDisabled = !source || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
     reason.trim().length < 10 || workpaperNote.trim().length < 10 ||
     (isPriorPeriod && !retainedEarningsAccounts.some(account => account.code === retainedEarningsCode)) ||
     !effectiveDate || effectiveDate < (source?.date || today) ||
@@ -60,12 +60,28 @@ export const ReversionFiscalView: React.FC = () => {
   const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
   const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
   const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
-  const linkedInventoryMovements = source && linkedInvoiceNumber
+  const linkedInventoryMovements = source
     ? movements.filter(movement => movement.companyId === currentCompany.id && !movement.correctionForMovementId &&
-        (movement.journalEntryId === source.id || movement.documentRef.trim().toLocaleUpperCase() === linkedInvoiceNumber.trim().toLocaleUpperCase() ||
-         movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))
+        (movement.journalEntryId === source.id || Boolean(linkedInvoiceNumber &&
+          (movement.documentRef.trim().toLocaleUpperCase() === linkedInvoiceNumber.trim().toLocaleUpperCase() ||
+           movement.documentRef.trim().toLocaleUpperCase() === ('FAC-' + linkedInvoiceNumber).toLocaleUpperCase()))))
     : [];
   const requiresInventoryReview = linkedInventoryMovements.length > 0;
+  const linkedBankMovements = source
+    ? bankStatementMovements.filter(movement => movement.companyId === currentCompany.id &&
+        movement.isReconciled && movement.reconciledWithJournalEntryId === source.id)
+    : [];
+  const linkedDocumentId = linkedSale?.id || linkedPurchase?.id;
+  const linkedSettlementKind = linkedSale ? 'SALE_COLLECTION' : linkedPurchase ? 'PURCHASE_PAYMENT' : undefined;
+  const activeLinkedSettlements = linkedDocumentId && linkedSettlementKind
+    ? creditSettlements.filter(item => item.companyId === currentCompany.id &&
+        item.documentId === linkedDocumentId && item.kind === linkedSettlementKind && !item.isReversed)
+    : [];
+  const reversalBlockReasons = [
+    ...(requiresInventoryReview ? ['Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
+    ...(linkedBankMovements.length ? ['Hay movimientos bancarios conciliados con este asiento; primero debe ejecutarse el flujo de reversión bancaria autorizado.'] : []),
+    ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
+  ];
   const purchaseLineReconciliation = useMemo(() => {
     if (!linkedPurchase) return null;
     const lines = linkedPurchase.inventoryLines || [];
@@ -283,7 +299,8 @@ export const ReversionFiscalView: React.FC = () => {
               <textarea value={reason} onChange={event=>setReason(event.target.value)} rows={2} maxLength={1000} placeholder="Ej. Factura emitida con RIF incorrecto; documento soporte…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
               <label className="block text-sm font-semibold text-slate-700">4. Nota explicativa / papel de trabajo (mínimo 10 caracteres)</label>
               <textarea value={workpaperNote} onChange={event=>setWorkpaperNote(event.target.value)} rows={3} maxLength={5000} placeholder="Fundamento técnico, soporte revisado, responsable y efecto fiscal pendiente…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
-              <button disabled={reversalDisabled} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> Aprobar y registrar contra-asiento</button>
+              {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con marcar una revisión manual: el sistema debe comprobar la reversión de los auxiliares y su asiento vinculado antes de permitir la aprobación.</p></div>}
+                            <button disabled={reversalDisabled} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> Aprobar y registrar contra-asiento</button>
             </div>
             <div className="space-y-3">
               <h2 className="font-bold text-slate-900">Vista previa del impacto contable</h2>
@@ -298,6 +315,7 @@ export const ReversionFiscalView: React.FC = () => {
                     <tbody>{preview.map((item,index)=><tr key={index} className="border-t border-slate-100"><td className="p-2">{item.targetCode} · {item.targetName}{item.toRetained && <span className="block text-indigo-700">Reclasificado a resultados acumulados</span>}</td><td className="p-2 text-right whitespace-nowrap">{formatBs(item.debitBs)}</td><td className="p-2 text-right whitespace-nowrap">{formatBs(item.creditBs)}</td><td className="p-2 text-right whitespace-nowrap">{formatUsd(item.debitUsd)}</td><td className="p-2 text-right whitespace-nowrap">{formatUsd(item.creditUsd)}</td></tr>)}</tbody>
                   </table>
                 </div>
+                {(linkedBankMovements.length > 0 || activeLinkedSettlements.length > 0) && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Conciliación de auxiliares pendiente</strong><p>Movimientos bancarios conciliados: {linkedBankMovements.length}</p><p>Cobros/pagos vigentes vinculados: {activeLinkedSettlements.length}</p><p>Estos importes no se compensarán por el solo hecho de generar un contra-asiento del Libro Diario.</p></div>}
                 <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-950 space-y-1">
                   <p className="font-semibold flex items-center gap-2"><CheckCircle2 className="w-4 h-4" /> Balance previsto</p>
                   <p>La contrapartida invierte Debe/Haber por línea y conserva la partida doble en Bs. y USD.</p>
