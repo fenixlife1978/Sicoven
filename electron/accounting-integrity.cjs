@@ -55,7 +55,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   const priorState = previousState && typeof previousState === 'object' ? previousState : {};
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
-    ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
+    ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['journalEntryId', 'isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'sales',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'movements');
