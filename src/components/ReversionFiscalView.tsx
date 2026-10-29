@@ -98,6 +98,10 @@ export const ReversionFiscalView: React.FC = () => {
   }, 0);
 
   const registerInventoryCorrection = () => {
+    if (linkedPurchase && !linkedSale) {
+      setFeedback({kind:'error', message:'La devolución física a proveedor no se automatiza desde la reversión de factura: el contra-asiento ya revierte CxP y el asiento original. Registrar aquí otra devolución podría duplicar el efecto contable. Requiere conciliación documentada de la cuenta de inventario antes de generar el movimiento físico.'});
+      return;
+    }
     const original = selectedCorrectionSource;
     if (!original) {
       setFeedback({kind:'error', message:'Seleccione un movimiento original de Kardex que admita devolución.'});
