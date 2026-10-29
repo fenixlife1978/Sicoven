@@ -684,7 +684,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const deleteJournalEntry = (id: string) => {
-    setJournalEntries(prev => prev.filter(e => e.id !== id));
+    const entry = journalEntries.find(item => item.id === id && item.companyId === currentCompany.id);
+    if (!entry) return;
+    // Un asiento que respalda una factura o una liquidación es parte del historial
+    // contable: no se elimina físicamente, aunque un registro antiguo haya perdido
+    // el vínculo journalEntryId. Su corrección requiere un asiento reverso.
+    const linkedToDocument =
+      sales.some(item => item.companyId === entry.companyId && item.journalEntryId === id) ||
+      purchases.some(item => item.companyId === entry.companyId && item.journalEntryId === id) ||
+      creditSettlements.some(item => item.companyId === entry.companyId && item.journalEntryId === id);
+    const protectedType = entry.type === 'VENTA' || entry.type === 'COMPRA' ||
+      /^Cobro de cuenta por cobrar|^Pago de cuenta por pagar/i.test(entry.description || '');
+    if (linkedToDocument || protectedType) {
+      if (typeof window !== 'undefined') {
+        window.alert('Este asiento respalda una factura o liquidación contabilizada y no puede eliminarse físicamente. Registre una reversión contable para corregirlo.');
+      }
+      return;
+    }
+    setJournalEntries(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
   };
 
   // Registrar compra y generar asiento automático y comprobantes de retención
@@ -904,6 +921,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalPurchase: PurchaseRecord = {
       ...purchaseData,
+      // Persistir la misma tasa usada en el asiento; no dejar un BCV vacío/antiguo
+      // cuando el dominio haya aplicado la tasa vigente de la empresa como respaldo.
+      bcvRate: rate,
+      totalAmountUsd: purchaseData.totalAmountBs / rate,
+      taxableBaseUsd: purchaseData.taxableBaseBs / rate,
+      vatAmountUsd: purchaseData.vatAmountBs / rate,
+      vatWithheldUsd: purchaseData.vatWithheldBs / rate,
+      islrWithheldUsd: (purchaseData.islrWithheldBs || 0) / rate,
+      igtfAmountUsd: igtfAmount / rate,
       id: purchaseId,
       companyId: currentCompany.id,
       opNumber: nextOp,
@@ -1169,6 +1195,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalSale: SaleRecord = {
       ...saleData,
+      // El registro conserva la tasa efectiva usada en su asiento y equivalentes
+      // USD coherentes con los importes nominales de la factura.
+      bcvRate: rate,
+      totalAmountUsd: saleData.totalAmountBs / rate,
+      taxableBaseUsd: saleData.taxableBaseBs / rate,
+      vatAmountUsd: saleData.vatAmountBs / rate,
+      vatWithheldUsd: (saleData.vatWithheldBs || 0) / rate,
+      igtfAmountUsd: saleIgtf / rate,
       id: saleId,
       companyId: currentCompany.id,
       opNumber: nextOp,
