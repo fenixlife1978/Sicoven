@@ -55,9 +55,9 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   const priorState = previousState && typeof previousState === 'object' ? previousState : {};
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
-    ['isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
+    ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'sales',
-    ['isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
+    ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'movements');
   assertAppendOnlyCollection(priorState, nextState, 'creditSettlements',
     ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
@@ -168,6 +168,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         : undefined;
       if (!originalEntry || !reversal || reversal.companyId !== document.companyId ||
           reversal.reversalOfEntryId !== originalEntry.id ||
+          (document.journalEntryId && document.journalEntryId !== originalEntry.id) ||
           String(document.cancellationReason || '').trim().length < 10 ||
           String(document.cancellationNote || '').trim().length < 10) {
         throw new Error('SQLite rechazó la cancelación del documento fiscal: falta el contra-asiento enlazado, el motivo o el papel de trabajo.');
