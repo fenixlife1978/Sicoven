@@ -6,7 +6,6 @@ import {
   Printer,
   Search,
   Filter,
-  Trash2,
   CheckCircle2,
   AlertCircle,
   ShieldCheck,
@@ -23,7 +22,7 @@ import { exportDiarioPdf } from '../../utils/pdfGenerator';
 import { Download } from 'lucide-react';
 
 export const LibroDiarioView: React.FC = () => {
-  const { currentCompany, journalEntries, deleteJournalEntry, displayCurrency } = useAccounting();
+  const { currentCompany, journalEntries, displayCurrency } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
@@ -310,18 +309,9 @@ export const LibroDiarioView: React.FC = () => {
                     <div className="text-xs text-slate-500 font-mono-nums">
                       Tasa BCV: <span className="font-semibold text-slate-700">Bs. {entry.bcvRate.toFixed(2)}</span>
                     </div>
-                    {/* Delete entry button (no-print) */}
-                    <button
-                      onClick={() => {
-                        if (confirm(`¿Eliminar asiento contable N° ${entry.entryNumber}?`)) {
-                          deleteJournalEntry(entry.id);
-                        }
-                      }}
-                      className="no-print p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                      title="Eliminar asiento"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    <span className="no-print inline-flex items-center gap-1 rounded-md border border-emerald-200 bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-800" title="Los asientos contabilizados no se eliminan; se corrigen mediante reversión">
+                      <ShieldCheck className="w-3.5 h-3.5" /> Registro inmutable
+                    </span>
                   </div>
                 </div>
 
