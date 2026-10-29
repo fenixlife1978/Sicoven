@@ -47,7 +47,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfApplicable = igtfAgent && paymentCurrency !== 'BS';
+  const igtfApplicable = igtfAgent && paymentTerm === 'CONTADO' && paymentCurrency !== 'BS';
   const igtfAmountBs = igtfApplicable ? Math.round(invoiceSubtotalBs * 0.03 * 100) / 100 : 0;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
   const vatWithheldBs = clientIsSpecial
@@ -354,10 +354,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
               </select>
             </div>
             <div className="flex flex-wrap justify-between gap-2 text-xs">
-              <span className="text-slate-600">IGTF estimado (3% sobre el total de la factura, sujeto a validación fiscal):</span>
+              <span className="text-slate-600">IGTF estimado (3% cuando el cobro es de contado en medio sujeto, sujeto a validación fiscal):</span>
               <strong className="font-mono text-sky-800">{formatBs(igtfAmountBs)} ({formatUsd(bcvRate > 0 ? igtfAmountBs / bcvRate : 0)})</strong>
             </div>
-            <p className="text-[11px] text-slate-600">El impuesto solo se suma si se marca la condición de agente y se selecciona un medio sujeto. Confirme con su contador la base imponible y los supuestos legales aplicables antes de emitir el comprobante.</p>
+            <p className="text-[11px] text-slate-600">El IGTF se calcula aquí solo para cobros de contado declarados en un medio sujeto. En ventas a crédito debe registrarse al momento del cobro, según el medio efectivamente utilizado; no se anticipa ni se duplica en la factura. Confirme con su contador la base imponible y los supuestos legales aplicables antes de emitir el comprobante.</p>
           </div>
 
           {/* Summary Box */}
