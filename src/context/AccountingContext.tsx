@@ -522,15 +522,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  // Sincroniza al iniciar y al recuperar conectividad/enfocar la app, máximo una vez por día.
+  // Sincroniza al iniciar y al recuperar conectividad/enfocar la app, una vez por día y empresa.
   const lastAutoSyncDayRef = useRef<string>('');
   useEffect(() => {
-    if (!autoSyncBcv || companies.length === 0) return;
+    if (!autoSyncBcv || companies.length === 0 || !currentCompanyId) return;
     const maybeSyncToday = () => {
       if (typeof navigator !== 'undefined' && !navigator.onLine) return;
       const today = new Date().toLocaleDateString('en-CA');
-      if (lastAutoSyncDayRef.current === today) return;
-      lastAutoSyncDayRef.current = today;
+      const syncKey = `${currentCompanyId}:${today}`;
+      if (lastAutoSyncDayRef.current === syncKey) return;
+      lastAutoSyncDayRef.current = syncKey;
       void syncBcvRate();
     };
     maybeSyncToday();
@@ -540,7 +541,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       window.removeEventListener('online', maybeSyncToday);
       window.removeEventListener('focus', maybeSyncToday);
     };
-  }, [companies.length, autoSyncBcv]);
+  }, [companies.length, autoSyncBcv, currentCompanyId]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
