@@ -64,6 +64,7 @@ export const LibroComprasView: React.FC = () => {
 
   // Totals for SENIAT Forma 30
   const totalComprasConIvaBs = filteredPurchases.reduce((s, p) => s + p.totalAmountBs, 0);
+  const totalIgtfBs = filteredPurchases.reduce((s, p) => s + Number(p.igtfAmountBs || 0), 0);
   const totalExentoBs = filteredPurchases.reduce((s, p) => s + (p.exemptAmountBs || 0), 0);
   const totalBaseBs = filteredPurchases.reduce((s, p) => s + p.taxableBaseBs, 0);
   const totalIvaCreditoBs = filteredPurchases.reduce((s, p) => s + p.vatAmountBs, 0);
@@ -187,6 +188,7 @@ export const LibroComprasView: React.FC = () => {
                 <th className="py-2.5 px-3 w-28">N° Control</th>
                 <th className="py-2.5 px-3 w-32">N° Comprobante Ret.</th>
                 <th className="py-2.5 px-3 text-right w-32">Total Compra (Bs.)</th>
+                <th className="py-2.5 px-3 text-right w-28 text-amber-800">IGTF (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-28">Exento (Bs.)</th>
                 <th className="py-2.5 px-3 text-right w-32">Base Imponible</th>
                 <th className="py-2.5 px-2 text-center w-14">% Alíc.</th>
@@ -240,6 +242,10 @@ export const LibroComprasView: React.FC = () => {
                           {formatUsd(p.totalAmountUsd)}
                         </div>
                       )}
+                    </td>
+                    <td className="py-2 px-3 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
+                      {Number(p.igtfAmountBs || 0) > 0 ? formatBs(Number(p.igtfAmountBs)) : '-'}
+                      {p.paymentMethod && <div className="text-[10px] text-slate-400 font-normal">{({BS:'Bs./nacional',FOREIGN_CASH:'Divisas efectivo',ZELLE:'Zelle',INTERNATIONAL_TRANSFER:'Transferencia intl.',CRYPTO:'Cripto'} as Record<string,string>)[p.paymentMethod] || p.paymentMethod}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
                       {p.exemptAmountBs > 0 ? formatBs(p.exemptAmountBs) : '-'}
@@ -307,6 +313,9 @@ export const LibroComprasView: React.FC = () => {
                   {displayCurrency !== 'BS' && (
                     <div className="text-[10px] text-slate-400">{formatUsd(totalComprasConIvaUsd)}</div>
                   )}
+                </td>
+                <td className="py-3 px-3 text-right font-mono text-amber-300">
+                  {formatBs(totalIgtfBs)}
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-slate-300">
                   {formatBs(totalExentoBs)}
