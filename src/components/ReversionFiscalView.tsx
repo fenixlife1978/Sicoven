@@ -96,7 +96,7 @@ export const ReversionFiscalView: React.FC = () => {
     try {
       const entry = reverseJournalEntry(
         source.id, effectiveDate, reason,
-        requiresInventoryReview ? workpaperNote.trim() + '\\nReferencia de conciliación/corrección de inventario: ' + inventoryCorrectionRef.trim() : workpaperNote,
+        requiresInventoryReview ? workpaperNote.trim() + '\nReferencia de conciliación/corrección de inventario: ' + inventoryCorrectionRef.trim() : workpaperNote,
         isPriorPeriod, isPriorPeriod ? retainedEarningsCode : undefined
       );
       setFeedback({kind:'success', message:'Contra-asiento '+entry.entryNumber+' registrado y enlazado al asiento '+source.entryNumber+'. El original permanece en el historial.'});
