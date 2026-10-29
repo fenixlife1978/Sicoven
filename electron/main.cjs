@@ -417,6 +417,49 @@ app.whenReady().then(async () => {
       const nextEntries = Array.isArray(state.journalEntries) ? state.journalEntries : [];
       const priorById = new Map(priorEntries.map(entry => [String(entry.id), entry]));
       const nextById = new Map(nextEntries.map(entry => [String(entry.id), entry]));
+      const isLegacyDemoRecord = record =>
+        ['comp-1', 'comp-2'].includes(String(record?.companyId || '')) ||
+        String(record?.id || '') === 'entry-apertura-1';
+      const assertAppendOnlyCollection = (collectionName, mutableKeys = [], monotonicKeys = []) => {
+        const oldItems = Array.isArray(priorState[collectionName]) ? priorState[collectionName] : [];
+        const newItems = Array.isArray(state[collectionName]) ? state[collectionName] : [];
+        const newById = new Map(newItems.map(item => [String(item.id), item]));
+        const stripMutable = item => {
+          const copy = { ...item };
+          for (const key of mutableKeys) delete copy[key];
+          return copy;
+        };
+        for (const oldItem of oldItems) {
+          if (isLegacyDemoRecord(oldItem)) continue; // Purga única de datos de demostración heredados.
+          const nextItem = newById.get(String(oldItem.id));
+          if (!nextItem) {
+            throw new Error('SQLite bloqueó la eliminación del registro histórico en ' + collectionName + ' (' + oldItem.id + '). Use una reversión o corrección trazable.');
+          }
+          if (JSON.stringify(stripMutable(oldItem)) !== JSON.stringify(stripMutable(nextItem))) {
+            throw new Error('SQLite bloqueó la modificación de un registro histórico en ' + collectionName + ' (' + oldItem.id + ').');
+          }
+          for (const key of monotonicKeys) {
+            if (oldItem[key] && nextItem[key] !== oldItem[key]) {
+              throw new Error('No se puede retirar ni modificar la marca histórica ' + key + ' del registro ' + oldItem.id + '.');
+            }
+          }
+        }
+      };
+      assertAppendOnlyCollection('purchases',
+        ['isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'],
+        ['isCancelled']);
+      assertAppendOnlyCollection('sales',
+        ['isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'],
+        ['isCancelled']);
+      assertAppendOnlyCollection('movements');
+      assertAppendOnlyCollection('creditSettlements',
+        ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
+      assertAppendOnlyCollection('bankStatementMovements',
+        ['isReconciled', 'reconciledWithJournalEntryId', 'matchedBy', 'reconciledAt']);
+      assertAppendOnlyCollection('vatVouchers',
+        ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
+      assertAppendOnlyCollection('islrVouchers',
+        ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
       if (nextById.size !== nextEntries.length) throw new Error('Hay identificadores de asientos duplicados; SQLite rechazó el guardado.');
       const immutableEntry = entry => {
         const { reversedByEntryId, isAdjusted, ...immutable } = entry;
@@ -425,6 +468,7 @@ app.whenReady().then(async () => {
       // La protección se aplica también en la frontera SQLite, no sólo en React:
       // un estado antiguo/importado no puede borrar ni reescribir asientos ya persistidos.
       for (const prior of priorEntries) {
+        if (isLegacyDemoRecord(prior)) continue; // Purga única de asientos ficticios heredados.
         const next = nextById.get(String(prior.id));
         if (!next) throw new Error('SQLite bloqueó la eliminación del asiento histórico #' + prior.entryNumber + '. El Libro Diario es inmutable.');
         if (JSON.stringify(immutableEntry(prior)) !== JSON.stringify(immutableEntry(next))) {
