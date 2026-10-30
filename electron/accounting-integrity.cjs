@@ -423,11 +423,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       const product = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
           journalMovementIds.has(String(returnMovement.id)) ||
+          originalMovement.productId !== line.productId || returnMovement.productId !== line.productId ||
           returnMovement.type !== 'SALIDA' || returnMovement.concept !== 'DEVOLUCION_COMPRA' ||
+          returnMovement.date !== note.invoiceDate ||
           returnMovement.correctionForMovementId !== originalMovement.id ||
           normalizeDocument(returnMovement.documentRef) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber) ||
           returnMovement.journalEntryId !== journal.id ||
           Math.abs(Number(returnMovement.quantity) - Number(line.quantity)) > 0.000001 ||
+          Math.abs(Number(returnMovement.unitCostBs) - Number(line.unitCostBs)) > 0.02 ||
           Math.abs(Number(returnMovement.totalCostBs) - Number(line.inventoryCostBs)) > 0.02 ||
           Math.abs(Number(returnMovement.totalCostUsd) - Number(line.inventoryCostBs) / Number(note.bcvRate)) > 0.0001 ||
           normalizeRif(returnMovement.counterpartyRif) !== normalizeRif(original.supplierRif) ||
