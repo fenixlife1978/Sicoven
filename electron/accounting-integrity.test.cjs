@@ -474,6 +474,39 @@ const supplierCreditFixture = () => {
   return { prior, next, note, returnMovement };
 };
 
+test('SQLite reconciles concurrent supplier returns independently when companies reuse product ids', () => {
+  const { prior, next } = supplierCreditFixture();
+  const clone = (value, suffix) => ({ ...value,
+    id: value.id + suffix, companyId: 'company-2',
+    ...(value.journalEntryId ? { journalEntryId: value.journalEntryId + suffix } : {}),
+    ...(value.originalPurchaseId ? { originalPurchaseId: value.originalPurchaseId + suffix } : {}),
+    ...(value.originalMovementId ? { originalMovementId: value.originalMovementId + suffix } : {}),
+    ...(value.movementId ? { movementId: value.movementId + suffix } : {}),
+    ...(value.correctionForMovementId ? { correctionForMovementId: value.correctionForMovementId + suffix } : {}),
+    ...(value.creditNoteLines ? { creditNoteLines: value.creditNoteLines.map(line => ({
+      ...line, originalMovementId: line.originalMovementId + suffix,
+      movementId: line.movementId + suffix
+    })) } : {})
+  });
+  const originalPurchase = clone(prior.purchases[0], '-2');
+  const originalEntry = clone(prior.journalEntries[0], '-2');
+  const originalMovement = clone(prior.movements[0], '-2');
+  const productPrior = { ...prior.products[0], companyId: 'company-2' };
+  const note = clone(next.purchases[1], '-2');
+  const noteEntry = clone(next.journalEntries[1], '-2');
+  const returnMovement = clone(next.movements[1], '-2');
+  const productNext = { ...next.products[0], companyId: 'company-2' };
+  prior.purchases.push(originalPurchase);
+  prior.journalEntries.push(originalEntry);
+  prior.movements.push(originalMovement);
+  prior.products.push(productPrior);
+  next.purchases.push(originalPurchase, note);
+  next.journalEntries.push(originalEntry, noteEntry);
+  next.movements.push(originalMovement, returnMovement);
+  next.products.push(productNext);
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
 test('SQLite accepts a supplier credit note only with linked stock return, balanced journal, taxes and AP reduction', () => {
   const { prior, next } = supplierCreditFixture();
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
