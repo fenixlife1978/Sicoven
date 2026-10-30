@@ -1,16 +1,15 @@
-import { describe, expect, it } from 'vitest';
+import test from 'node:test';
+import assert from 'node:assert/strict';
 import { validatePurchaseSettlementMode } from './purchaseSettlement';
 
-describe('validatePurchaseSettlementMode', () => {
-  it('bloquea contado mientras no exista conciliación con caja/banco', () => {
-    expect(validatePurchaseSettlementMode('CONTADO')).toMatch(/cuenta de caja\/banco/);
-  });
+test('bloquea contado mientras no exista conciliación con caja/banco', () => {
+  assert.match(validatePurchaseSettlementMode('CONTADO') || '', /cuenta de caja\/banco/);
+});
 
-  it('permite crédito para su circuito de CxP', () => {
-    expect(validatePurchaseSettlementMode('CREDITO')).toBeNull();
-  });
+test('permite crédito para su circuito de CxP', () => {
+  assert.equal(validatePurchaseSettlementMode('CREDITO'), null);
+});
 
-  it('mantiene compatibilidad con registros históricos sin condición explícita', () => {
-    expect(validatePurchaseSettlementMode(undefined)).toBeNull();
-  });
+test('mantiene compatibilidad con registros históricos sin condición explícita', () => {
+  assert.equal(validatePurchaseSettlementMode(undefined), null);
 });
