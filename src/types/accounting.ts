@@ -78,9 +78,23 @@ export interface PurchaseInventoryLine {
   unitCostBs: number;
 }
 
+export interface PurchaseCreditNoteLine {
+  productId: string;
+  originalMovementId: string;
+  movementId: string;
+  quantity: number;
+  unitCostBs: number;
+  inventoryCostBs: number;
+}
+
 export interface PurchaseRecord {
   /** Líneas de mercancía vinculadas al Kardex; ausente en facturas históricas sin detalle. */
   inventoryLines?: PurchaseInventoryLine[];
+  /** Enlace inmutable de una nota de crédito de proveedor a su factura y movimientos físicos. */
+  originalPurchaseId?: string;
+  creditNoteLines?: PurchaseCreditNoteLine[];
+  netPayableReductionBs?: number;
+  netPayableReductionUsd?: number;
   id: string;
   companyId: string;
   opNumber: number;
