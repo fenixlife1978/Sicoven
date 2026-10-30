@@ -51,7 +51,18 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
     };
     freezeWhenActive('isCancelled', ['cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote']);
     freezeWhenActive('isReversed', ['reversedByJournalEntryId']);
-    freezeWhenActive('requiresFiscalCorrection', ['correctionEntryId', 'correctionNote']);
+    if (oldItem.requiresFiscalCorrection) {
+      const oldCorrectionIds = Array.isArray(oldItem.correctionEntryIds) ? oldItem.correctionEntryIds : (oldItem.correctionEntryId ? [oldItem.correctionEntryId] : []);
+      const nextCorrectionIds = Array.isArray(nextItem.correctionEntryIds) ? nextItem.correctionEntryIds : (nextItem.correctionEntryId ? [nextItem.correctionEntryId] : []);
+      const oldCorrectionNote = String(oldItem.correctionNote || '');
+      const nextCorrectionNote = String(nextItem.correctionNote || '');
+      if (new Set(nextCorrectionIds).size !== nextCorrectionIds.length ||
+          oldCorrectionIds.some(id => !nextCorrectionIds.includes(id)) ||
+          (nextItem.correctionEntryId && !nextCorrectionIds.includes(nextItem.correctionEntryId)) ||
+          (oldCorrectionNote && !nextCorrectionNote.startsWith(oldCorrectionNote))) {
+        throw new Error('No se puede retirar ni alterar el historial de correcciones fiscales del comprobante ' + oldItem.id + '.');
+      }
+    }
   }
 }
 
@@ -70,9 +81,9 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'bankStatementMovements',
     ['isReconciled', 'reconciledWithJournalEntryId', 'reconciledJournalEntryIds', 'matchedBy', 'reconciledAt']);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
-    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
+    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
-    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
+    ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   const nextBankRows = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
   for (const oldRow of asArray(priorState.bankStatementMovements)) {
     if (isLegacyDemoRecord(oldRow)) continue;
