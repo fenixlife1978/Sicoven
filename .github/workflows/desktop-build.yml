@@ -4,13 +4,14 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
-  contents: write
-  pull-requests: write
+  contents: read
+
+concurrency:
+  group: sicoven-desktop-validation-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   validate:
@@ -23,20 +24,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
-      - name: Generate reproducible dependency lockfile
-        run: npm install --package-lock-only --ignore-scripts --no-audit --no-fund
+          cache: npm
+          cache-dependency-path: package-lock.json
       - name: Install locked dependencies
         run: npm ci --no-audit --no-fund
-      - name: Propose generated package lockfile
-        uses: peter-evans/create-pull-request@v7
-        with:
-          token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: 'build: add reproducible npm lockfile'
-          branch: automation/npm-lockfile
-          delete-branch: true
-          title: 'build: add reproducible npm lockfile'
-          body: 'Generado por la validación de escritorio con la resolución de dependencias de npm. La CI instala después con npm ci para comprobar el lockfile.'
-          add-paths: package-lock.json
       - name: Test authentication and session security guards
         run: node scripts/test-auth-hardening.cjs
       - name: Run automated tests
