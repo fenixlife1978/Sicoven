@@ -94,6 +94,15 @@ test('bloquea PEPS, costo promedio divergente y fecha en período cerrado', () =
   assert.throws(() => calculatePurchaseCreditNote(draft({ closedThroughDate: '2026-10-10' })), /período contable cerrado/);
 });
 
+test('rechaza fechas con formato ISO pero imposibles en el calendario', () => {
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft(), returnDate: '2026-02-30'
+  }), /fecha de la nota de crédito/);
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft(), purchase: { ...purchase, invoiceDate: '2026-13-01' }
+  }), /fecha de la nota de crédito/);
+});
+
 test('bloquea si el tratamiento fiscal de las líneas no concilia con la factura', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, exemptAmountBs: 20, taxableBaseBs: 180 }
