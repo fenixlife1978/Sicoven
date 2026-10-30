@@ -75,7 +75,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   if (purchase.paymentTerm !== 'CREDITO') throw new Error('Por ahora solo se admiten devoluciones de facturas a crédito; contado requiere conciliación de caja/bancos o saldo a favor.');
   if (!purchase.inventoryLines?.length) throw new Error('La factura no conserva líneas de inventario estructuradas.');
   if (!Array.isArray(draft.lines) || draft.lines.length === 0) throw new Error('Agregue al menos un artículo a la nota de crédito.');
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.returnDate) || draft.returnDate < purchase.invoiceDate) {
+  if (!isValidIsoDate(draft.returnDate) || !isValidIsoDate(purchase.invoiceDate) || draft.returnDate < purchase.invoiceDate) {
     throw new Error('La fecha de la nota de crédito no puede ser anterior a la factura original.');
   }
   if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
