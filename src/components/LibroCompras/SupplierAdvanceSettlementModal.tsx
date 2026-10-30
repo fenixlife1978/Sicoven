@@ -33,6 +33,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const [reference, setReference] = useState('');
   const [error, setError] = useState('');
   const [saving, setSaving] = useState(false);
+  const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const balance = supplierRif ? getSupplierAdvanceBalance(supplierRif) : null;
   const eligiblePurchases = purchases.filter(p => p.documentType === '01' && !p.isCancelled &&
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
@@ -41,15 +42,15 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const rate = Number(bcvRate);
   const usd = Number(amountUsd);
   const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
     setError('');
-    if (!isStorageReady) { setError(storageError || 'SQLite no está disponible.'); return; }
+    if (!sqliteAvailable || !isStorageReady) { setError(storageError || 'La edición de escritorio con SQLite local no está disponible.'); return; }
     if (!balance || !validAmount) { setError('Seleccione proveedor e indique importe y tasa BCV válidos.'); return; }
     setSaving(true);
     try {
-      addSupplierAdvanceSettlement({
+      await addSupplierAdvanceSettlement({
         supplierRif, kind, date, amountUsd: usd,
         amountBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : Math.round(usd * rate * 100) / 100,
         cashReceivedBs: kind === 'REFUND_RECEIVED' ? Number(cashReceivedBs) : undefined,
@@ -109,7 +110,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
         </>}
         <footer className="flex justify-end gap-2 border-t border-slate-100 pt-4">
           <button type="button" onClick={onClose} disabled={saving} className="rounded-lg border border-slate-300 px-4 py-2 text-xs font-semibold">Cancelar</button>
-          <button type="submit" disabled={saving || suppliers.length === 0 || !isStorageReady} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button>
+          <button type="submit" disabled={saving || suppliers.length === 0 || !isStorageReady || !sqliteAvailable} className="rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white disabled:opacity-50">{saving ? 'Registrando…' : 'Registrar liquidación'}</button>
         </footer>
       </form>
     </div>
