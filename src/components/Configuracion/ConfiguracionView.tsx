@@ -30,8 +30,7 @@ export const ConfiguracionView: React.FC = () => {
     resetToSampleData,
     resetFactoryData,
     exportBackupJson,
-    importBackupJson,
-    waitForPersistence
+    restoreBackupJson
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -149,12 +148,11 @@ export const ConfiguracionView: React.FC = () => {
       }
       setBackupRestoreBusy(true);
       try {
-        const ok = importBackupJson(content);
+        const ok = await restoreBackupJson(content);
         if (!ok) {
           alert('No se pudo validar el respaldo. No se confirmó la restauración.');
           return;
         }
-        await waitForPersistence();
         alert('¡Copia de seguridad restaurada y guardada correctamente en SQLite!');
       } catch (error) {
         console.error('No se pudo confirmar la restauración del respaldo en SQLite:', error);
