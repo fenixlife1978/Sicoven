@@ -1352,9 +1352,43 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (latestMovementDate && request.returnDate < latestMovementDate) {
         throw new Error('La devolución del artículo ' + product.code + ' debe registrarse después del último movimiento de Kardex (' + latestMovementDate + ').');
       }
+      const requestedQuantity = Number(line.quantity);
+      let fifoLayerAvailableQuantity: number | undefined;
+      let fifoBalanceAfterReturnBs: number | undefined;
+      let fifoBalanceAfterReturnUsd: number | undefined;
+      if (product.costingMethod === 'PEPS') {
+        const productHistory = movements
+          .filter(item => item.companyId === currentCompany.id && item.productId === product.id)
+          .map(item => ({
+            type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
+            unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
+            balanceQty: item.balanceQty
+          }));
+        const fifoLayers = reconstructFifoLayers(productHistory, product.currentStock);
+        const normalizeRef = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+        const originalLayer = fifoLayers.find(layer =>
+          layer.date === originalMovement.date &&
+          normalizeRef(layer.documentRef) === normalizeRef(originalMovement.documentRef) &&
+          Math.abs(Number(layer.unitCostBs) - Number(originalMovement.unitCostBs)) <= 0.01 &&
+          Math.abs(Number(layer.unitCostUsd) - Number(originalMovement.unitCostUsd)) <= 0.0001
+        );
+        fifoLayerAvailableQuantity = Number(originalLayer?.quantity || 0);
+        if (!originalLayer || fifoLayerAvailableQuantity + 0.000001 < requestedQuantity) {
+          throw new Error('La capa PEPS de la factura ' + purchase.invoiceNumber + ' ya fue consumida total o parcialmente; solo puede devolverse la cantidad que permanezca en esa capa original.');
+        }
+        const remainingLayers = fifoLayers.map(layer => ({ ...layer }));
+        const targetLayer = remainingLayers.find(layer =>
+          layer.date === originalLayer.date && layer.documentRef === originalLayer.documentRef &&
+          Math.abs(layer.unitCostBs - originalLayer.unitCostBs) <= 0.000001
+        )!;
+        targetLayer.quantity -= requestedQuantity;
+        fifoBalanceAfterReturnBs = Math.round(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) * 100) / 100;
+        fifoBalanceAfterReturnUsd = Math.round(remainingLayers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) * 1000000) / 1000000;
+      }
       return {
-        product, originalMovement, quantity: Number(line.quantity), previouslyReturnedQuantity: priorReturnedQuantity,
-        currentStock: product.currentStock, currentAverageCostBs: product.avgCostBs
+        product, originalMovement, quantity: requestedQuantity, previouslyReturnedQuantity: priorReturnedQuantity,
+        currentStock: product.currentStock, currentAverageCostBs: product.avgCostBs,
+        fifoLayerAvailableQuantity, fifoBalanceAfterReturnBs, fifoBalanceAfterReturnUsd
       };
     });
     const valuation = calculatePurchaseCreditNote({
@@ -1427,8 +1461,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           quantity: returnedLine.quantity, unitCostBs: returnedLine.unitCostBs,
           unitCostUsd: toUsd(returnedLine.unitCostBs),
           totalCostBs: returnedLine.inventoryCostBs, totalCostUsd: toUsd(returnedLine.inventoryCostBs),
-          balanceQty: newStock, balanceTotalBs: Math.round(newStock * product.avgCostBs * 100) / 100,
-          balanceTotalUsd: Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
+          balanceQty: newStock,
+          balanceTotalBs: product.costingMethod === 'PEPS' ? Number(source.fifoBalanceAfterReturnBs) : Math.round(newStock * product.avgCostBs * 100) / 100,
+          balanceTotalUsd: product.costingMethod === 'PEPS' ? Number(source.fifoBalanceAfterReturnUsd) : Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
           journalEntryId: journalId, correctionForMovementId: returnedLine.originalMovementId,
           bcvRate: rate, documentType: 'Nota de crédito proveedor',
           counterpartyRif: purchase.supplierRif, counterpartyName: purchase.supplierName,
