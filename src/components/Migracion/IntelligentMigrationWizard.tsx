@@ -48,7 +48,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
+ const { products, importInventoryProducts, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
