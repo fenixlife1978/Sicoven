@@ -721,28 +721,32 @@ test('SQLite rejects supplier advance settlements without source credit notes an
 });
 
 test('SQLite rejects supplier advance settlements with an unbalanced linked journal', () => {
-  const source = {
-    id: 'nc-source', companyId: 'company-1', documentType: '03',
-    supplierRif: 'J-12345678-9', supplierAdvanceUsd: 10, supplierAdvanceBs: 900,
-    isCancelled: false
-  };
+  const { prior, next, note } = supplierCreditFixture();
+  const source = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
   const journal = {
-    id: 'advance-journal', companyId: 'company-1', entryNumber: 1, date: '2026-10-30',
+    id: 'advance-journal', companyId: 'company-1', entryNumber: 3, date: '2026-10-30',
     description: 'Liquidación anticipo', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
-    items: [line(1000, 0, 10, 0), line(0, 1000, 0, 10)],
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 899, debitUsd: 0, creditUsd: 10 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 101, debitUsd: 0, creditUsd: 0 }
+    ],
     createdAt: '2026-10-30T10:00:00.000Z'
   };
   const settlement = {
     id: 'advance-settlement-2', companyId: 'company-1', supplierRif: 'J-12345678-9',
     kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 10, amountBs: 900,
     advanceBookValueBs: 900, cashReceivedBs: 1000, bcvRate: 100,
-    sourceCreditNoteIds: ['nc-source'], treasuryAccountCode: '1.1.1.03',
+    sourceCreditNoteIds: [source.id], treasuryAccountCode: '1.1.1.03',
     journalEntryId: 'advance-journal', createdAt: '2026-10-30T10:00:00.000Z'
   };
-  assert.throws(() => validateAccountingSnapshot(
-    emptyState(),
-    { ...emptyState([journal]), purchases: [source], supplierAdvanceSettlements: [settlement], bankAccounts: [
-      { id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }
-    ] }
-  ), /asiento de anticipo descuadrado/);
+  const adjustedNext = {
+    ...next,
+    purchases: [...next.purchases.filter(item => item.id !== source.id), source],
+    journalEntries: [...next.journalEntries, journal],
+    supplierAdvanceSettlements: [settlement],
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
+    /asiento de anticipo descuadrado/);
 });
