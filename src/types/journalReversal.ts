@@ -436,9 +436,12 @@ export function assessJournalReversal(input: {
   bankAccounts: BankAccount[];
   bankStatementMovements: BankStatementMovement[];
   creditSettlements: Array<{ companyId: string; documentId: string; kind: string; isReversed?: boolean }>;
+  priorPeriodAdjustment?: boolean;
+  retainedEarningsAccountCode?: string;
 }): JournalReversalAssessment {
   const { companyId, source, accounts, sales, purchases, movements, products,
-    journalEntries, bankAccounts, bankStatementMovements, creditSettlements } = input;
+    journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+    priorPeriodAdjustment = false, retainedEarningsAccountCode } = input;
   const sale = sales.find(item => item.companyId === companyId &&
     (item.journalEntryId === source.id ||
       (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
@@ -484,7 +487,7 @@ export function assessJournalReversal(input: {
     blockers.push('El asiento tiene movimientos de inventario relacionados. Deben identificarse y conciliarse antes de reversar.');
   }
   if (settlements.length) blockers.push('Hay ' + settlements.length + ' cobro(s)/pago(s) vigente(s) asociados al documento; revierta primero sus liquidaciones.');
-  const reversedItems = buildReversalItems(source, accounts);
+  const reversedItems = buildReversalItems(source, accounts, priorPeriodAdjustment, retainedEarningsAccountCode);
   const bankReadiness = validateBankStatementReversal({
     companyId, source, reversalItems: reversedItems, bankAccounts, statementMovements: bankStatementMovements
   });
