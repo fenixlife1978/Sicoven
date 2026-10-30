@@ -583,6 +583,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó la nota de crédito: falta enlazar los comprobantes de retención IVA/ISLR afectados para revisión fiscal.');
     }
     const journalMovementIds = new Set();
+    const sourceMovementIds = new Set();
     let totalInventoryCost = 0;
     for (const line of lines) {
       const originalMovement = asArray(nextState.movements).find(item =>
@@ -594,7 +595,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       const originalLine = sourceLines.find(item => item.productId === line.productId);
       const product = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
-          journalMovementIds.has(String(returnMovement.id)) ||
+          journalMovementIds.has(String(returnMovement.id)) || sourceMovementIds.has(String(line.originalMovementId)) ||
           originalMovement.productId !== line.productId || returnMovement.productId !== line.productId ||
           returnMovement.type !== 'SALIDA' || returnMovement.concept !== 'DEVOLUCION_COMPRA' ||
           returnMovement.date !== note.invoiceDate ||
@@ -612,6 +613,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         throw new Error('SQLite rechazó una línea de nota de crédito: la salida física no concilia con la entrada original y el asiento enlazado.');
       }
       journalMovementIds.add(String(returnMovement.id));
+      sourceMovementIds.add(String(line.originalMovementId));
       totalInventoryCost += Number(line.inventoryCostBs);
       const allReturned = asArray(nextState.purchases).filter(item => item.companyId === original.companyId && item.originalPurchaseId === original.id)
         .flatMap(item => Array.isArray(item.creditNoteLines) ? item.creditNoteLines : [])
