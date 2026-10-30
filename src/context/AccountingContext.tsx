@@ -1100,34 +1100,44 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // 1. Generar Asiento Contable Automático en Libro Diario
     const items: JournalEntryItem[] = [];
 
-    // Debe: Gasto u Operación / Inventario (Base Imponible)
+    // Debe: distribuir el costo de inventario por la cuenta auxiliar real de cada artículo.
+    // Las compras sin líneas de inventario estructuradas se registran como gasto operativo.
     const hasInventoryLines = Array.isArray(purchaseData.inventoryLines) && purchaseData.inventoryLines.length > 0;
-    const debitAccountCode = hasInventoryLines || purchaseData.taxableBaseBs > 0 ? '1.1.4.01' : '6.1.1.04';
-    const debitAccountName = debitAccountCode === '1.1.4.01'
-      ? 'Inventario de Mercancías para la Venta'
-      : 'Honorarios Profesionales (Contables, Legales, Asesoría)';
-
-    items.push({
-      accountCode: debitAccountCode,
-      accountName: debitAccountName,
-      debitBs: purchaseData.taxableBaseBs,
-      creditBs: 0,
-      debitUsd: purchaseData.taxableBaseBs / rate,
-      creditUsd: 0,
-      description: `Compra Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
-    });
-
-    // Debe: compras/operaciones exentas. Incluir esta línea evita que las
-    // facturas con monto exento queden descuadradas en el asiento automático.
-    if (purchaseData.exemptAmountBs > 0) {
-      items.push({
-        accountCode: debitAccountCode,
-        accountName: `Compras u operaciones exentas - ${debitAccountName}`,
-        debitBs: purchaseData.exemptAmountBs,
-        creditBs: 0,
-        debitUsd: purchaseData.exemptAmountBs / rate,
-        creditUsd: 0,
-        description: `Monto exento Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
+    if (hasInventoryLines) {
+      const inventoryByAccount = new Map<string, { name: string; amountBs: number; productCodes: string[] }>();
+      for (const purchaseLine of purchaseData.inventoryLines || []) {
+        const product = products.find(item => item.id === purchaseLine.productId && item.companyId === currentCompany.id);
+        if (!product) throw new Error('No se puede contabilizar una línea de compra sin artículo válido.');
+        const accountCode = product.inventoryAccountCode || '1.1.4.01';
+        const account = accounts.find(item => item.code === accountCode && item.isMovement);
+        if (!account) throw new Error('La cuenta de inventario ' + accountCode + ' del artículo ' + product.code + ' no existe o no admite movimientos.');
+        const current = inventoryByAccount.get(accountCode) || { name: account.name, amountBs: 0, productCodes: [] };
+        current.amountBs += Number(purchaseLine.quantity) * Number(purchaseLine.unitCostBs);
+        current.productCodes.push(product.code);
+        inventoryByAccount.set(accountCode, current);
+      }
+      for (const [accountCode, group] of inventoryByAccount) {
+        const amountBs = Math.round(group.amountBs * 100) / 100;
+        if (amountBs <= 0) continue;
+        items.push({
+          accountCode, accountName: group.name,
+          debitBs: amountBs, creditBs: 0,
+          debitUsd: amountBs / rate, creditUsd: 0,
+          description: `Inventario compra Fac. ${purchaseData.invoiceNumber} · ${group.productCodes.join(', ')}`
+        });
+      }
+    } else {
+      const expenseAccountCode = '6.1.1.04';
+      const expenseAccount = accounts.find(item => item.code === expenseAccountCode && item.isMovement);
+      if (!expenseAccount && purchaseData.taxableBaseBs + purchaseData.exemptAmountBs > 0) {
+        throw new Error('Falta la cuenta de gasto operativo ' + expenseAccountCode + '.');
+      }
+      const baseBs = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
+      if (baseBs > 0) items.push({
+        accountCode: expenseAccountCode,
+        accountName: expenseAccount?.name || 'Gastos operativos',
+        debitBs: baseBs, creditBs: 0, debitUsd: baseBs / rate, creditUsd: 0,
+        description: `Compra operativa Fac. ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`
       });
     }
 
