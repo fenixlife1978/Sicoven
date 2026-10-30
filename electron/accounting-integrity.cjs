@@ -324,6 +324,13 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
       journalMovementIds.add(String(returnMovement.id));
       totalInventoryCost += Number(line.inventoryCostBs);
+      const allReturned = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
+        .flatMap(item => Array.isArray(item.creditNoteLines) ? item.creditNoteLines : [])
+        .filter(item => item.productId === line.productId)
+        .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      if (allReturned > Number(originalLine.quantity) + 0.000001) {
+        throw new Error('SQLite rechazó la nota de crédito: las devoluciones acumuladas superan la cantidad facturada.');
+      }
       const priorProduct = asArray(priorState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       const nextProduct = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       const allNewReturnsForProduct = newSupplierReturns.filter(item => item.productId === line.productId)
@@ -332,13 +339,6 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(Number(priorProduct.currentStock) - allNewReturnsForProduct - Number(nextProduct.currentStock)) > 0.000001 ||
           Math.abs(Number(returnMovement.balanceQty) - Number(nextProduct.currentStock)) > 0.000001) {
         throw new Error('SQLite rechazó la nota de crédito: la existencia final del artículo no coincide con las salidas físicas registradas.');
-      }
-      const allReturned = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
-        .flatMap(item => Array.isArray(item.creditNoteLines) ? item.creditNoteLines : [])
-        .filter(item => item.productId === line.productId)
-        .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-      if (allReturned > Number(originalLine.quantity) + 0.000001) {
-        throw new Error('SQLite rechazó la nota de crédito: las devoluciones acumuladas superan la cantidad facturada.');
       }
     }
     const debitsBs = journal.items.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
