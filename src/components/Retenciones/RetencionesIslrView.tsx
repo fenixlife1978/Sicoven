@@ -159,6 +159,12 @@ export const RetencionesIslrView: React.FC = () => {
           </div>
         </div>
 
+        {filteredVouchers.some(voucher => voucher.requiresFiscalCorrection) && (
+          <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
+            Hay comprobantes vinculados a notas de crédito o reversiones que requieren revisión fiscal. Se conservan como documentos históricos; el archivo SENIAT todavía incluye sus datos originales. Verifique la rectificación aplicable antes de declarar.
+          </div>
+        )}
+
         {/* XML Preview Card */}
         {showXmlPreview && (
           <div className="mt-6 p-4 bg-slate-900 text-white rounded-xl border border-slate-800 space-y-2 animate-in fade-in duration-200">
