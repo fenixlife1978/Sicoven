@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord, InventoryMovement } from './accounting';
+import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord, InventoryMovement, InventoryProduct } from './accounting';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from './journalReversal';
 
 const accounts: Account[] = [
@@ -294,6 +294,12 @@ const reconciledPurchase = {
   journalEntryId: 'purchase-journal',
   inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
 } satisfies PurchaseRecord;
+const reconciledInventoryProduct: InventoryProduct = {
+  id: 'p-1', companyId: 'c-1', code: 'P-1', name: 'Producto',
+  category: 'Mercancía', unit: 'UND', minStock: 0, currentStock: 2,
+  avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
+  salesPriceBs: 150, salesPriceUsd: 1.5, inventoryAccountCode: '1.1.4.02'
+};
 const reconciledPurchaseMovement: InventoryMovement = {
   id: 'purchase-movement', companyId: 'c-1', productId: 'p-1',
   productName: 'Producto', productCode: 'P-1', date: '2026-10-10',
@@ -321,6 +327,22 @@ test('certifica compra solo cuando factura, Kardex y asiento coinciden en ambas 
   assert.equal(result.ready, true);
   assert.equal(result.lineTotal, 200);
   assert.equal(result.movementTotal, 200);
+  assert.equal(result.journalInventoryDebit, 200);
+  assert.equal(result.journalInventoryDebitUsd, 2);
+});
+
+test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventario configurada', () => {
+  const alternateJournal: JournalEntry = {
+    ...reconciledPurchaseJournal,
+    items: reconciledPurchaseJournal.items.map(item => item.accountCode === '1.1.4.01'
+      ? { ...item, accountCode: '1.1.4.02', accountName: 'Inventario materia prima' } : item)
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [alternateJournal],
+    products: [reconciledInventoryProduct]
+  });
+  assert.equal(result.ready, true);
   assert.equal(result.journalInventoryDebit, 200);
   assert.equal(result.journalInventoryDebitUsd, 2);
 });
