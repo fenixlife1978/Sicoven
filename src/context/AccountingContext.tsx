@@ -33,6 +33,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 import { calculateFifoIssue, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
+import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -968,6 +969,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
+    const settlementModeError = validatePurchaseSettlementMode(purchaseData.paymentTerm);
+    if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
     const rate = Number(purchaseData.bcvRate || currentCompany.bcvRate);
