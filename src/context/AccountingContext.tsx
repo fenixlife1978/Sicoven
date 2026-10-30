@@ -360,8 +360,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const linkedInventoryMovements = movements.filter(movement =>
       movement.companyId === currentCompany.id &&
       (movement.journalEntryId === source.id ||
-        (linkedSale && movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedSale.invoiceNumber).toUpperCase()) ||
-        (linkedPurchase && movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase()))
+        (linkedSale && (movement.documentRef.trim().toUpperCase() === linkedSale.invoiceNumber.trim().toUpperCase() ||
+          movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedSale.invoiceNumber).toUpperCase())) ||
+        (linkedPurchase && (movement.documentRef.trim().toUpperCase() === linkedPurchase.invoiceNumber.trim().toUpperCase() ||
+          movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase())))
     );
     if (linkedInventoryMovements.length > 0) {
       if (!linkedSale || linkedPurchase) {
