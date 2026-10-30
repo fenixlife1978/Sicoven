@@ -942,6 +942,37 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (amounts.some(value => !Number.isFinite(value) || value < 0) || purchaseData.totalAmountBs <= 0) {
       throw new Error('La compra contiene importes inválidos; revisa la factura antes de guardarla.');
     }
+    if (purchaseData.inventoryLines !== undefined) {
+      if (!Array.isArray(purchaseData.inventoryLines)) {
+        throw new Error('Las líneas de inventario de la compra no tienen un formato válido.');
+      }
+      if (purchaseData.inventoryLines.length > 0) {
+        const seenProducts = new Set<string>();
+        let inventoryLineTotal = 0;
+        for (const line of purchaseData.inventoryLines) {
+          const quantity = Number(line.quantity);
+          const unitCost = Number(line.unitCostBs);
+          const product = products.find(item => item.id === line.productId && item.companyId === currentCompany.id);
+          if (!product || seenProducts.has(String(line.productId)) ||
+              !Number.isFinite(quantity) || quantity <= 0 ||
+              !Number.isFinite(unitCost) || unitCost <= 0) {
+            throw new Error('Las líneas de inventario requieren artículos existentes, sin duplicados, y cantidades/costos positivos.');
+          }
+          seenProducts.add(String(line.productId));
+          inventoryLineTotal += quantity * unitCost;
+          const latestMovementDate = movements
+            .filter(movement => movement.companyId === currentCompany.id && movement.productId === product.id)
+            .reduce((latest, movement) => movement.date > latest ? movement.date : latest, '');
+          if (latestMovementDate && purchaseData.invoiceDate < latestMovementDate) {
+            throw new Error('La fecha de compra es anterior al último movimiento del Kardex de ' + product.code + '. Registre las operaciones en orden cronológico.');
+          }
+        }
+        const expectedInventoryTotal = Number(purchaseData.taxableBaseBs) + Number(purchaseData.exemptAmountBs);
+        if (Math.abs(Math.round(inventoryLineTotal * 100) / 100 - Math.round(expectedInventoryTotal * 100) / 100) > 0.02) {
+          throw new Error('Las líneas de inventario no concilian con la base imponible más el monto exento de la factura.');
+        }
+      }
+    }
     // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
     if (currentCompany.closedThroughDate && purchaseData.invoiceDate <= currentCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
