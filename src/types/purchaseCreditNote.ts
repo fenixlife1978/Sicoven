@@ -52,6 +52,7 @@ export interface PurchaseCreditNoteDraftLine {
   previouslyReturnedQuantity: number;
   currentStock: number;
   currentAverageCostBs: number;
+  fifoLayerAvailableQuantity?: number;
 }
 
 export interface PurchaseCreditNoteDraft {
@@ -193,21 +194,25 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     if (!Number.isFinite(currentStock) || currentStock < 0 || quantity > currentStock + 0.000001) {
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
+    let returnUnitCostBs = Number(line.unitCostBs);
     if (product.costingMethod === 'PEPS') {
-      throw new Error('PEPS requiere identificación y descarga del lote original; esta devolución no se puede automatizar.');
-    }
-    if (!Number.isFinite(Number(requested.currentAverageCostBs)) ||
+      const availableOriginalLayer = Number(requested.fifoLayerAvailableQuantity);
+      if (!Number.isFinite(availableOriginalLayer) || availableOriginalLayer + 0.000001 < quantity) {
+        throw new Error('La capa PEPS de la compra original no conserva existencia suficiente. No se puede devolver inventario de otra compra como si perteneciera a esta factura.');
+      }
+      returnUnitCostBs = movementUnitCost;
+    } else if (!Number.isFinite(Number(requested.currentAverageCostBs)) ||
         Math.abs(Number(requested.currentAverageCostBs) - Number(line.unitCostBs)) > 0.01) {
       throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
     }
-    const lineValue = money(quantity * Number(line.unitCostBs));
+    const lineValue = money(quantity * returnUnitCostBs);
     const isExempt = product.vatTreatment === 'EXENTO' || product.vatTreatment === 'EXONERADO';
     inventoryCostBs += lineValue;
     if (isExempt) exemptAmountBs += lineValue;
     else taxableBaseBs += lineValue;
     lineAmounts.push({
       productId: product.id, originalMovementId: movement.id,
-      quantity, unitCostBs: Number(line.unitCostBs), inventoryCostBs: lineValue
+      quantity, unitCostBs: returnUnitCostBs, inventoryCostBs: lineValue
     });
   }
 
