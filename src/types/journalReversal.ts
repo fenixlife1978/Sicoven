@@ -122,15 +122,21 @@ export function validateSaleInventoryReturnReconciliation(input: {
         ' no está devuelta en su totalidad. Devuelto: ' + returnedQuantity + ' de ' + original.quantity + '.');
     }
     if (!corrections.length || corrections.some(item =>
-      item.type !== 'ENTRADA' || item.concept !== 'DEVOLUCION_CLIENTE' ||
-      !item.journalEntryId || item.date < original.date
+      item.productId !== original.productId || item.type !== 'ENTRADA' ||
+      item.concept !== 'DEVOLUCION_CLIENTE' || !item.journalEntryId ||
+      !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
+      !Number.isFinite(Number(item.totalCostBs)) || Number(item.totalCostBs) <= 0 ||
+      !Number.isFinite(Number(item.totalCostUsd)) || Number(item.totalCostUsd) <= 0 ||
+      item.date < original.date
     )) {
       return blocked('La devolución de ' + original.productCode + ' no tiene movimientos de entrada válidos y fechados después de la venta.');
     }
     for (const correction of corrections) {
       const entry = journalEntries.find(item => item.id === correction.journalEntryId && item.companyId === companyId);
-      if (!entry || entry.type !== 'INVENTARIO' || entry.referenceDoc !== correction.documentRef) {
-        return blocked('La devolución ' + correction.documentRef + ' no tiene su asiento de inventario vinculado.');
+      if (!entry || entry.type !== 'INVENTARIO' || entry.date !== correction.date ||
+          entry.referenceDoc !== correction.documentRef || entry.items.length !== 2 ||
+          entry.items.some(item => item.accountCode !== inventoryCode && item.accountCode !== costCode)) {
+        return blocked('La devolución ' + correction.documentRef + ' no tiene un asiento exclusivo de inventario/costo vinculado.');
       }
       const totals = entry.items.reduce((sum, item) => ({
         debitBs: sum.debitBs + Number(item.debitBs || 0),
