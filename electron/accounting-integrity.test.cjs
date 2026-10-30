@@ -971,3 +971,28 @@ test('SQLite rejects supplier advance refunds posted to an unrelated account ins
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
     /cuenta de tesorería, efectivo recibido o diferencial cambiario no concilian exactamente/);
 });
+
+
+test('SQLite rejects supplier credit notes with an invalid BCV rate', () => {
+  const { prior, next } = supplierCreditFixture();
+  const note = next.purchases.find(item => item.id === 'purchase-credit-note');
+  note.bcvRate = Number.NaN;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /falta factura original, proveedor, soporte, líneas de Kardex o reducción de CxP válida/);
+});
+
+test('SQLite rejects supplier credit note lines with non-numeric quantities', () => {
+  const { prior, next } = supplierCreditFixture();
+  const note = next.purchases.find(item => item.id === 'purchase-credit-note');
+  note.creditNoteLines[0].quantity = Number.NaN;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /la salida física no concilia con la entrada original/);
+});
+
+test('SQLite rejects balanced supplier credit note journals with unrelated accounts', () => {
+  const { prior, next } = supplierCreditFixture();
+  const journal = next.journalEntries.find(item => item.id === 'credit-entry');
+  journal.items.push(
+    { accountCode: '9.9.9.99', debitBs: 1, creditBs: 0, debitUsd: 0, creditUsd: 0 },
+    { accountCode: '9.9.9.99', debitBs: 0, creditBs: 1, debitUsd: 0, creditUsd: 0 }
+  );
+  assert.throws(() => validateAccountingSnapshot(prior, next), /nota de crédito: el asiento no está balanceado o no revierte CxP/);
+});
