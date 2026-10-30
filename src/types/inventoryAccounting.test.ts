@@ -4,6 +4,7 @@ import {
   calculateWeightedAverageCost,
   calculateFifoIssue,
   validateInventoryMovement,
+  normalizeProductionRecipe,
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales
 } from './inventoryAccounting';
