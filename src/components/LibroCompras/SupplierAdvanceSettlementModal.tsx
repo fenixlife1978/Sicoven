@@ -40,6 +40,9 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id);
+  const rate = Number(bcvRate);
+  const usd = Number(amountUsd);
+  const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
   const allocationPreview = useMemo(() => {
     if (!supplierRif || !Number.isFinite(usd) || usd <= 0) return { rows: [], error: '' };
     const rif = supplierRif.trim().toUpperCase();
@@ -70,9 +73,6 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
       return { rows: [], error: cause instanceof Error ? cause.message : 'No se pudo calcular la distribución FIFO.' };
     }
   }, [supplierRif, usd, purchases, supplierAdvanceSettlements, currentCompany.id]);
-  const rate = Number(bcvRate);
-  const usd = Number(amountUsd);
-  const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (saving) return;
