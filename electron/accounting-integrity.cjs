@@ -764,11 +764,31 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
-      const payableDebit = journal.items.reduce((sum, item) =>
-        sum + (item.accountCode === '2.1.1.01' ? Number(item.debitBs || 0) : 0), 0);
+      const originalPurchaseJournal = target?.journalEntryId
+        ? priorById.get(String(target.journalEntryId))
+        : undefined;
+      const payableCandidates = originalPurchaseJournal && originalPurchaseJournal.companyId === companyId &&
+        originalPurchaseJournal.type === 'COMPRA' && Array.isArray(originalPurchaseJournal.items)
+        ? originalPurchaseJournal.items.filter(item =>
+            Number(item.creditBs || 0) > 0 &&
+            String(item.accountCode || '').startsWith('2.1.1.') &&
+            /(proveedor|cuentas por pagar|neto a pagar)/i.test(String(item.description || '')))
+        : [];
+      const payableCodes = [...new Set(payableCandidates.map(item => String(item.accountCode)))];
+      const targetPayableCode = payableCodes.length === 1 ? payableCodes[0] : '';
+      const payableDebitBs = targetPayableCode
+        ? journal.items.filter(item => item.accountCode === targetPayableCode)
+            .reduce((sum, item) => sum + Number(item.debitBs || 0), 0)
+        : 0;
+      const payableDebitUsd = targetPayableCode
+        ? journal.items.filter(item => item.accountCode === targetPayableCode)
+            .reduce((sum, item) => sum + Number(item.debitUsd || 0), 0)
+        : 0;
       if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
-          String(target.supplierRif || '').trim().toUpperCase() !== rif || payableDebit <= 0) {
-        throw new Error('SQLite rechazó una aplicación de anticipo a una factura de otro proveedor o sin débito de CxP.');
+          String(target.supplierRif || '').trim().toUpperCase() !== rif ||
+          !targetPayableCode || payableDebitBs <= 0 ||
+          Math.abs(payableDebitUsd - amountUsd) > 0.01) {
+        throw new Error('SQLite rechazó la aplicación de anticipo: la factura, su asiento original y la cuenta auxiliar de CxP no concilian.');
       }
     }
     if (settlement.isReversed) {
