@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { calculateSupplierAdvanceBalance, validateSupplierAdvanceSettlement } from './supplierAdvance';
+import { calculateSupplierAdvanceBalance, calculateOutstandingSupplierAdvance, validateSupplierAdvanceSettlement } from './supplierAdvance';
+import type { SupplierAdvanceSettlement } from './supplierAdvanceSettlement';
 import type { PurchaseRecord } from './accounting';
 
 const note = (overrides: Partial<PurchaseRecord> = {}): PurchaseRecord => ({
@@ -25,6 +26,21 @@ test('calcula el saldo por RIF y excluye notas reversadas', () => {
   assert.equal(balance.totalCreditBs, 5000);
   assert.equal(balance.totalCreditUsd, 50);
   assert.equal(balance.creditNoteCount, 2);
+});
+
+test('descuenta reembolsos y aplicaciones activas; una reversión restaura el saldo', () => {
+  const purchases = [note()];
+  const settlement = {
+    id: 'settlement-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor A', sourceCreditNoteIds: ['nc-1'],
+    kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 10,
+    amountBs: 1000, bcvRate: 100, treasuryAccountCode: '1.1.1.03',
+    journalEntryId: 'journal-1', createdAt: '2026-10-30T10:00:00.000Z'
+  } as SupplierAdvanceSettlement;
+  const afterRefund = calculateOutstandingSupplierAdvance('J-12345678-9', purchases, [settlement], 'company-1');
+  assert.equal(afterRefund.outstandingUsd, 20);
+  const afterReversal = calculateOutstandingSupplierAdvance('J-12345678-9', purchases, [{ ...settlement, isReversed: true }], 'company-1');
+  assert.equal(afterReversal.outstandingUsd, 30);
 });
 
 test('impide liquidar por encima del saldo disponible', () => {
