@@ -86,7 +86,7 @@ interface AccountingContextType {
   addProduct: (product: Omit<InventoryProduct, 'id' | 'companyId'>) => InventoryProduct;
   importInventoryProducts: (products: Omit<InventoryProduct, 'id' | 'companyId'>[]) => number;
   importInventoryMovements: (movements: Omit<InventoryMovement, 'id' | 'companyId'>[]) => number;
-  executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => InventoryMovement[];
+  executeProduction: (finishedProductId: string, outputQuantity: number, date: string, bcvRate: number, documentRef: string) => Promise<InventoryMovement[]>;
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
@@ -2317,17 +2317,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
 
-  const executeProduction = (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): InventoryMovement[] => {
+  const executeProduction = async (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): Promise<InventoryMovement[]> => {
+    if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones; cierre y vuelva a abrir la aplicación.');
+    if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista.');
     const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
     if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
     if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date) || !Number.isFinite(parsedProductionDate.getTime()) || parsedProductionDate.toISOString().slice(0,10) !== date) throw new Error('La fecha de producción no es válida.');
-    const recipe = finished.bomComponents || [];
-    if (!recipe.length) throw new Error('Configure primero la matriz insumo-producto del artículo.');
-    if (recipe.some(line => !Number.isFinite(line.quantityPerUnit) || line.quantityPerUnit <= 0 || line.productId === finishedProductId)) {
-      throw new Error('La matriz contiene componentes inválidos o una referencia circular directa.');
+    const recipe = normalizeProductionRecipe(finished.bomComponents || [], finishedProductId);
+    const productionReference = String(documentRef || '').trim();
+    if (!productionReference) throw new Error('La orden de producción requiere una referencia única.');
+    if (journalEntries.some(entry => entry.companyId === currentCompany.id &&
+        entry.type === 'INVENTARIO' && String(entry.referenceDoc || '').trim().toUpperCase() === productionReference.toUpperCase())) {
+      throw new Error('La referencia de la orden de producción ya fue registrada.');
+    }
+    for (const productId of [finishedProductId, ...recipe.map(line => line.productId)]) {
+      const latestMovementDate = movements.filter(movement =>
+        movement.companyId === currentCompany.id && movement.productId === productId)
+        .reduce((latest, movement) => movement.date > latest ? movement.date : latest, '');
+      if (latestMovementDate && date < latestMovementDate) {
+        throw new Error('La fecha de producción es anterior al último movimiento de Kardex del artículo ' + productId + '. Importe los períodos históricos en orden cronológico.');
+      }
     }
     const rate = bcvRateInput;
     const wipAccount = accounts.find(a => a.code === '1.1.4.04' && a.isMovement);
@@ -2344,6 +2356,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       if (component.itemType === 'PRODUCTO_EN_PROCESO' && component.inventoryAccountCode !== '1.1.4.04') throw new Error('El componente en proceso ' + component.code + ' debe estar asociado a la cuenta 1.1.4.04.');
       const requiredQuantity = Math.round(line.quantityPerUnit * outputQuantity * 1000000) / 1000000;
+      if (!Number.isFinite(requiredQuantity) || requiredQuantity <= 0) throw new Error('La cantidad requerida para ' + component.code + ' no es válida.');
       if (requiredQuantity > component.currentStock + 1e-8) throw new Error('Existencia insuficiente de ' + component.code + ': disponibles ' + component.currentStock + ', requeridas ' + requiredQuantity + '.');
       let totalBs = 0;
       let componentNewAverageBs = component.avgCostBs;
@@ -2432,8 +2445,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ...finished, currentStock: weightedFinished.quantity, avgCostBs: weightedFinished.unitCostBs,
       avgCostUsd: weightedFinished.unitCostUsd, lastCostBs: productionUnitCostBs, lastCostUsd: productionUnitCostBs / rate
     });
+    const persistenceConfirmation = waitForPersistence();
     setProducts(prev => prev.map(product => productUpdates.get(product.id) || product));
     setMovements(prev => [...prev, ...movementsToAdd]);
+    await persistenceConfirmation;
     return movementsToAdd;
   };
 

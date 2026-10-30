@@ -116,6 +116,30 @@ export function validateInventoryMovement(input: {
   return null;
 }
 
+/** Normaliza la matriz BOM y consolida componentes repetidos antes de consumir existencias. */
+export function normalizeProductionRecipe(
+  recipeInput: Array<{ productId: string; quantityPerUnit: number }>,
+  finishedProductId: string
+): Array<{ productId: string; quantityPerUnit: number }> {
+  if (!Array.isArray(recipeInput) || recipeInput.length === 0) {
+    throw new Error('Configure primero la matriz insumo-producto del artículo.');
+  }
+  const quantities = new Map<string, number>();
+  for (const line of recipeInput) {
+    const productId = String(line?.productId || '').trim();
+    const quantity = Number(line?.quantityPerUnit);
+    if (!productId || productId === finishedProductId || !Number.isFinite(quantity) || quantity <= 0) {
+      throw new Error('La matriz contiene componentes inválidos, cantidades no positivas o una referencia circular directa.');
+    }
+    const accumulated = (quantities.get(productId) || 0) + quantity;
+    if (!Number.isFinite(accumulated) || accumulated <= 0) {
+      throw new Error('La cantidad acumulada de un componente de producción no es válida.');
+    }
+    quantities.set(productId, accumulated);
+  }
+  return [...quantities.entries()].map(([productId, quantityPerUnit]) => ({ productId, quantityPerUnit }));
+}
+
 /** NIC 2: el importe en libros no debe superar el valor neto realizable. */
 export function calculateVnrWriteDown(input: {
   quantity: number;

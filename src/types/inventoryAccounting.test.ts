@@ -69,6 +69,23 @@ describe('motor de inventario contable', () => {
     }) || '', /fecha.*no es válida/i);
   });
 
+  it('consolida componentes repetidos de una matriz de producción', () => {
+    assert.deepEqual(normalizeProductionRecipe([
+      { productId: 'raw-1', quantityPerUnit: 2 },
+      { productId: 'raw-2', quantityPerUnit: 1 },
+      { productId: 'raw-1', quantityPerUnit: 3 }
+    ], 'finished-1'), [
+      { productId: 'raw-1', quantityPerUnit: 5 },
+      { productId: 'raw-2', quantityPerUnit: 1 }
+    ]);
+  });
+
+  it('rechaza componentes de producción inválidos o referencias circulares directas', () => {
+    assert.throws(() => normalizeProductionRecipe([{ productId: 'finished-1', quantityPerUnit: 1 }], 'finished-1'), /componentes inválidos/);
+    assert.throws(() => normalizeProductionRecipe([{ productId: 'raw-1', quantityPerUnit: Number.NaN }], 'finished-1'), /componentes inválidos/);
+    assert.throws(() => normalizeProductionRecipe([{ productId: 'raw-1', quantityPerUnit: 1e309 }], 'finished-1'), /componentes inválidos/);
+  });
+
   it('calcula una provisión cuando el VNR cae por debajo del costo', () => {
     const result = calculateVnrWriteDown({
       quantity: 10, unitCostBs: 100, estimatedSellingPricePerUnitBs: 90,

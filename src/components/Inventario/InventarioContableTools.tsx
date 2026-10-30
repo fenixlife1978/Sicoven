@@ -46,6 +46,7 @@ export const InventarioContableTools: React.FC = () => {
   const [periodEnd, setPeriodEnd] = useState(new Date().toISOString().slice(0, 10));
   const [closingRate, setClosingRate] = useState(String(currentCompany.bcvRate || ''));
   const [closingBusy, setClosingBusy] = useState(false);
+  const [productionBusy, setProductionBusy] = useState(false);
   const [finishedProductId, setFinishedProductId] = useState(products.find(p => p.itemType === 'PRODUCTO_TERMINADO')?.id || '');
   const [recipeLines, setRecipeLines] = useState<Array<{productId:string;quantityPerUnit:number}>>([]);
   const [componentId, setComponentId] = useState('');
@@ -322,12 +323,14 @@ export const InventarioContableTools: React.FC = () => {
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo guardar la matriz.'); }
   };
 
-  const runProduction = () => {
-    setError(''); setMessage('');
+  const runProduction = async () => {
+    if (productionBusy) return;
+    setError(''); setMessage(''); setProductionBusy(true);
     try {
-      const result = executeProduction(finishedProductId, Number(productionQty), productionDate, Number(productionRate), productionRef.trim() || ('PROD-' + Date.now()));
-      setMessage('Producción registrada: ' + result.length + ' movimientos de consumo/entrada y asiento contable de producción.');
+      const result = await executeProduction(finishedProductId, Number(productionQty), productionDate, Number(productionRate), productionRef.trim() || ('PROD-' + Date.now()));
+      setMessage('Producción registrada y confirmada en SQLite: ' + result.length + ' movimientos de consumo/entrada y asiento contable.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la producción.'); }
+    finally { setProductionBusy(false); }
   };
 
   const closeInventoryPeriod = () => {
@@ -493,7 +496,7 @@ export const InventarioContableTools: React.FC = () => {
           <input value={productionRef} onChange={e => setProductionRef(e.target.value)} placeholder="OP-00001" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2" />
         </label>
       </div>
-      <button onClick={runProduction} disabled={!selectedFinishedProduct || !selectedFinishedProduct.bomComponents?.length} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">Ejecutar orden de producción</button>
+      <button onClick={runProduction} disabled={productionBusy || !selectedFinishedProduct || !selectedFinishedProduct.bomComponents?.length} className="rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50">{productionBusy ? 'Guardando en SQLite…' : 'Ejecutar orden de producción'}</button>
     </section>
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
