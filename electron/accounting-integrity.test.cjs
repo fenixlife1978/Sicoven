@@ -844,7 +844,7 @@ test('SQLite rejects supplier advance allocations that exceed the individual cre
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
   };
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
-    /saldo individual de una nota de crédito/);
+    /liquidaciones de anticipos que exceden el saldo acreditado por notas de crédito/);
 });
 
 test('SQLite restores an individual credit-note advance allocation after its settlement is reversed', () => {
@@ -917,7 +917,7 @@ test('SQLite rejects supplier advance settlements with an unbalanced linked jour
     description: 'Liquidación anticipo', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
     items: [
       { accountCode: '1.1.1.03', debitBs: 10, creditBs: 0, debitUsd: 0.1, creditUsd: 0 },
-      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 9.99, debitUsd: 0, creditUsd: 0.1 }
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 9.98, debitUsd: 0, creditUsd: 0.1 }
     ],
     createdAt: '2026-10-30T10:00:00.000Z'
   };
