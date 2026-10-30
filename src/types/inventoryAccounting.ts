@@ -25,6 +25,87 @@ export interface InventoryCostResult {
   unitCostUsd: number;
 }
 
+export interface FifoMovementSnapshot {
+  type: 'ENTRADA' | 'SALIDA' | 'AJUSTE';
+  quantity: number;
+  unitCostBs: number;
+  unitCostUsd: number;
+  date: string;
+  documentRef?: string;
+  balanceQty: number;
+}
+
+/**
+ * Reconstructs PEPS layers only from the real movement history.
+ * It never invents a legacy opening layer to make the current stock balance.
+ */
+export function reconstructFifoLayers(
+  movementsInput: FifoMovementSnapshot[],
+  currentStock: number
+): CostLayer[] {
+  if (!Array.isArray(movementsInput) || !validNonNegative(Number(currentStock))) {
+    throw new Error('El Kardex PEPS o la existencia actual no son válidos.');
+  }
+  const ordered = movementsInput.map((movement, index) => ({ movement, index }))
+    .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
+  const layers: CostLayer[] = [];
+  let runningQuantity = 0;
+  const consumeLayers = (quantity: number, reference: string) => {
+    let remaining = quantity;
+    for (const layer of layers) {
+      const consumed = Math.min(layer.quantity, remaining);
+      layer.quantity -= consumed;
+      remaining -= consumed;
+      if (remaining <= 1e-8) break;
+    }
+    if (remaining > 1e-8) {
+      throw new Error('El historial PEPS no contiene capas suficientes para reconstruir ' + reference + '.');
+    }
+  };
+  for (const { movement } of ordered) {
+    const date = String(movement.date || '');
+    const parsedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(date) ? new Date(date + 'T00:00:00Z') : null;
+    if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
+      throw new Error('El historial PEPS contiene una fecha inválida.');
+    }
+    const quantity = Number(movement.quantity);
+    const unitCostBs = Number(movement.unitCostBs);
+    const unitCostUsd = Number(movement.unitCostUsd);
+    const balanceQuantity = Number(movement.balanceQty);
+    if (!validNonNegative(unitCostBs) || !validNonNegative(unitCostUsd) ||
+        !validNonNegative(balanceQuantity) || !validNonNegative(quantity)) {
+      throw new Error('El historial PEPS contiene cantidades, costos o saldos no válidos.');
+    }
+    if (movement.type === 'ENTRADA') {
+      if (!validPositive(quantity)) throw new Error('Una entrada PEPS debe contener una cantidad positiva.');
+      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef });
+      runningQuantity += quantity;
+    } else if (movement.type === 'SALIDA') {
+      if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
+      consumeLayers(quantity, movement.documentRef || date);
+      runningQuantity -= quantity;
+    } else if (movement.type === 'AJUSTE') {
+      const delta = balanceQuantity - runningQuantity;
+      if (delta > 1e-8) {
+        layers.push({ quantity: delta, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef });
+      } else if (delta < -1e-8) {
+        consumeLayers(Math.abs(delta), movement.documentRef || date);
+      }
+      runningQuantity = balanceQuantity;
+    } else {
+      throw new Error('El historial PEPS contiene un tipo de movimiento desconocido.');
+    }
+    if (!Number.isFinite(runningQuantity) || runningQuantity < -1e-8 ||
+        Math.abs(runningQuantity - balanceQuantity) > 1e-8) {
+      throw new Error('El saldo de Kardex no concilia con las capas PEPS en el documento ' + (movement.documentRef || date) + '.');
+    }
+  }
+  if (Math.abs(runningQuantity - Number(currentStock)) > 1e-8) {
+    throw new Error('Las capas PEPS reconstruidas (' + runningQuantity + ') no coinciden con la existencia actual (' + currentStock + '). No se crearán capas de costo estimadas.');
+  }
+  return layers.filter(layer => layer.quantity > 1e-8);
+}
+
 const cents = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 const usdPrecision = (value: number): number => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
 const validPositive = (value: number): boolean => Number.isFinite(value) && value > 0;
