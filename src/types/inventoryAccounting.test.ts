@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   calculateWeightedAverageCost,
+  calculateWeightedAverageCostDual,
   calculateFifoIssue,
   reconstructFifoLayers,
   validateInventoryMovement,
@@ -18,6 +19,15 @@ describe('motor de inventario contable', () => {
     assert.equal(result.totalCostBs, 1800);
     assert.equal(result.unitCostBs, 120);
     assert.equal(result.unitCostUsd, 1.5);
+  });
+
+  it('preserves historical USD cost when the BCV rate changes', () => {
+    const result = calculateWeightedAverageCostDual(10, 100, 2, 5, 160, 2.5);
+    assert.equal(result.quantity, 15);
+    assert.equal(result.totalCostBs, 1800);
+    assert.equal(result.totalCostUsd, 32.5);
+    assert.equal(result.unitCostBs, 120);
+    assert.equal(result.unitCostUsd, 32.5 / 15);
   });
 
   it('capitalizes landed costs into the weighted average', () => {
