@@ -467,10 +467,21 @@ const supplierCreditFixture = () => {
     creditNoteLines: [{ productId: 'p-1', originalMovementId: 'purchase-movement',
       movementId: 'return-movement', quantity: 1, unitCostBs: 100, inventoryCostBs: 100 }]
   };
+  const vatVoucher = { id: 'vat-original', companyId: 'company-1', purchaseRecordId: originalPurchase.id,
+    invoiceNumber: originalPurchase.invoiceNumber, supplierRif: originalPurchase.supplierRif,
+    requiresFiscalCorrection: false };
+  const islrVoucher = { id: 'islr-original', companyId: 'company-1', invoiceNumber: originalPurchase.invoiceNumber,
+    supplierRif: originalPurchase.supplierRif, requiresFiscalCorrection: false };
+  const correctedVatVoucher = { ...vatVoucher, requiresFiscalCorrection: true,
+    correctionEntryId: noteEntry.id, correctionNote: 'Nota de crédito NC-001 requiere revisar retención fiscal' };
+  const correctedIslrVoucher = { ...islrVoucher, requiresFiscalCorrection: true,
+    correctionEntryId: noteEntry.id, correctionNote: 'Nota de crédito NC-001 requiere revisar retención fiscal' };
   const prior = { ...emptyState([originalEntry]), purchases: [originalPurchase],
-    movements: [originalMovement], products: [{ ...product, currentStock: 2 }] };
+    movements: [originalMovement], products: [{ ...product, currentStock: 2 }],
+    vatVouchers: [vatVoucher], islrVouchers: [islrVoucher] };
   const next = { ...emptyState([originalEntry, noteEntry]), purchases: [originalPurchase, note],
-    movements: [originalMovement, returnMovement], products: [product] };
+    movements: [originalMovement, returnMovement], products: [product],
+    vatVouchers: [correctedVatVoucher], islrVouchers: [correctedIslrVoucher] };
   return { prior, next, note, returnMovement };
 };
 
@@ -479,6 +490,7 @@ test('SQLite reconciles concurrent supplier returns independently when companies
   const clone = (value, suffix) => ({ ...value,
     id: value.id + suffix, companyId: 'company-2',
     ...(value.journalEntryId ? { journalEntryId: value.journalEntryId + suffix } : {}),
+    ...(value.purchaseRecordId ? { purchaseRecordId: value.purchaseRecordId + suffix } : {}),
     ...(value.originalPurchaseId ? { originalPurchaseId: value.originalPurchaseId + suffix } : {}),
     ...(value.originalMovementId ? { originalMovementId: value.originalMovementId + suffix } : {}),
     ...(value.movementId ? { movementId: value.movementId + suffix } : {}),
@@ -507,9 +519,17 @@ test('SQLite reconciles concurrent supplier returns independently when companies
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
-test('SQLite accepts a supplier credit note only with linked stock return, balanced journal, taxes and AP reduction', () => {
+test('SQLite accepts a supplier credit note only with linked stock return, balanced journal, taxes, AP reduction and flagged retention vouchers', () => {
   const { prior, next } = supplierCreditFixture();
+  assert.equal(next.vatVouchers[0].correctionEntryId, 'credit-entry');
+  assert.equal(next.islrVouchers[0].correctionEntryId, 'credit-entry');
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
+test('SQLite rejects a retention correction flag linked to an unrelated entry', () => {
+  const { prior, next } = supplierCreditFixture();
+  next.vatVouchers[0].correctionEntryId = 'unrelated-entry';
+  assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
 });
 
 test('SQLite rejects impossible calendar dates on supplier credit notes', () => {
