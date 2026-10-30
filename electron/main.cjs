@@ -322,16 +322,17 @@ app.whenReady().then(async () => {
         db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
           .run(replacingSeed ? 'seed_admin_replaced' : 'initial_admin_created',
             JSON.stringify({ username, userId: Number(result.lastInsertRowid), seedUserId: removedSeedId }));
+        const persisted = db.prepare('SELECT username,is_seed FROM auth_users WHERE id=?').get(Number(result.lastInsertRowid));
+        if (!persisted || Number(persisted.is_seed) !== 0) throw new Error('ADMIN_PERSISTENCE_VERIFICATION_FAILED');
+        if (replacingSeed && db.prepare('SELECT id FROM auth_users WHERE id=?').get(removedSeedId)) {
+          throw new Error('SEED_REPLACEMENT_VERIFICATION_FAILED');
+        }
       });
       initialize();
       if (removedSeedId !== null) {
         for (const [token, session] of sessions.entries()) {
           if (Number(session.id) === removedSeedId) sessions.delete(token);
         }
-      }
-      const persisted = db.prepare('SELECT username,is_seed FROM auth_users WHERE username=?').get(username);
-      if (!persisted || Number(persisted.is_seed) !== 0) {
-        throw new Error('ADMIN_PERSISTENCE_VERIFICATION_FAILED');
       }
       return { ok: true, seedReplaced: removedSeedId !== null };
     } catch (error) {
