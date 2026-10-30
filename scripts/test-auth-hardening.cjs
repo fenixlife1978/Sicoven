@@ -20,7 +20,12 @@ assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
 assert.match(main, /actor\.role !== 'admin'/);
 assert.match(main, /sicoven:load-state', \(_event, token\)/);
-assert.match(main, /sicoven:save-state', \(_event, token, state\)/);
+const persistence = read('electron/accounting-persistence.cjs');
+assert.match(main, /registerAccountingPersistenceHandler\(\{ ipcMain, db, licenseView, getActiveSession \}\)/);
+assert.match(persistence, /ipcMain\.handle\('sicoven:save-state', \(_event, token, state\)/);
+assert.match(persistence, /if \(!licensing\.authorized\)/);
+assert.match(persistence, /if \(!getActiveSession\(token\)\)/);
+assert.match(persistence, /persistAccountingSnapshot\(db, state\)/);
 
 assert.match(main, /function getActiveSession/);
 assert.match(main, /expiry <= Date/);
