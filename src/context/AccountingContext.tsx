@@ -1366,7 +1366,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             correctionForMovementId: item.correctionForMovementId
           }));
         const fifoLayers = reconstructFifoLayers(productHistory, product.currentStock);
-        const normalizeRef = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+        const normalizeRef = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
         const originalLayer = fifoLayers.find(layer =>
           layer.sourceMovementId === originalMovement.id && layer.date === originalMovement.date &&
           normalizeRef(layer.documentRef) === normalizeRef(originalMovement.documentRef) &&
