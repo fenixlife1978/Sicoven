@@ -9,6 +9,10 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function money(value) {
+  return Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+}
+
 function isValidIsoDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const parsed = new Date(value + 'T00:00:00.000Z');
@@ -364,7 +368,6 @@ function validateAccountingSnapshot(previousState, nextState) {
   // snapshot salte las guardias del formulario/contexto para notas de crédito.
   const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const priorPurchaseIdsForIntegrity = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   const priorMovementIdsForIntegrity = new Set(asArray(priorState.movements).map(item => String(item.id)));
   for (const purchase of asArray(nextState.purchases)) {
