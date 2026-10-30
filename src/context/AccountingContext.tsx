@@ -3336,6 +3336,36 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         return !data.bankAccounts.some((b: any) => b.companyId === item.companyId && b.accountCode === item.treasuryAccountCode);
       })) throw new Error('El respaldo contiene liquidaciones de anticipos duplicadas, inválidas o sin documento/asiento/tesorería verificable.');
+      const advanceConsumedByNote = new Map<string, { usd: number; bs: number }>();
+      for (const settlement of advanceSettlements as SupplierAdvanceSettlement[]) {
+        const sourceNotes = (data.purchases as PurchaseRecord[]).filter(note =>
+          note.companyId === settlement.companyId && note.documentType === '03' && !note.isCancelled &&
+          String(note.supplierRif || '').trim().toUpperCase() === String(settlement.supplierRif || '').trim().toUpperCase() &&
+          Number(note.supplierAdvanceUsd || 0) > 0);
+        const sourceById = new Map(sourceNotes.map(note => [note.id, note]));
+        const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+          settlement.sourceCreditNoteAllocations || [], settlement.sourceCreditNoteIds || [],
+          Number(settlement.amountUsd), Number(settlement.advanceBookValueBs ?? settlement.amountBs)
+        );
+        if (allocationError) throw new Error('El respaldo contiene una liquidación de anticipo inválida: ' + allocationError);
+        for (const allocation of settlement.sourceCreditNoteAllocations || []) {
+          const source = sourceById.get(allocation.creditNoteId);
+          if (!source) throw new Error('Una liquidación de anticipo referencia una nota de crédito inexistente o de otro proveedor.');
+          if (!settlement.isReversed) {
+            const used = advanceConsumedByNote.get(source.id) || { usd: 0, bs: 0 };
+            used.usd = Math.round((used.usd + allocation.amountUsd) * 100) / 100;
+            used.bs = Math.round((used.bs + allocation.bookValueBs) * 100) / 100;
+            advanceConsumedByNote.set(source.id, used);
+          }
+        }
+      }
+      for (const [noteId, used] of advanceConsumedByNote) {
+        const source = (data.purchases as PurchaseRecord[]).find(note => note.id === noteId)!;
+        if (used.usd > Number(source.supplierAdvanceUsd || 0) + 0.01 ||
+            used.bs > Number(source.supplierAdvanceBs || 0) + 0.02) {
+          throw new Error('El respaldo consume más anticipo del disponible en una nota de crédito de proveedor.');
+        }
+      }
       const settlementIds = new Set<string>();
       const salesById = new Map<string, any>(data.sales.map((row: any) => [row.id, row]));
       const purchasesById = new Map<string, any>(data.purchases.map((row: any) => [row.id, row]));
