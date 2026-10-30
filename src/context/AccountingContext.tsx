@@ -924,6 +924,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
       });
     }
+    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
+      sourceNotes.map(note => ({
+        id: note.id,
+        amountUsd: Number(note.supplierAdvanceUsd || 0),
+        bookValueBs: Number(note.supplierAdvanceBs || 0)
+      })),
+      supplierAdvanceSettlements,
+      currentCompany.id,
+      rif,
+      amountUsd
+    );
+    const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
+    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
+    );
+    if (allocationError) throw new Error(allocationError);
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const persistenceConfirmation = new Promise<void>((resolve, reject) => {
@@ -945,22 +961,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw cause;
     }
-    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
-      sourceNotes.map(note => ({
-        id: note.id,
-        amountUsd: Number(note.supplierAdvanceUsd || 0),
-        bookValueBs: Number(note.supplierAdvanceBs || 0)
-      })),
-      supplierAdvanceSettlements,
-      currentCompany.id,
-      rif,
-      amountUsd
-    );
-    const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
-    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
-      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
-    );
-    if (allocationError) throw new Error(allocationError);
     const settlement: SupplierAdvanceSettlement = {
       ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || target?.supplierName || '',
       sourceCreditNoteIds, sourceCreditNoteAllocations,
