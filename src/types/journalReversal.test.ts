@@ -541,3 +541,57 @@ test('bloquea una compra con total fiscal incoherente aunque el inventario cuadr
   assert.equal(result.ready, false);
   assert.equal(result.journalMatchesInvoice, false);
 });
+
+test('bloquea reversar una compra mientras conserve aplicaciones de anticipo vigentes', () => {
+  const purchase = { ...reconciledPurchase, inventoryLines: undefined };
+  const settlement = {
+    companyId: 'c-1', journalEntryId: 'advance-settlement-journal',
+    targetPurchaseId: purchase.id, kind: 'APPLIED_TO_PURCHASE', isReversed: false
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: reconciledPurchaseJournal, accounts, sales: [],
+    purchases: [purchase], movements: [], products: [],
+    journalEntries: [reconciledPurchaseJournal], bankAccounts: [],
+    bankStatementMovements: [], creditSettlements: [],
+    supplierAdvanceSettlements: [settlement]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.activeSupplierAdvanceSettlementCount, 1);
+  assert.match(result.blockers.join(' '), /aplicación\(es\) de anticipo vigente\(s\)/);
+});
+
+test('no bloquea reversar una compra cuando su aplicación de anticipo ya fue reversada', () => {
+  const purchase = { ...reconciledPurchase, inventoryLines: undefined };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: reconciledPurchaseJournal, accounts, sales: [],
+    purchases: [purchase], movements: [], products: [],
+    journalEntries: [reconciledPurchaseJournal], bankAccounts: [],
+    bankStatementMovements: [], creditSettlements: [],
+    supplierAdvanceSettlements: [{
+      companyId: 'c-1', journalEntryId: 'advance-settlement-journal',
+      targetPurchaseId: purchase.id, kind: 'APPLIED_TO_PURCHASE', isReversed: true
+    }]
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.activeSupplierAdvanceSettlementCount, 0);
+});
+
+test('permite evaluar la reversión del propio asiento de liquidación de anticipo', () => {
+  const settlementJournal: JournalEntry = {
+    ...source, id: 'advance-settlement-journal', type: 'ANTICIPO_PROVEEDOR',
+    description: 'Aplicación de anticipo a proveedor'
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: settlementJournal, accounts, sales: [],
+    purchases: [], movements: [], products: [],
+    journalEntries: [settlementJournal], bankAccounts: [],
+    bankStatementMovements: [], creditSettlements: [],
+    supplierAdvanceSettlements: [{
+      companyId: 'c-1', journalEntryId: settlementJournal.id,
+      targetPurchaseId: reconciledPurchase.id, kind: 'APPLIED_TO_PURCHASE', isReversed: false
+    }]
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.activeSupplierAdvanceSettlementCount, 1);
+});
+
