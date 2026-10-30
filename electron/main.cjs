@@ -470,6 +470,23 @@ app.whenReady().then(async () => {
           }
         }
       }
+      const oldPurchaseIds = new Set((Array.isArray(priorState.purchases) ? priorState.purchases : [])
+        .map(document => String(document.id)));
+      for (const note of (Array.isArray(state.purchases) ? state.purchases : [])) {
+        if (oldPurchaseIds.has(String(note.id)) || note.documentType !== '03') continue;
+        auditInsert.run('supplier_credit_note_posted', JSON.stringify({
+          documentId: note.id, companyId: note.companyId,
+          creditNoteNumber: note.creditNoteNumber || note.invoiceNumber,
+          controlNumber: note.controlNumber, invoiceDate: note.invoiceDate,
+          supplierRif: note.supplierRif, supplierName: note.supplierName,
+          originalPurchaseId: note.originalPurchaseId || null,
+          affectedInvoiceNumber: note.affectedInvoiceNumber || null,
+          journalEntryId: note.journalEntryId || null,
+          netPayableReductionBs: note.netPayableReductionBs || 0,
+          netPayableReductionUsd: note.netPayableReductionUsd || 0,
+          creditNoteLines: Array.isArray(note.creditNoteLines) ? note.creditNoteLines : []
+        }));
+      }
       const oldInventoryMovements = new Map((Array.isArray(priorState.movements) ? priorState.movements : [])
         .map(item => [String(item.id), item]));
       for (const movement of (Array.isArray(state.movements) ? state.movements : [])) {
