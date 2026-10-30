@@ -696,7 +696,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     const rate = Number(settlement.bcvRate);
     if (!companyId || !rif || !['REFUND_RECEIVED', 'APPLIED_TO_PURCHASE'].includes(settlement.kind) ||
         !Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(bookBs) || bookBs <= 0 ||
-        !Number.isFinite(rate) || rate <= 0 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(settlement.date || ''))) {
+        !Number.isFinite(rate) || rate <= 0 || !/^\d{4}-\d{2}-\d{2}$/.test(String(settlement.date || ''))) {
       throw new Error('SQLite rechazó una liquidación de anticipo con proveedor, fecha, moneda o tasa inválidos.');
     }
     const sources = Array.isArray(settlement.sourceCreditNoteIds) ? settlement.sourceCreditNoteIds : [];
