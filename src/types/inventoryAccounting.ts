@@ -64,7 +64,7 @@ export function reconstructFifoLayers(
   };
   for (const { movement } of ordered) {
     const date = String(movement.date || '');
-    const parsedDate = /^\\d{4}-\\d{2}-\\d{2}$/.test(date) ? new Date(date + 'T00:00:00Z') : null;
+    const parsedDate = /^\d{4}-\d{2}-\d{2}$/.test(date) ? new Date(date + 'T00:00:00Z') : null;
     if (!parsedDate || !Number.isFinite(parsedDate.getTime()) || parsedDate.toISOString().slice(0, 10) !== date) {
       throw new Error('El historial PEPS contiene una fecha inválida.');
     }
@@ -134,6 +134,33 @@ export function calculateWeightedAverageCost(
     totalCostUsd: usdPrecision(totalCostBs / exchangeRate),
     unitCostBs,
     unitCostUsd
+  };
+}
+
+/** Recalcula el costo promedio ponderado preservando por separado la valoración histórica en Bs. y USD. */
+export function calculateWeightedAverageCostDual(
+  existingQuantity: number,
+  existingUnitCostBs: number,
+  existingUnitCostUsd: number,
+  incomingQuantity: number,
+  incomingUnitCostBs: number,
+  incomingUnitCostUsd: number
+): InventoryCostResult {
+  if (!validNonNegative(existingQuantity) || !validNonNegative(existingUnitCostBs) ||
+      !validNonNegative(existingUnitCostUsd) || !validPositive(incomingQuantity) ||
+      !validNonNegative(incomingUnitCostBs) || !validNonNegative(incomingUnitCostUsd)) {
+    throw new Error('Cantidades o costos históricos Bs./USD inválidos para recalcular el costo promedio.');
+  }
+  const quantity = existingQuantity + incomingQuantity;
+  const totalCostBs = cents(existingQuantity * existingUnitCostBs + incomingQuantity * incomingUnitCostBs);
+  const totalCostUsd = usdPrecision(existingQuantity * existingUnitCostUsd + incomingQuantity * incomingUnitCostUsd);
+  if (!Number.isFinite(quantity) || !Number.isFinite(totalCostBs) || !Number.isFinite(totalCostUsd)) {
+    throw new Error('La valoración ponderada dual produjo un importe no finito.');
+  }
+  return {
+    quantity, totalCostBs, totalCostUsd,
+    unitCostBs: quantity > 0 ? totalCostBs / quantity : 0,
+    unitCostUsd: quantity > 0 ? totalCostUsd / quantity : 0
   };
 }
 
