@@ -28,6 +28,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [supplierCreditNoteSubmitting, setSupplierCreditNoteSubmitting] = useState(false);
   const [reversalSubmitting, setReversalSubmitting] = useState(false);
   const [correctionSubmitting, setCorrectionSubmitting] = useState(false);
+  const [closingPeriodSubmitting, setClosingPeriodSubmitting] = useState(false);
 
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
@@ -303,13 +304,17 @@ export const ReversionFiscalView: React.FC = () => {
     }
   };
 
-  const submitClose = () => {
-    if (!window.confirm('Va a bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
+  const submitClose = async () => {
+    if (closingPeriodSubmitting || !window.confirm('Va a bloquear el período contable hasta '+closedDate+'. La fecha no podrá retroceder desde esta pantalla. ¿Confirma el cierre?')) return;
+    setClosingPeriodSubmitting(true);
     try {
       closeAccountingPeriod(closedDate);
-      setFeedback({kind:'success', message:'Período cerrado hasta '+closedDate+'. No se admitirán nuevos asientos ni facturas con fecha igual o anterior.'});
+      await waitForPersistence();
+      setFeedback({kind:'success', message:'Período cerrado y confirmado en SQLite hasta '+closedDate+'. No se admitirán nuevos asientos ni facturas con fecha igual o anterior.'});
     } catch (error) {
-      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo cerrar el período.'});
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo confirmar el cierre del período en SQLite.'});
+    } finally {
+      setClosingPeriodSubmitting(false);
     }
   };
 
@@ -455,7 +460,7 @@ export const ReversionFiscalView: React.FC = () => {
       <section className="rounded-2xl bg-white border border-slate-200 shadow-sm p-4 sm:p-6 space-y-4">
         <div className="flex items-center gap-3"><LockKeyhole className="w-6 h-6 text-indigo-700" /><div><h2 className="font-bold text-slate-900">Candado de períodos fiscales</h2><p className="text-sm text-slate-500">Bloquea nuevos asientos y facturas con fecha igual o anterior al corte.</p></div></div>
         <div className="rounded-lg bg-slate-50 border p-3 text-sm">Estado actual: {currentCompany.closedThroughDate ? <strong>cerrado hasta {currentCompany.closedThroughDate}</strong> : <strong>sin período cerrado</strong>}</div>
-        <div className="flex flex-col sm:flex-row gap-3 items-end"><div className="w-full sm:max-w-xs"><label className="block text-sm font-semibold text-slate-700 mb-1">Cerrar hasta</label><input type="date" max={today} value={closedDate} onChange={event=>setClosedDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" /></div><button disabled={!closedDate || Boolean(currentCompany.closedThroughDate && closedDate < currentCompany.closedThroughDate) || closedDate > today} onClick={submitClose} className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"><LockKeyhole className="w-4 h-4" /> Confirmar cierre irreversible</button></div>
+        <div className="flex flex-col sm:flex-row gap-3 items-end"><div className="w-full sm:max-w-xs"><label className="block text-sm font-semibold text-slate-700 mb-1">Cerrar hasta</label><input type="date" max={today} value={closedDate} onChange={event=>setClosedDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" /></div><button disabled={closingPeriodSubmitting || !closedDate || Boolean(currentCompany.closedThroughDate && closedDate < currentCompany.closedThroughDate) || closedDate > today} onClick={submitClose} className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-bold text-white hover:bg-indigo-800 disabled:bg-slate-300 disabled:cursor-not-allowed flex items-center gap-2"><LockKeyhole className="w-4 h-4" /> {closingPeriodSubmitting ? 'Guardando cierre en SQLite…' : 'Confirmar cierre irreversible'}</button></div>
         <p className="text-xs text-slate-500">El cierre es progresivo e irreversible desde esta pantalla. Para reabrir un período debe existir autorización formal y un procedimiento auditado de administrador; no se habilita una reapertura informal.</p>
       </section>
 
