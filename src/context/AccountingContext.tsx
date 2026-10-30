@@ -2314,7 +2314,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const movement = bankStatementMovements.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!movement) return;
     if (typeof window !== 'undefined') {
-      window.alert('Los movimientos importados del extracto bancario se conservan como soporte histórico. Si existe un error, documente la incidencia y excluya/reconcilie mediante un procedimiento trazable; no se permite borrar la fila.');
+      window.alert('Los movimientos importados del extracto bancario se conservan como soporte histórico. Si existe un error, documente la incidencia y mantenga la fila como soporte histórico; no se permite borrarla.');
     }
   };
 
