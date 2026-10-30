@@ -1587,13 +1587,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       creditNoteNumber: request.creditNoteNumber, controlNumber: request.controlNumber,
       reason: request.reason, closedThroughDate: currentCompany.closedThroughDate
     });
+    const sourcePurchaseEntry = journalEntries.find(entry =>
+      entry.companyId === currentCompany.id && entry.id === purchase.journalEntryId);
+    const payableAccountCodes = [...new Set((sourcePurchaseEntry?.items || [])
+      .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+      .map(item => String(item.accountCode)))];
+    if (payableAccountCodes.length !== 1) {
+      throw new Error('No se pudo identificar de forma inequívoca la cuenta auxiliar de CxP del asiento original. La devolución requiere conciliación manual.');
+    }
+    const payableAccountCode = payableAccountCodes[0];
     const balance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
     const supplierCredit = allocateSupplierCredit(
       valuation.netPayableReductionUsd, valuation.netPayableReductionBs,
       balance.outstandingUsd, valuation.bcvRate
     );
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
-    const requiredAccounts = ['2.1.1.01', ...inventoryAccountCodes];
+    const requiredAccounts = [payableAccountCode, ...inventoryAccountCodes];
     if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
     if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
@@ -1612,7 +1621,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       debitBs, creditBs, debitUsd: toUsd(debitBs), creditUsd: toUsd(creditBs), description
     });
     if (supplierCredit.appliedToPayableBs > 0.02) {
-      items.push(line('2.1.1.01', supplierCredit.appliedToPayableBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
+      items.push(line(payableAccountCode, supplierCredit.appliedToPayableBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
     }
     if (supplierCredit.supplierAdvanceBs > 0.02) {
       items.push(line('1.1.2.03', supplierCredit.supplierAdvanceBs, 0, 'Excedente de nota de crédito · anticipo a favor en proveedor ' + purchase.supplierName));
