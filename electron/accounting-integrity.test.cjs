@@ -1004,3 +1004,23 @@ test('SQLite rejects supplier credit notes whose USD totals do not match the rec
   note.totalAmountUsd += 0.05;
   assert.throws(() => validateAccountingSnapshot(prior, next), /nota de crédito: el asiento no está balanceado o no revierte CxP/);
 });
+
+
+test('SQLite rejects supplier return movements with a different BCV rate or USD unit cost', () => {
+  for (const mutate of [
+    movement => { movement.bcvRate = 200; },
+    movement => { movement.unitCostUsd = 0.75; }
+  ]) {
+    const { prior, next } = supplierCreditFixture();
+    const movement = next.movements.find(item => item.id === 'return-movement');
+    mutate(movement);
+    assert.throws(() => validateAccountingSnapshot(prior, next), /la salida física no concilia con la entrada original/);
+  }
+});
+
+test('SQLite rejects supplier return movements with an invalid final stock balance', () => {
+  const { prior, next } = supplierCreditFixture();
+  const movement = next.movements.find(item => item.id === 'return-movement');
+  movement.balanceQty = Number.NaN;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /la existencia final del artículo no coincide/);
+});
