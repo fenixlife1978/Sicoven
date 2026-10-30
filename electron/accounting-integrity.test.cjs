@@ -571,6 +571,17 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
+test('SQLite reconciles supplier credit note against the payable auxiliary used by the original purchase', () => {
+  const { prior, next } = supplierCreditFixture();
+  const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
+  const creditEntry = next.journalEntries.find(item => item.id === 'credit-entry');
+  originalEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '2.1.1.09';
+  creditEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '2.1.1.09';
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  creditEntry.items.find(item => item.accountCode === '2.1.1.09').accountCode = '2.1.1.01';
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado o no revierte CxP/);
+});
+
 test('SQLite rejects a retention correction flag linked to an unrelated entry', () => {
   const { prior, next } = supplierCreditFixture();
   next.vatVouchers[0].correctionEntryId = 'unrelated-entry';
