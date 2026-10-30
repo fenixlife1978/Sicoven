@@ -27,11 +27,7 @@ export const LibroComprasView: React.FC = () => {
     currentCompany,
     purchases,
     vatVouchers,
-    products,
-    movements,
-    addPurchaseCreditNote,
     isStorageReady,
-    storageError,
     displayCurrency
   } = useAccounting();
 
