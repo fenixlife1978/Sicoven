@@ -48,6 +48,8 @@ export interface CreditSettlementDraft {
   amountUsd: number;
   amountBs: number;
   method: SettlementMethod;
+  /** Auxiliar bancario de la empresa activa cuando el medio es transferencia. */
+  bankAccountId?: string;
   reference?: string;
   notes?: string;
 }
