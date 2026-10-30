@@ -54,7 +54,9 @@ export const ReversionFiscalView: React.FC = () => {
     try {
       return assessJournalReversal({
         companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
-        journalEntries, bankAccounts, bankStatementMovements, creditSettlements
+        journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+        priorPeriodAdjustment: Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate),
+        retainedEarningsAccountCode: retainedEarningsCode
       });
     } catch {
       return null;
