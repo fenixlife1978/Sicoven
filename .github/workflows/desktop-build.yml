@@ -1,43 +1,38 @@
-name: SICOVEN Desktop Build
+name: SICOVEN Desktop Validation
 
 on:
+  push:
+    branches:
+      - main
+    paths-ignore:
+      - '.github/workflows/**'
   workflow_dispatch:
 
 permissions:
   contents: read
 
 jobs:
-  test-and-package-windows:
+  validate:
     runs-on: windows-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
-
       - name: Install dependencies
         run: npm install --no-audit --no-fund
-
+      - name: Test authentication and session security guards
+        run: node scripts/test-auth-hardening.cjs
       - name: Run automated tests
         run: npm test
-
       - name: Check TypeScript
-        run: npm run lint
-
+        run: npm run check:types
+      - name: Audit source resources
+        run: npm run audit:assets -- --source-only
       - name: Build application
         run: npm run build
-
-      - name: Package Windows installer
-        run: npm run dist
-
-      - name: Upload installer
-        uses: actions/upload-artifact@v4
-        with:
-          name: SICOVEN-Windows-Installer
-          path: release/*.exe
-          if-no-files-found: error
-          retention-days: 14
+      - name: Audit production assets
+        run: npm run audit:assets
