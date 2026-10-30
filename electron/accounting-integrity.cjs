@@ -193,7 +193,6 @@ function validateAccountingSnapshot(previousState, nextState) {
     const oldDocuments = asArray(priorState[collectionName]);
     const newDocuments = asArray(nextState[collectionName]);
     const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
-    const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
     for (const document of newDocuments) {
       const oldDocument = oldById.get(String(document.id));
       if (!document.isCancelled || (oldDocument && oldDocument.isCancelled)) continue;
