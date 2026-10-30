@@ -996,3 +996,11 @@ test('SQLite rejects balanced supplier credit note journals with unrelated accou
   );
   assert.throws(() => validateAccountingSnapshot(prior, next), /nota de crédito: el asiento no está balanceado o no revierte CxP/);
 });
+
+
+test('SQLite rejects supplier credit notes whose USD totals do not match the recorded BCV rate', () => {
+  const { prior, next } = supplierCreditFixture();
+  const note = next.purchases.find(item => item.id === 'purchase-credit-note');
+  note.totalAmountUsd += 0.05;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /nota de crédito: el asiento no está balanceado o no revierte CxP/);
+});
