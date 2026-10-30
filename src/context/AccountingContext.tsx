@@ -914,11 +914,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
             : 0) * 100) / 100;
         })();
-    const fxAmounts = calculateSupplierAdvanceFxSettlement(
-      balance.outstandingUsd, balance.outstandingBs, amountUsd, settlementValueBs
+    // Distribuir primero por nota fuente FIFO. El valor en libros debe salir
+    // de los importes históricos concretos consumidos, no de un promedio global.
+    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
+      sourceNotes.map(note => ({
+        id: note.id,
+        amountUsd: Number(note.supplierAdvanceUsd || 0),
+        bookValueBs: Number(note.supplierAdvanceBs || 0)
+      })),
+      supplierAdvanceSettlements,
+      currentCompany.id,
+      rif,
+      amountUsd
     );
-    const advanceBookValueBs = fxAmounts.advanceBookValueBs;
-    // Positivo = ganancia; negativo = pérdida por diferencial cambiario.
+    const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
+    const advanceBookValueBs = Math.round(sourceCreditNoteAllocations.reduce(
+      (sum, allocation) => sum + allocation.bookValueBs, 0
+    ) * 100) / 100;
+    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
+    );
+    if (allocationError) throw new Error(allocationError);
+
+    // Se reutiliza el cálculo FX con el valor histórico exacto de la asignación FIFO.
+    const fxAmounts = calculateSupplierAdvanceFxSettlement(
+      amountUsd, advanceBookValueBs, amountUsd, settlementValueBs
+    );
     const differenceBs = fxAmounts.exchangeDifferenceBs;
     const gain = accounts.find(item => item.code === '4.2.1.01' && item.isMovement);
     const loss = accounts.find(item => item.code === '6.1.1.08' && item.isMovement);
@@ -929,12 +950,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const debitItems: JournalEntryItem[] = [{
       accountCode: counterpart.code, accountName: counterpart.name,
       debitBs: settlementValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0,
-      description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso recibido del proveedor' : 'Aplicación a cuenta por pagar'
+      description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso de anticipo de proveedor' : 'Aplicación de anticipo a cuenta por pagar'
     }];
     const creditItems: JournalEntryItem[] = [{
       accountCode: advance.code, accountName: advance.name,
       debitBs: 0, creditBs: advanceBookValueBs, debitUsd: 0, creditUsd: amountUsd,
-      description: 'Descarga del anticipo a su valor histórico'
+      description: 'Descarga del anticipo a su valor histórico FIFO'
     }];
     if (differenceBs > 0.009) {
       creditItems.push({
@@ -949,22 +970,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
       });
     }
-    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
-      sourceNotes.map(note => ({
-        id: note.id,
-        amountUsd: Number(note.supplierAdvanceUsd || 0),
-        bookValueBs: Number(note.supplierAdvanceBs || 0)
-      })),
-      supplierAdvanceSettlements,
-      currentCompany.id,
-      rif,
-      amountUsd
-    );
-    const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
-    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
-      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
-    );
-    if (allocationError) throw new Error(allocationError);
     let resolvePersistence!: () => void;
     let rejectPersistence!: (error: Error) => void;
     const persistenceConfirmation = new Promise<void>((resolve, reject) => {
