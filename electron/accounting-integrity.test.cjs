@@ -178,7 +178,7 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
-  ), /asiento no reconoce en inventario/);
+  ), /asiento no reconoce en Bs\\. y USD/);
 });
 
 test('SQLite keeps inventory movements append-only', () => {
