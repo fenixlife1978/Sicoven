@@ -718,22 +718,33 @@ function validateAccountingSnapshot(previousState, nextState) {
       debitBs: acc.debitBs + Number(item.debitBs || 0), creditBs: acc.creditBs + Number(item.creditBs || 0),
       debitUsd: acc.debitUsd + Number(item.debitUsd || 0), creditUsd: acc.creditUsd + Number(item.creditUsd || 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    const advanceCredit = journal.items.reduce((sum, item) =>
+      sum + (item.accountCode === '1.1.2.03' ? Number(item.creditBs || 0) : 0), 0);
+    const advanceCreditUsd = journal.items.reduce((sum, item) =>
+      sum + (item.accountCode === '1.1.2.03' ? Number(item.creditUsd || 0) : 0), 0);
     if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
         Math.abs(totals.debitUsd - amountUsd) >= 0.01 ||
-        Math.abs(totals.creditUsd - amountUsd) >= 0.01) {
-      throw new Error('SQLite rechazó un asiento de anticipo descuadrado o por un importe distinto a la liquidación.');
+        Math.abs(totals.creditUsd - amountUsd) >= 0.01 ||
+        Math.abs(advanceCredit - bookBs) >= 0.01 ||
+        Math.abs(advanceCreditUsd - amountUsd) >= 0.01) {
+      throw new Error('SQLite rechazó un asiento de anticipo descuadrado o que no descarga el valor histórico correcto.');
     }
     if (settlement.kind === 'REFUND_RECEIVED') {
       const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode);
-      if (!bank || Number(settlement.cashReceivedBs ?? 0) <= 0) {
-        throw new Error('SQLite rechazó un reembolso de anticipo sin cuenta bancaria/caja y efectivo recibido verificables.');
+      const treasuryDebit = journal.items.reduce((sum, item) =>
+        sum + (item.accountCode === settlement.treasuryAccountCode ? Number(item.debitBs || 0) : 0), 0);
+      if (!bank || Number(settlement.cashReceivedBs ?? 0) <= 0 ||
+          Math.abs(treasuryDebit - Number(settlement.cashReceivedBs)) >= 0.01) {
+        throw new Error('SQLite rechazó un reembolso de anticipo sin cuenta bancaria/caja y efectivo recibido conciliados con el asiento.');
       }
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
+      const payableDebit = journal.items.reduce((sum, item =>
+        sum + (item.accountCode === '2.1.1.01' ? Number(item.debitBs || 0) : 0), 0), 0);
       if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
-          String(target.supplierRif || '').trim().toUpperCase() !== rif) {
-        throw new Error('SQLite rechazó una aplicación de anticipo a una factura de otro proveedor o no vigente.');
+          String(target.supplierRif || '').trim().toUpperCase() !== rif || payableDebit <= 0) {
+        throw new Error('SQLite rechazó una aplicación de anticipo a una factura de otro proveedor o sin débito de CxP.');
       }
     }
     if (settlement.isReversed) {
