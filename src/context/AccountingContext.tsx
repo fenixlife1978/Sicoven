@@ -536,40 +536,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (window.sicovenStore) {
           let saved = await window.sicovenStore.load(token);
           if (cancelled) return;
-          // Purga completa de cualquier dato de demostración heredado (comp-1, comp-2)
-          // tanto en la edición completa como en la demo, garantizando que ninguna incluya datos ficticios.
-          if (saved && typeof saved === 'object' && Array.isArray(saved.companies)) {
-            const isLegacyDemo = (c: Company) => {
-              const id = String(c?.id || '');
-              const n = String(c?.name || '').toLowerCase();
-              return id === 'comp-1' || id === 'comp-2' ||
-                (n.includes('los andes') && n.includes('distrib')) ||
-                (n.includes('caribe') && n.includes('tecnol'));
-            };
-            const hasLegacyDemo = saved.companies.some(isLegacyDemo);
-            if (hasLegacyDemo) {
-              const cleanedCompanies = saved.companies.filter((c: Company) => !isLegacyDemo(c));
-              const demoIds = new Set(['comp-1', 'comp-2']);
-              saved = {
-                ...saved,
-                companies: cleanedCompanies,
-                currentCompanyId: cleanedCompanies[0]?.id || '',
-                purchases: Array.isArray(saved.purchases) ? saved.purchases.filter((p: any) => !demoIds.has(p.companyId)) : [],
-                sales: Array.isArray(saved.sales) ? saved.sales.filter((s: any) => !demoIds.has(s.companyId)) : [],
-                journalEntries: Array.isArray(saved.journalEntries) ? saved.journalEntries.filter((j: any) => !demoIds.has(j.companyId) && j.id !== 'entry-apertura-1') : [],
-                products: Array.isArray(saved.products) ? saved.products.filter((pr: any) => !demoIds.has(pr.companyId)) : [],
-                movements: Array.isArray(saved.movements) ? saved.movements.filter((m: any) => !demoIds.has(m.companyId)) : [],
-                vatVouchers: Array.isArray(saved.vatVouchers) ? saved.vatVouchers.filter((v: any) => !demoIds.has(v.companyId)) : [],
-                islrVouchers: Array.isArray(saved.islrVouchers) ? saved.islrVouchers.filter((i: any) => !demoIds.has(i.companyId)) : [],
-                bankAccounts: Array.isArray(saved.bankAccounts) ? saved.bankAccounts.filter((b: any) => !demoIds.has(b.companyId)) : [],
-                bankStatementMovements: Array.isArray(saved.bankStatementMovements) ? saved.bankStatementMovements.filter((bm: any) => !demoIds.has(bm.companyId)) : [],
-                creditSettlements: Array.isArray(saved.creditSettlements) ? saved.creditSettlements.filter((cs: any) => !demoIds.has(cs.companyId)) : [],
-                supplierAdvanceSettlements: Array.isArray(saved.supplierAdvanceSettlements) ? saved.supplierAdvanceSettlements.filter((x: any) => !demoIds.has(x.companyId)) : [],
-              };
-              await window.sicovenStore.save(token, saved);
-            }
-          }
-
+          // La hidratación nunca elimina empresas ni movimientos históricos por identificadores o nombres.
           if (saved && typeof saved === 'object') {
             if (Array.isArray(saved.companies)) setCompanies(saved.companies as Company[]);
             if (typeof saved.currentCompanyId === 'string') setCurrentCompanyId(saved.currentCompanyId);
