@@ -3010,6 +3010,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankAccounts([]);
     setBankStatementMovements([]);
     setCreditSettlements([]);
+    setSupplierAdvanceSettlements([]);
   };
 
   const resetFactoryData = async () => {
@@ -3033,6 +3034,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankAccounts([]);
     setBankStatementMovements([]);
     setCreditSettlements([]);
+    setSupplierAdvanceSettlements([]);
     setDisplayCurrency('DUAL');
   };
 
@@ -3051,7 +3053,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       islrVouchers,
       bankAccounts,
       bankStatementMovements,
-      creditSettlements
+      creditSettlements,
+      supplierAdvanceSettlements
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -3141,6 +3144,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       // Validar todas las liquidaciones antes de tocar cualquier estado: la importación
       // debe ser todo-o-nada desde la perspectiva de la interfaz.
       const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
+      const advanceSettlements = Array.isArray(data.supplierAdvanceSettlements) ? data.supplierAdvanceSettlements : [];
+      const advanceIds = new Set<string>();
+      if (advanceSettlements.some((item: any) => {
+        if (!item || typeof item.id !== 'string' || !item.id.trim() || advanceIds.has(item.id) ||
+            !companyIds.has(item.companyId) || !['REFUND_RECEIVED','APPLIED_TO_PURCHASE'].includes(item.kind) ||
+            !Number.isFinite(item.amountBs) || item.amountBs <= 0 || !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
+            !Number.isFinite(item.bcvRate) || item.bcvRate <= 0 || !Array.isArray(item.sourceCreditNoteIds) ||
+            !data.journalEntries.some((j: any) => j.id === item.journalEntryId && j.companyId === item.companyId)) return true;
+        advanceIds.add(item.id);
+        if (item.kind === 'APPLIED_TO_PURCHASE') {
+          const target = data.purchases.find((p: any) => p.id === item.targetPurchaseId && p.companyId === item.companyId && p.documentType === '01');
+          return !target || String(target.supplierRif).trim().toUpperCase() !== String(item.supplierRif).trim().toUpperCase();
+        }
+        return !data.bankAccounts.some((b: any) => b.companyId === item.companyId && b.accountCode === item.treasuryAccountCode);
+      })) throw new Error('El respaldo contiene liquidaciones de anticipos duplicadas, inválidas o sin documento/asiento/tesorería verificable.');
       const settlementIds = new Set<string>();
       const salesById = new Map<string, any>(data.sales.map((row: any) => [row.id, row]));
       const purchasesById = new Map<string, any>(data.purchases.map((row: any) => [row.id, row]));
@@ -3170,6 +3188,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setBankAccounts(data.bankAccounts);
       setBankStatementMovements(data.bankStatementMovements);
       setCreditSettlements(settlements);
+      setSupplierAdvanceSettlements(advanceSettlements);
       setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
