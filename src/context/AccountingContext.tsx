@@ -1658,7 +1658,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       type: 'AJUSTE', bcvRate: rate, referenceDoc: reference, items, createdAt: new Date().toISOString()
     };
     const stampMovements = valuation.lines.map((returnedLine, index) => {
-      const source = draftLines.find(item => item.product.id === returnedLine.productId)!;
+      const source = draftLines.find(item =>
+        item.product.id === returnedLine.productId &&
+        item.originalMovement.id === returnedLine.originalMovementId
+      ); 
+      if (!source) throw new Error('No se encontró la entrada original para una línea de devolución.');
       const product = source.product;
       const productReturnQuantity = valuation.lines
         .filter(item => item.productId === product.id)
