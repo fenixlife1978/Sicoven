@@ -163,12 +163,22 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
     id: 'movement-new', companyId: 'company-1', productId: 'p-1',
     date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
     documentRef: ' FAC - 100 ', counterpartyRif: 'J-12345678-9',
-    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
+    quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
   ));
+  for (const invalidMovement of [
+    { ...movement, counterpartyRif: '' },
+    { ...movement, unitCostBs: 90 },
+    { ...movement, unitCostUsd: 0.9 }
+  ]) {
+    assert.throws(() => validateAccountingSnapshot(
+      emptyState(),
+      { ...emptyState([entry]), purchases: [purchase], movements: [invalidMovement] }
+    ), /una entrada de Kardex no coincide/);
+  }
 });
 
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
@@ -194,7 +204,7 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
     id: 'movement-new', companyId: 'company-1', productId: 'p-1',
     date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
     documentRef: 'FAC-100', counterpartyRif: 'J-12345678-9',
-    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
+    quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
   };
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),

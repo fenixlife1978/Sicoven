@@ -386,22 +386,31 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
       const movement = matches[0];
       const expectedCost = money(Number(line.quantity) * Number(line.unitCostBs));
+      const lineUnitCostBs = Number(line.unitCostBs);
       const movementQuantity = Number(movement.quantity);
+      const movementUnitCostBs = Number(movement.unitCostBs);
+      const movementUnitCostUsd = Number(movement.unitCostUsd);
       const movementCostBs = Number(movement.totalCostBs);
       const movementCostUsd = Number(movement.totalCostUsd);
       const movementRate = Number(movement.bcvRate);
       const invoiceRate = Number(purchase.bcvRate);
+      const supplierRif = normalizeRif(purchase.supplierRif);
+      const movementRif = normalizeRif(movement.counterpartyRif);
       if (priorMovementIdsForIntegrity.has(String(movement.id)) ||
           movement.date !== purchase.invoiceDate ||
           !Number.isFinite(movementQuantity) ||
           Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
-          !Number.isFinite(movementCostBs) ||
-          Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
+          !Number.isFinite(lineUnitCostBs) || !Number.isFinite(movementUnitCostBs) ||
+          Math.abs(movementUnitCostBs - lineUnitCostBs) > 0.02 ||
           !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
           !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
+          !Number.isFinite(movementUnitCostUsd) ||
+          Math.abs(movementUnitCostUsd - lineUnitCostBs / invoiceRate) > 0.0001 ||
+          !Number.isFinite(movementCostBs) ||
+          Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
           !Number.isFinite(movementCostUsd) ||
           Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001 ||
-          normalizeRif(movement.counterpartyRif) !== normalizeRif(purchase.supplierRif)) {
+          !supplierRif || !movementRif || movementRif !== supplierRif) {
         throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.');
       }
     }
@@ -485,8 +494,12 @@ function validateAccountingSnapshot(previousState, nextState) {
         const supplierRif = normalizeRif(original.supplierRif);
         return sourceMovement.date === original.invoiceDate && Boolean(movementRif) && Boolean(supplierRif) &&
           movementRif === supplierRif &&
+          Number.isFinite(Number(sourceMovement.quantity)) &&
           Math.abs(Number(sourceMovement.quantity) - Number(sourceLine.quantity)) <= 0.000001 &&
+          Number.isFinite(Number(sourceMovement.unitCostBs)) &&
           Math.abs(Number(sourceMovement.unitCostBs) - Number(sourceLine.unitCostBs)) <= 0.02 &&
+          Number.isFinite(Number(sourceMovement.unitCostUsd)) &&
+          Math.abs(Number(sourceMovement.unitCostUsd) - Number(sourceLine.unitCostBs) / sourceRate) <= 0.0001 &&
           Math.abs(money(Number(sourceMovement.totalCostBs)) - expectedBs) <= 0.02 &&
           Math.abs(Number(sourceMovement.bcvRate) - sourceRate) <= 0.000001 &&
           Math.abs(Number(sourceMovement.totalCostUsd) - expectedBs / sourceRate) <= 0.0001;

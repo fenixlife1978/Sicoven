@@ -130,4 +130,18 @@ function persistAccountingSnapshot(db, state) {
   return { ok: true, savedAt: new Date().toISOString() };
 }
 
-module.exports = { persistAccountingSnapshot };
+function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession }) {
+  if (!ipcMain || typeof ipcMain.handle !== 'function' ||
+      typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
+    throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
+  }
+  ipcMain.handle('sicoven:save-state', (_event, token, state) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
+    if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
+    return persistAccountingSnapshot(db, state);
+  });
+}
+
+module.exports = { persistAccountingSnapshot, registerAccountingPersistenceHandler };

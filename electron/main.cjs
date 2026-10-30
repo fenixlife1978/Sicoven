@@ -23,7 +23,7 @@ const verifyPassword = (password, salt, expected) => {
 };
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
-const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
+const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
 let db;
 function openDatabase() {
@@ -422,13 +422,7 @@ app.whenReady().then(async () => {
     return { ok: true, cleared: true, verified: true };
   });
 
-  ipcMain.handle('sicoven:save-state', (_event, token, state) => {
-    const licensing = licenseView();
-    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
-    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
-    if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
-    return persistAccountingSnapshot(db, state);
-  });
+  registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getActiveSession });
 
 
   await revalidateLicense();
