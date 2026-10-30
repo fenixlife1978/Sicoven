@@ -652,17 +652,24 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(totalInventoryCost - Number(note.taxableBaseBs) - Number(note.exemptAmountBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
+        accountSum(sourcePayableAccountCode, 'credit', 'Bs') > 0.02 || accountSum(sourcePayableAccountCode, 'credit', 'Usd') > 0.0001 ||
         Math.abs(accountSum('1.1.2.03', 'debit', 'Bs') - Number(note.supplierAdvanceBs || 0)) > 0.02 ||
         Math.abs(accountSum('1.1.2.03', 'debit', 'Usd') - Number(note.supplierAdvanceUsd || 0)) > 0.0001 ||
+        accountSum('1.1.2.03', 'credit', 'Bs') > 0.02 || accountSum('1.1.2.03', 'credit', 'Usd') > 0.0001 ||
         !inventoryAccountsMatch ||
+        [...inventoryByAccount.keys()].some(code => accountSum(code, 'debit', 'Bs') > 0.02 || accountSum(code, 'debit', 'Usd') > 0.0001) ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
+        accountSum('1.1.3.01', 'debit', 'Bs') > 0.02 || accountSum('1.1.3.01', 'debit', 'Usd') > 0.0001 ||
         Math.abs(accountSum('2.1.2.03', 'debit', 'Bs') - Number(note.vatWithheldBs || 0)) > 0.02 ||
         Math.abs(accountSum('2.1.2.03', 'debit', 'Usd') - Number(note.vatWithheldUsd || 0)) > 0.0001 ||
+        accountSum('2.1.2.03', 'credit', 'Bs') > 0.02 || accountSum('2.1.2.03', 'credit', 'Usd') > 0.0001 ||
         Math.abs(accountSum('2.1.2.04', 'debit', 'Bs') - Number(note.islrWithheldBs || 0)) > 0.02 ||
         Math.abs(accountSum('2.1.2.04', 'debit', 'Usd') - Number(note.islrWithheldUsd || 0)) > 0.0001 ||
+        accountSum('2.1.2.04', 'credit', 'Bs') > 0.02 || accountSum('2.1.2.04', 'credit', 'Usd') > 0.0001 ||
         Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('6.1.1.11', 'credit', 'Usd') - Number(note.igtfAmountUsd || 0)) > 0.0001 ||
+        accountSum('6.1.1.11', 'debit', 'Bs') > 0.02 || accountSum('6.1.1.11', 'debit', 'Usd') > 0.0001 ||
         Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.igtfAmountBs || 0)) > 0.02 ||
         Math.abs(Number(note.netPayableReductionBs) + Number(note.supplierAdvanceBs || 0) -
            (Number(note.totalAmountBs) - Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0))) > 0.02 ||
