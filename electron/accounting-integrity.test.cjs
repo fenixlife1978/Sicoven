@@ -22,7 +22,7 @@ const reversalEntry = () => ({
 });
 const emptyState = (journalEntries = []) => ({
   journalEntries, purchases: [], sales: [], movements: [], creditSettlements: [],
-  bankStatementMovements: [], vatVouchers: [], islrVouchers: []
+  bankStatementMovements: [], vatVouchers: [], islrVouchers: [], products: [], companies: [], accounts: []
 });
 
 test('SQLite rejects reuse of a lower unused journal sequence number', () => {
@@ -92,7 +92,7 @@ test('SQLite rejects supplier-return movements imported through a snapshot or ba
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState(), movements: [returnMovement] }
-  ), /bloqueó la devolución a proveedor/);
+  ), /cada nota de crédito debe tener exactamente su salida de Kardex asociada/);
 });
 
 test('SQLite rejects supplier debit/credit notes imported as new purchase records', () => {
@@ -379,4 +379,121 @@ test('SQLite audit_events table rejects UPDATE and DELETE operations', () => {
   } finally {
     db.close();
   }
+});
+
+
+const supplierCreditFixture = () => {
+  const originalPurchase = {
+    id: 'purchase-original', companyId: 'company-1', opNumber: 1,
+    invoiceDate: '2026-10-01', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', invoiceNumber: '100', controlNumber: '00-100',
+    documentType: '01', totalAmountBs: 238.96, taxableBaseBs: 200,
+    exemptAmountBs: 0, taxRate: 16, vatAmountBs: 32, retentionRate: 75,
+    vatWithheldBs: 24, islrWithheldBs: 2, islrSubtrahendBs: 0,
+    bcvRate: 100, totalAmountUsd: 2.3896, taxableBaseUsd: 2,
+    vatAmountUsd: 0.32, vatWithheldUsd: 0.24, islrWithheldUsd: 0.02,
+    igtfAmountBs: 6.96, igtfAmountUsd: 0.0696,
+    paymentTerm: 'CREDITO', journalEntryId: 'purchase-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const originalEntry = {
+    id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-01', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    referenceDoc: 'FAC-100',
+    items: [
+      { accountCode: '1.1.4.01', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '6.1.1.11', debitBs: 6.96, creditBs: 0, debitUsd: 0.0696, creditUsd: 0 },
+      { accountCode: '2.1.2.03', debitBs: 0, creditBs: 24, debitUsd: 0, creditUsd: 0.24 },
+      { accountCode: '2.1.2.04', debitBs: 0, creditBs: 2, debitUsd: 0, creditUsd: 0.02 },
+      { accountCode: '2.1.1.01', debitBs: 0, creditBs: 212.96, debitUsd: 0, creditUsd: 2.1296 }
+    ],
+    createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const originalMovement = {
+    id: 'purchase-movement', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-01', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-100', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200,
+    totalCostUsd: 2, bcvRate: 100
+  };
+  const product = { id: 'p-1', companyId: 'company-1', currentStock: 1, inventoryAccountCode: '1.1.4.01' };
+  const noteEntry = {
+    id: 'credit-entry', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'Nota de crédito NC-001', type: 'AJUSTE',
+    bcvRate: 100, referenceDoc: 'NC-PROV-NC-001',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 106.48, creditBs: 0, debitUsd: 1.0648, creditUsd: 0 },
+      { accountCode: '2.1.2.03', debitBs: 12, creditBs: 0, debitUsd: 0.12, creditUsd: 0 },
+      { accountCode: '2.1.2.04', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 16, debitUsd: 0, creditUsd: 0.16 },
+      { accountCode: '6.1.1.11', debitBs: 0, creditBs: 3.48, debitUsd: 0, creditUsd: 0.0348 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const returnMovement = {
+    id: 'return-movement', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA',
+    documentRef: 'NC-PROV-NC-001', quantity: 1, unitCostBs: 100,
+    totalCostBs: 100, totalCostUsd: 1, correctionForMovementId: 'purchase-movement',
+    journalEntryId: 'credit-entry'
+  };
+  const note = {
+    id: 'purchase-credit-note', companyId: 'company-1', opNumber: 2,
+    invoiceDate: '2026-10-10', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', invoiceNumber: 'NC-001', controlNumber: '00-NC-001',
+    creditNoteNumber: 'NC-001', affectedInvoiceNumber: '100', documentType: '03',
+    totalAmountBs: 119.48, taxableBaseBs: 100, exemptAmountBs: 0,
+    taxRate: 16, vatAmountBs: 16, retentionRate: 75, vatWithheldBs: 12,
+    islrWithheldBs: 1, bcvRate: 100, totalAmountUsd: 1.1948,
+    taxableBaseUsd: 1, vatAmountUsd: 0.16, vatWithheldUsd: 0.12,
+    islrWithheldUsd: 0.01, igtfAmountBs: 3.48, igtfAmountUsd: 0.0348,
+    journalEntryId: 'credit-entry', originalPurchaseId: 'purchase-original',
+    netPayableReductionBs: 106.48, netPayableReductionUsd: 1.0648,
+    notes: 'Mercancía defectuosa devuelta',
+    creditNoteLines: [{ productId: 'p-1', originalMovementId: 'purchase-movement',
+      movementId: 'return-movement', quantity: 1, unitCostBs: 100, inventoryCostBs: 100 }]
+  };
+  const prior = { ...emptyState([originalEntry]), purchases: [originalPurchase],
+    movements: [originalMovement], products: [{ ...product, currentStock: 2 }] };
+  const next = { ...emptyState([originalEntry, noteEntry]), purchases: [originalPurchase, note],
+    movements: [originalMovement, returnMovement], products: [product] };
+  return { prior, next, note, returnMovement };
+};
+
+test('SQLite accepts a supplier credit note only with linked stock return, balanced journal, taxes and AP reduction', () => {
+  const { prior, next } = supplierCreditFixture();
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
+test('SQLite rejects supplier credit note without the linked physical return', () => {
+  const { prior, next } = supplierCreditFixture();
+  next.movements = next.movements.filter(item => item.id !== 'return-movement');
+  assert.throws(() => validateAccountingSnapshot(prior, next), /cada nota de crédito debe tener exactamente su salida/);
+});
+
+test('SQLite rejects supplier credit note whose journal does not reverse VAT or AP correctly', () => {
+  const { prior, next } = supplierCreditFixture();
+  next.journalEntries[1].items[0].debitBs = 50;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no está balanceado o no revierte CxP/);
+});
+
+test('SQLite rejects cumulative supplier returns above the original invoice quantity', () => {
+  const { prior, next } = supplierCreditFixture();
+  const secondNote = {
+    ...next.purchases[1], id: 'purchase-credit-note-2', invoiceNumber: 'NC-002',
+    creditNoteNumber: 'NC-002', opNumber: 3, journalEntryId: 'credit-entry-2',
+    netPayableReductionBs: 106.48, netPayableReductionUsd: 1.0648,
+    creditNoteLines: [{ ...next.purchases[1].creditNoteLines[0], quantity: 1.5, movementId: 'return-movement-2' }]
+  };
+  const secondMovement = { ...next.movements[1], id: 'return-movement-2', quantity: 1.5,
+    documentRef: 'NC-PROV-NC-002', correctionForMovementId: 'purchase-movement',
+    journalEntryId: 'credit-entry-2' };
+  const secondEntry = { ...next.journalEntries[1], id: 'credit-entry-2', entryNumber: 3,
+    referenceDoc: 'NC-PROV-NC-002' };
+  next.purchases.push(secondNote);
+  next.movements.push(secondMovement);
+  next.journalEntries.push(secondEntry);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /devoluciones acumuladas superan/);
 });
