@@ -1,6 +1,8 @@
 name: SICOVEN Windows installer
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
   workflow_dispatch:
@@ -17,53 +19,42 @@ jobs:
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
-      - name: Checkout main
+      - name: Checkout source
         uses: actions/checkout@v4
-
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: package.json
-
-      - name: Install dependencies
-        run: npm install --no-audit --no-fund
-
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test authentication and session security guards
+        run: node scripts/test-auth-hardening.cjs
       - name: Run automated tests
         run: npm test
-
       - name: Check TypeScript types
         run: npm run check:types
-
       - name: Build renderer
         run: npm run build
-
       - name: Audit production assets
         run: npm run audit:assets
-
       - name: Build Windows NSIS installer
         run: npm run dist
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-
       - name: Verify installer exists
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File
           if (-not $installer) {
-            Write-Error "No se generó el instalador Windows x64 de SICOVEN."
-            exit 1
+            throw "No se generó el instalador Windows x64 de SICOVEN."
           }
           $installer | Select-Object Name, Length, LastWriteTime | Format-Table
-
       - name: Install and launch smoke test
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
-          if (-not $installer) {
-            throw "No se encontró el instalador para la prueba de instalación."
-          }
           $installDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Smoke"
           if (Test-Path $installDir) {
             Remove-Item -Path $installDir -Recurse -Force
@@ -71,9 +62,7 @@ jobs:
           $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
           if (-not $install.WaitForExit(120000)) {
             $autoApplication = Get-Process -Name "SICOVEN" -ErrorAction SilentlyContinue
-            if ($autoApplication) {
-              & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null
-            }
+            if ($autoApplication) { & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null }
             if (-not $install.WaitForExit(30000)) {
               throw "El instalador NSIS no terminó dentro del tiempo permitido."
             }
