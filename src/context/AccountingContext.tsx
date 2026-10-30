@@ -1000,6 +1000,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el cobro/pago.');
+    }
     const kind = draft.kind;
     const document = kind === 'SALE_COLLECTION'
       ? sales.find(item => item.id === draft.documentId && item.companyId === currentCompany.id)
