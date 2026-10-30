@@ -19,3 +19,16 @@ test('redondea el valor histórico proporcional a céntimos', () => {
 test('rechaza una liquidación superior al saldo disponible', () => {
   assert.throws(() => calculateSupplierAdvanceFxSettlement(10, 500, 11, 550), /supera el saldo/);
 });
+
+test('usa el valor histórico exacto de la distribución FIFO cuando las notas tienen tasas distintas', () => {
+  // 10 USD de la primera nota (800 Bs) + 2 USD de la segunda (200 Bs).
+  // El valor correcto consumido es 1.000 Bs, no el promedio global (1.104 Bs).
+  const fifoBookValueBs = 800 + 200;
+  const result = calculateSupplierAdvanceFxSettlement(12, fifoBookValueBs, 12, 1200);
+  assert.deepEqual(result, {
+    amountUsd: 12,
+    advanceBookValueBs: 1000,
+    settlementValueBs: 1200,
+    exchangeDifferenceBs: 200
+  });
+});
