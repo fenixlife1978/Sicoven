@@ -501,6 +501,8 @@ function validateAccountingSnapshot(previousState, nextState) {
         !Number.isFinite(Number(note.taxableBaseBs || 0)) || Number(note.taxableBaseBs || 0) < 0 ||
         !Number.isFinite(Number(note.exemptAmountBs || 0)) || Number(note.exemptAmountBs || 0) < 0 ||
         !Number.isFinite(Number(note.vatAmountBs || 0)) || Number(note.vatAmountBs || 0) < 0 ||
+        !Number.isFinite(Number(note.vatWithheldBs || 0)) || Number(note.vatWithheldBs || 0) < 0 ||
+        !Number.isFinite(Number(note.islrWithheldBs || 0)) || Number(note.islrWithheldBs || 0) < 0 ||
         !Number.isFinite(Number(note.igtfAmountBs || 0)) || Number(note.igtfAmountBs || 0) < 0 ||
         !Number.isFinite(Number(note.netPayableReductionBs)) || Number(note.netPayableReductionBs) < 0 ||
         !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) < 0 ||
@@ -639,7 +641,11 @@ function validateAccountingSnapshot(previousState, nextState) {
           !Number.isFinite(Number(returnMovement.unitCostBs)) ||
           !Number.isFinite(Number(returnMovement.totalCostBs)) ||
           !Number.isFinite(Number(returnMovement.totalCostUsd)) ||
+          !Number.isFinite(Number(returnMovement.unitCostUsd)) ||
+          !Number.isFinite(Number(returnMovement.balanceQty)) ||
           !Number.isFinite(Number(returnMovement.bcvRate)) ||
+          Math.abs(Number(returnMovement.bcvRate) - Number(note.bcvRate)) > 0.000001 ||
+          Math.abs(Number(returnMovement.unitCostUsd) - Number(line.unitCostBs) / Number(note.bcvRate)) > 0.0001 ||
           Math.abs(Number(line.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
           Math.abs(Number(line.inventoryCostBs) - Number(line.quantity) * Number(line.unitCostBs)) > 0.02) {
         throw new Error('SQLite rechazó una línea de nota de crédito: la salida física no concilia con la entrada original y el asiento enlazado.');
@@ -659,6 +665,9 @@ function validateAccountingSnapshot(previousState, nextState) {
       const allNewReturnsForProduct = newSupplierReturns.filter(item => item.companyId === note.companyId && item.productId === line.productId)
         .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       if (!priorProduct || !nextProduct ||
+          !Number.isFinite(Number(priorProduct.currentStock)) ||
+          !Number.isFinite(Number(nextProduct.currentStock)) ||
+          !Number.isFinite(Number(returnMovement.balanceQty)) ||
           Math.abs(Number(priorProduct.currentStock) - allNewReturnsForProduct - Number(nextProduct.currentStock)) > 0.000001 ||
           Math.abs(Number(returnMovement.balanceQty) - Number(nextProduct.currentStock)) > 0.000001) {
         throw new Error('SQLite rechazó la nota de crédito: la existencia final del artículo no coincide con las salidas físicas registradas.');
