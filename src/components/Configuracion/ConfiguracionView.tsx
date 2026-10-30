@@ -30,7 +30,8 @@ export const ConfiguracionView: React.FC = () => {
     resetToSampleData,
     resetFactoryData,
     exportBackupJson,
-    importBackupJson
+    importBackupJson,
+    waitForPersistence
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -38,6 +39,7 @@ export const ConfiguracionView: React.FC = () => {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
+  const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
 
   // Form state for current company editing
   const [name, setName] = useState(currentCompany.name);
@@ -131,17 +133,29 @@ export const ConfiguracionView: React.FC = () => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
-    reader.onload = event => {
+    reader.onload = async event => {
       const content = event.target?.result as string;
-      if (content) {
+      if (!content) {
+        alert('El archivo de respaldo está vacío o no se pudo leer.');
+        return;
+      }
+      setBackupRestoreBusy(true);
+      try {
         const ok = importBackupJson(content);
-        if (ok) {
-          alert('¡Copia de seguridad restaurada exitosamente!');
-        } else {
-          alert('Error al leer el archivo JSON de respaldo. Verifique el formato.');
+        if (!ok) {
+          alert('No se pudo validar el respaldo. No se confirmó la restauración.');
+          return;
         }
+        await waitForPersistence();
+        alert('¡Copia de seguridad restaurada y guardada correctamente en SQLite!');
+      } catch (error) {
+        console.error('No se pudo confirmar la restauración del respaldo en SQLite:', error);
+        alert('La restauración no pudo confirmarse en SQLite. No continúe trabajando hasta revisar el estado de la base de datos.');
+      } finally {
+        setBackupRestoreBusy(false);
       }
     };
+    reader.onerror = () => alert('No se pudo leer el archivo de respaldo.');
     reader.readAsText(file);
   };
 
@@ -423,11 +437,12 @@ export const ConfiguracionView: React.FC = () => {
 
             <label className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-semibold border border-slate-300 transition cursor-pointer">
               <Upload className="w-4 h-4" />
-              Restaurar desde Archivo JSON
+              {backupRestoreBusy ? 'Restaurando y verificando SQLite…' : 'Restaurar desde Archivo JSON'}
               <input
                 type="file"
                 accept=".json"
                 onChange={handleImportBackup}
+                  disabled={backupRestoreBusy}
                 className="hidden"
               />
             </label>
