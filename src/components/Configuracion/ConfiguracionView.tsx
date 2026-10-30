@@ -130,7 +130,8 @@ export const ConfiguracionView: React.FC = () => {
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const input = e.currentTarget;
+    const file = input.files?.[0];
     if (!file) return;
     const confirmed = window.confirm(
       'RESTAURAR COPIA DE SEGURIDAD SICOVEN\n\nEsta operación reemplazará todas las empresas y sus datos contables actuales (asientos, compras, ventas, inventario, movimientos, retenciones, bancos y liquidaciones) por el contenido del archivo. No se puede deshacer.\n\n¿Deseas continuar?'
@@ -160,9 +161,13 @@ export const ConfiguracionView: React.FC = () => {
         alert('La restauración no pudo confirmarse en SQLite. No continúe trabajando hasta revisar el estado de la base de datos.');
       } finally {
         setBackupRestoreBusy(false);
+        input.value = '';
       }
     };
-    reader.onerror = () => alert('No se pudo leer el archivo de respaldo.');
+    reader.onerror = () => {
+      input.value = '';
+      alert('No se pudo leer el archivo de respaldo.');
+    };
     reader.readAsText(file);
   };
 
