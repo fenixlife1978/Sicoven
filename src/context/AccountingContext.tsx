@@ -1577,6 +1577,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let nextEntryNumber = journalEntries.filter(e => e.companyId === currentCompany.id).reduce((max,e) => Math.max(max,e.entryNumber),0) + 1;
     for (let index = 0; index < rows.length; index++) {
       const row = rows[index];
+      if (row.type === 'SALIDA' && row.concept === 'DEVOLUCION_COMPRA') {
+        throw new Error('Importación bloqueada en fila ' + (index + 2) + ': las devoluciones a proveedor requieren una nota de crédito conciliada con factura, Kardex, CxP e impuestos. No se importó ningún movimiento.');
+      }
       const product = virtualProducts.get(row.productId);
       if (!product) throw new Error('Fila ' + (index + 2) + ': artículo no encontrado en la empresa activa.');
       if (!row.documentRef || !String(row.documentRef).trim()) throw new Error('Fila ' + (index + 2) + ': la referencia documental es obligatoria.');
