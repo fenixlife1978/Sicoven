@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { Account, JournalEntry, JournalEntryItem } from './accounting';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from './journalReversal';
+import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord, InventoryMovement } from './accounting';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from './journalReversal';
 
 const accounts: Account[] = [
   { code:'1.1', name:'Banco', type:'ACTIVO', level:2, isMovement:true },
@@ -278,4 +278,76 @@ test('blocks an original statement row that has been reassigned to another journ
   });
   assert.equal(result.ready, false);
   assert.match(result.reason || '', /vinculado posteriormente a otro asiento/);
+});
+
+
+const reconciledPurchase = {
+  id: 'purchase-200', companyId: 'c-1', opNumber: 1, invoiceDate: '2026-10-10',
+  supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: '200',
+  controlNumber: '00-200', documentType: '01' as const,
+  totalAmountBs: 232, exemptAmountBs: 0, taxableBaseBs: 200, taxRate: 16,
+  vatAmountBs: 32, retentionRate: 0, vatWithheldBs: 0, bcvRate: 100,
+  totalAmountUsd: 2.32, taxableBaseUsd: 2, vatAmountUsd: 0.32, vatWithheldUsd: 0,
+  journalEntryId: 'purchase-journal',
+  inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+} satisfies PurchaseRecord;
+const reconciledPurchaseMovement: InventoryMovement = {
+  id: 'purchase-movement', companyId: 'c-1', productId: 'p-1',
+  productName: 'Producto', productCode: 'P-1', date: '2026-10-10',
+  type: 'ENTRADA', concept: 'COMPRA', documentRef: ' FAC - 200 ',
+  quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2,
+  balanceQty: 2, balanceTotalBs: 200, balanceTotalUsd: 2, bcvRate: 100,
+  counterpartyRif: 'J-12345678-9'
+};
+const reconciledPurchaseJournal: JournalEntry = {
+  id: 'purchase-journal', companyId: 'c-1', entryNumber: 30,
+  date: '2026-10-10', description: 'Compra 200', type: 'COMPRA',
+  referenceDoc: 'FAC-200', bcvRate: 100, createdAt: '2026-10-10T10:00:00.000Z',
+  items: [
+    { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+    { accountCode: '1.1.3.01', accountName: 'IVA', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+    { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 232, debitUsd: 0, creditUsd: 2.32 }
+  ]
+};
+
+test('certifica compra solo cuando factura, Kardex y asiento coinciden en ambas monedas', () => {
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [reconciledPurchaseJournal]
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.lineTotal, 200);
+  assert.equal(result.movementTotal, 200);
+  assert.equal(result.journalInventoryDebit, 200);
+  assert.equal(result.journalInventoryDebitUsd, 2);
+});
+
+test('bloquea conciliación de compra si proveedor, fecha, BCV o USD del Kardex difieren', () => {
+  const variants = [
+    { ...reconciledPurchaseMovement, counterpartyRif: 'J-99999999-9' },
+    { ...reconciledPurchaseMovement, date: '2026-10-11' },
+    { ...reconciledPurchaseMovement, bcvRate: 101 },
+    { ...reconciledPurchaseMovement, totalCostUsd: 1.9 }
+  ];
+  for (const movement of variants) {
+    const result = validatePurchaseInventoryReconciliation({
+      companyId: 'c-1', purchase: reconciledPurchase,
+      movements: [movement], journalEntries: [reconciledPurchaseJournal]
+    });
+    assert.equal(result.ready, false);
+  }
+});
+
+test('bloquea conciliación de compra si el asiento no reconoce el inventario en USD', () => {
+  const wrongJournal = {
+    ...reconciledPurchaseJournal,
+    items: reconciledPurchaseJournal.items.map(item => item.accountCode === '1.1.4.01'
+      ? { ...item, debitUsd: 1.5 } : item)
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [wrongJournal]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.journalMatchesInvoice, false);
 });
