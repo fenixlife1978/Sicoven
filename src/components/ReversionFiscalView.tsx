@@ -179,7 +179,7 @@ export const ReversionFiscalView: React.FC = () => {
     return ['INGRESOS','COSTOS','GASTOS'].includes(type || '') ? sum + item.debitUsd - item.creditUsd : sum;
   }, 0);
 
-  const submitSupplierCreditNote = () => {
+  const submitSupplierCreditNote = async () => {
     if (!linkedPurchase || !purchaseLineReconciliation?.ok) {
       setFeedback({ kind: 'error', message: 'La factura, sus líneas, el Kardex y el asiento deben estar conciliados antes de registrar una nota de crédito.' });
       return;
@@ -193,7 +193,7 @@ export const ReversionFiscalView: React.FC = () => {
         if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cada cantidad devuelta debe ser mayor que cero.');
         return { productId: row.productId, originalMovementId: movement.id, quantity };
       });
-      const note = addPurchaseCreditNote({
+      const note = await addPurchaseCreditNote({
         purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
         creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
         reason: supplierCreditReason
