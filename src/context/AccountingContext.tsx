@@ -278,7 +278,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const result = operation();
       if (result && typeof (result as any).then === 'function') {
-        return (result as unknown as Promise<T>).catch(rollback) as T;
+        // Async persistence operations publish no React state before commit.
+        // Do not restore whole snapshots or sequence maps on rejection: another
+        // invoice operation may have legitimately committed while SQLite was pending.
+        // A failed async operation may leave a harmless sequence gap, never a duplicate.
+        return result;
       }
       return result;
     } catch (error) {
