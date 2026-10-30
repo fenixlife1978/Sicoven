@@ -121,3 +121,51 @@ test('bloquea si el tratamiento fiscal de las líneas no concilia con la factura
     purchase: { ...purchase, exemptAmountBs: 20, taxableBaseBs: 180 }
   })), /clasificación fiscal/);
 });
+
+test('rechaza RIF ausente incluso cuando factura y Kardex también carecen de RIF', () => {
+  const noSupplierIdentity = { ...purchase, supplierRif: '' };
+  const noMovementIdentity = { ...originalMovement, counterpartyRif: '' };
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft({ purchase: noSupplierIdentity }),
+    lines: [{ product, originalMovement: noMovementIdentity, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100 }]
+  }), /no identifica de forma suficiente/);
+});
+
+test('rechaza líneas de factura duplicadas o con cantidades y costos inválidos', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, inventoryLines: [
+      ...purchase.inventoryLines, { productId: 'p-1', quantity: 1, unitCostBs: 100 }
+    ] }
+  })), /duplicadas o contienen cantidades\/costos inválidos/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, inventoryLines: [{ productId: 'p-1', quantity: Number.NaN, unitCostBs: 100 }] }
+  })), /duplicadas o contienen cantidades\/costos inválidos/);
+});
+
+test('rechaza importes fiscales y retenciones incoherentes', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, vatWithheldBs: 40 }
+  })), /retenciones originales superan/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, igtfAmountBs: Number.NaN }
+  })), /importes fiscales negativos o no numéricos/);
+});
+
+test('rechaza una entrada de Kardex con cantidad o costo no numérico', () => {
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft(),
+    lines: [{ product, originalMovement: { ...originalMovement, quantity: Number.NaN },
+      quantity: 1, previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100 }]
+  }), /línea de factura no concilia/);
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft(),
+    lines: [{ product, originalMovement: { ...originalMovement, unitCostBs: Number.NaN },
+      quantity: 1, previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100 }]
+  }), /línea de factura no concilia/);
+});
+
+test('rechaza existencia negativa o no numérica', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({ currentStock: Number.NaN })), /existencia actual/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({ currentStock: -1 })), /existencia actual/);
+});
