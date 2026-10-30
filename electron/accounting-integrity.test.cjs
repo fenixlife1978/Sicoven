@@ -299,11 +299,11 @@ test('SQLite preserves historical bank reconciliation links after unreconciliati
   ));
 });
 
-test('one-time cleanup of legacy demo companies is permitted', () => {
+test('SQLite refuses deletion of historical legacy-company journal entries', () => {
   const demoEntry = { ...sourceEntry(), id: 'demo-entry', companyId: 'comp-1' };
-  assert.doesNotThrow(() => validateAccountingSnapshot(
+  assert.throws(() => validateAccountingSnapshot(
     emptyState([demoEntry]), emptyState([])
-  ));
+  ), /eliminación del asiento histórico/);
 });
 
 test('SQLite accepts fiscal cancellation only when linked to its immutable contra-entry', () => {
