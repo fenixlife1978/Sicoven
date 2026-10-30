@@ -135,7 +135,7 @@ test('rechaza RIF ausente incluso cuando factura y Kardex también carecen de RI
 test('rechaza líneas de factura duplicadas o con cantidades y costos inválidos', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, inventoryLines: [
-      ...purchase.inventoryLines, { productId: 'p-1', quantity: 1, unitCostBs: 100 }
+      ...(purchase.inventoryLines || []), { productId: 'p-1', quantity: 1, unitCostBs: 100 }
     ] }
   })), /duplicadas o contienen cantidades\/costos inválidos/);
   assert.throws(() => calculatePurchaseCreditNote(draft({
