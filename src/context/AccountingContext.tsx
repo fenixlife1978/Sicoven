@@ -32,6 +32,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -70,6 +71,7 @@ interface AccountingContextType {
   // Compras
   purchases: PurchaseRecord[];
   addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
+  addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => PurchaseRecord;
   deletePurchase: (id: string) => void;
 
   // Ventas
@@ -1273,6 +1275,137 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     return finalPurchase;
   };
+
+  const addPurchaseCreditNote = (request: PurchaseCreditNoteRequest): PurchaseRecord => runAtomicInvoiceImport(() => {
+    if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
+    const purchase = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
+    if (!purchase || purchase.documentType !== '01' || purchase.isCancelled) {
+      throw new Error('La factura original no existe, no pertenece a la empresa activa o está reversada.');
+    }
+    if (purchases.some(item => item.companyId === currentCompany.id &&
+      item.documentType === '03' &&
+      String(item.creditNoteNumber || item.invoiceNumber).trim().toUpperCase() === request.creditNoteNumber.trim().toUpperCase())) {
+      throw new Error('El número de nota de crédito ya está registrado en esta empresa.');
+    }
+    const product = products.find(item => item.id === request.productId && item.companyId === currentCompany.id);
+    const originalMovement = movements.find(item => item.id === request.originalMovementId && item.companyId === currentCompany.id);
+    if (!product || !originalMovement) throw new Error('No se encontró el artículo o la entrada original de Kardex.');
+    const priorReturned = movements
+      .filter(item => item.companyId === currentCompany.id && item.correctionForMovementId === originalMovement.id &&
+        item.type === 'SALIDA' && item.concept === 'DEVOLUCION_COMPRA')
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const valuation = calculatePurchaseCreditNote({
+      purchase, product, products: products.filter(item => item.companyId === currentCompany.id),
+      originalMovement, quantity: request.quantity, previouslyReturnedQuantity: priorReturned,
+      returnDate: request.returnDate, creditNoteNumber: request.creditNoteNumber,
+      controlNumber: request.controlNumber, reason: request.reason,
+      currentStock: product.currentStock, currentAverageCostBs: product.avgCostBs,
+      closedThroughDate: currentCompany.closedThroughDate
+    });
+    const balance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
+    if (valuation.netPayableReductionUsd > balance.outstandingUsd + 0.005) {
+      throw new Error('La nota de crédito supera el saldo pendiente de CxP. El excedente debe registrarse como saldo a favor del proveedor mediante un circuito separado.');
+    }
+    const inventoryAccountCode = product.inventoryAccountCode || '1.1.4.01';
+    const requiredAccounts = ['2.1.1.01', inventoryAccountCode];
+    if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
+    if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
+    if (valuation.islrWithheldBs > 0) requiredAccounts.push('2.1.2.04');
+    if (valuation.igtfAmountBs > 0) requiredAccounts.push('6.1.1.11');
+    for (const code of requiredAccounts) {
+      if (!accounts.some(account => account.code === code && account.isMovement)) {
+        throw new Error('Falta la cuenta contable de movimiento ' + code + '. No se registró la nota.');
+      }
+    }
+    const rate = valuation.bcvRate;
+    const toUsd = (value: number) => Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000;
+    const items: JournalEntryItem[] = [];
+    const line = (code: string, debitBs: number, creditBs: number, description: string): JournalEntryItem => ({
+      accountCode: code, accountName: accounts.find(account => account.code === code)?.name || code,
+      debitBs, creditBs, debitUsd: toUsd(debitBs), creditUsd: toUsd(creditBs), description
+    });
+    items.push(line('2.1.1.01', valuation.netPayableReductionBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
+    if (valuation.vatWithheldBs > 0) items.push(line('2.1.2.03', valuation.vatWithheldBs, 0, 'Reversión proporcional de retención IVA'));
+    if (valuation.islrWithheldBs > 0) items.push(line('2.1.2.04', valuation.islrWithheldBs, 0, 'Reversión proporcional de retención ISLR'));
+    items.push(line(inventoryAccountCode, 0, valuation.inventoryCostBs, 'Salida de inventario por devolución al proveedor'));
+    if (valuation.vatAmountBs > 0) items.push(line('1.1.3.01', 0, valuation.vatAmountBs, 'Reversión de crédito fiscal IVA'));
+    if (valuation.igtfAmountBs > 0) items.push(line('6.1.1.11', 0, valuation.igtfAmountBs, 'Reversión de gasto IGTF'));
+    const debitBs = items.reduce((sum, item) => sum + item.debitBs, 0);
+    const creditBs = items.reduce((sum, item) => sum + item.creditBs, 0);
+    const debitUsd = items.reduce((sum, item) => sum + item.debitUsd, 0);
+    const creditUsd = items.reduce((sum, item) => sum + item.creditUsd, 0);
+    if (Math.abs(debitBs - creditBs) > 0.02 || Math.abs(debitUsd - creditUsd) > 0.0001) {
+      throw new Error('El asiento de la nota de crédito no cuadra en Bs. y USD. No se registró ningún cambio.');
+    }
+    const companyEntries = journalEntries.filter(entry => entry.companyId === currentCompany.id);
+    const nextEntry = Math.max(companyEntries.reduce((max, entry) => Math.max(max, entry.entryNumber || 0), 0), journalSequenceRef.current[currentCompany.id] || 0) + 1;
+    journalSequenceRef.current[currentCompany.id] = nextEntry;
+    const stamp = Date.now();
+    const journalId = 'entry-purchase-credit-' + currentCompany.id + '-' + nextEntry + '-' + stamp;
+    const movementId = 'mov-purchase-credit-' + stamp + '-' + Math.floor(Math.random() * 10000);
+    const noteId = 'pur-credit-' + currentCompany.id + '-' + stamp;
+    const reference = 'NC-PROV-' + request.creditNoteNumber.trim();
+    const journal: JournalEntry = {
+      id: journalId, companyId: currentCompany.id, entryNumber: nextEntry,
+      date: request.returnDate, description: 'Nota de crédito proveedor ' + request.creditNoteNumber + ' afecta factura ' + purchase.invoiceNumber,
+      type: 'AJUSTE', bcvRate: rate, referenceDoc: reference, items, createdAt: new Date().toISOString()
+    };
+    const newStock = product.currentStock - request.quantity;
+    const movement: InventoryMovement = {
+      id: movementId, companyId: currentCompany.id, productId: product.id,
+      productName: product.name, productCode: product.code, date: request.returnDate,
+      type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', documentRef: reference,
+      quantity: request.quantity, unitCostBs: originalMovement.unitCostBs,
+      unitCostUsd: toUsd(originalMovement.unitCostBs),
+      totalCostBs: valuation.inventoryCostBs, totalCostUsd: valuation.inventoryCostUsd,
+      balanceQty: newStock, balanceTotalBs: Math.round(newStock * product.avgCostBs * 100) / 100,
+      balanceTotalUsd: Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
+      journalEntryId: journalId, correctionForMovementId: originalMovement.id,
+      bcvRate: rate, documentType: 'Nota de crédito proveedor',
+      counterpartyRif: purchase.supplierRif, counterpartyName: purchase.supplierName,
+      costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
+    };
+    const note: PurchaseRecord = {
+      id: noteId, companyId: currentCompany.id,
+      opNumber: Math.max(purchases.filter(item => item.companyId === currentCompany.id)
+        .reduce((max, item) => Math.max(max, item.opNumber || 0), 0), purchaseSequenceRef.current[currentCompany.id] || 0) + 1,
+      invoiceDate: request.returnDate, supplierRif: purchase.supplierRif,
+      supplierName: purchase.supplierName, supplierAddress: purchase.supplierAddress,
+      invoiceNumber: request.creditNoteNumber.trim(), controlNumber: request.controlNumber.trim(),
+      creditNoteNumber: request.creditNoteNumber.trim(), affectedInvoiceNumber: purchase.invoiceNumber,
+      documentType: '03', totalAmountBs: valuation.totalAmountBs,
+      exemptAmountBs: valuation.exemptAmountBs, taxableBaseBs: valuation.taxableBaseBs,
+      taxRate: purchase.taxRate, vatAmountBs: valuation.vatAmountBs,
+      retentionRate: purchase.retentionRate, vatWithheldBs: valuation.vatWithheldBs,
+      islrConceptCode: purchase.islrConceptCode, islrConceptName: purchase.islrConceptName,
+      islrRate: purchase.islrRate, islrSubtrahendBs: 0, islrWithheldBs: valuation.islrWithheldBs,
+      bcvRate: rate, totalAmountUsd: valuation.totalAmountUsd,
+      taxableBaseUsd: valuation.taxableBaseUsd, vatAmountUsd: valuation.vatAmountUsd,
+      vatWithheldUsd: valuation.vatWithheldUsd, islrWithheldUsd: valuation.islrWithheldUsd,
+      igtfApplicable: valuation.igtfAmountBs > 0, igtfRate: purchase.igtfRate,
+      igtfAmountBs: valuation.igtfAmountBs, igtfAmountUsd: valuation.igtfAmountUsd,
+      paymentTerm: 'CREDITO', paymentMethod: purchase.paymentMethod,
+      journalEntryId: journalId, originalPurchaseId: purchase.id,
+      netPayableReductionBs: valuation.netPayableReductionBs,
+      netPayableReductionUsd: valuation.netPayableReductionUsd,
+      creditNoteLines: [{
+        productId: product.id, originalMovementId: originalMovement.id, movementId,
+        quantity: request.quantity, unitCostBs: originalMovement.unitCostBs,
+        inventoryCostBs: valuation.inventoryCostBs
+      }],
+      notes: request.reason.trim()
+    };
+    purchaseSequenceRef.current[currentCompany.id] = note.opNumber;
+    setJournalEntries(prev => [...prev, journal]);
+    setMovements(prev => [...prev, movement]);
+    setProducts(prev => prev.map(item => item.id === product.id
+      ? { ...item, currentStock: newStock,
+          avgCostBs: newStock > 0 ? item.avgCostBs : 0,
+          avgCostUsd: newStock > 0 ? item.avgCostUsd : 0 }
+      : item));
+    setPurchases(prev => [...prev, note]);
+    return note;
+  });
 
   const deletePurchase = (id: string) => {
     const purchase = purchases.find(item => item.id === id && item.companyId === currentCompany.id);
@@ -2875,6 +3008,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addCreditSettlement,
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
+        addPurchaseCreditNote,
         deletePurchase,
         sales: sales.filter(s => s.companyId === currentCompany.id),
         addSale,
