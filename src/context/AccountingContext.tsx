@@ -1335,12 +1335,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (purchaseData.vatAmountBs > 0) {
       items.push({
         accountCode: '1.1.3.01',
-        accountName: 'Crédito Fiscal IVA Compras (Alícuota General 16%)',
+        accountName: `Crédito Fiscal IVA Compras (${purchaseData.taxRate}%)`,
         debitBs: purchaseData.vatAmountBs,
         creditBs: 0,
         debitUsd: purchaseData.vatAmountBs / rate,
         creditUsd: 0,
-        description: `IVA 16% Fac. ${purchaseData.invoiceNumber}`
+        description: `IVA ${purchaseData.taxRate}% Fac. ${purchaseData.invoiceNumber}`
       });
     }
 
@@ -1923,7 +1923,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // Haber: Ventas de Mercancías (Base imponible)
     items.push({
       accountCode: '4.1.1.01',
-      accountName: 'Ventas de Mercancías (Alícuota General 16%)',
+      accountName: 'Ventas de Mercancías',
       debitBs: 0,
       creditBs: saleData.taxableBaseBs,
       debitUsd: 0,
@@ -1949,12 +1949,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (saleData.vatAmountBs > 0) {
       items.push({
         accountCode: '2.1.2.01',
-        accountName: 'Débito Fiscal IVA Ventas (Alícuota General 16%)',
+        accountName: `Débito Fiscal IVA Ventas (${saleData.taxRate}%)`,
         debitBs: 0,
         creditBs: saleData.vatAmountBs,
         debitUsd: 0,
         creditUsd: saleData.vatAmountBs / rate,
-        description: `Débito fiscal 16% Fac. ${saleData.invoiceNumber}`
+        description: `Débito fiscal ${saleData.taxRate}% Fac. ${saleData.invoiceNumber}`
       });
     }
 
@@ -3302,8 +3302,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const documentKeys = new Set<string>();
         for (const document of documents as Array<SaleRecord | PurchaseRecord>) {
           const key = String(document.companyId) + '|' + String(document.invoiceNumber || '').trim().toLowerCase();
-          const totalBs = Number(document.totalAmountBs), baseBs = Number(document.taxableBaseBs);
-          const exemptBs = Number(document.exemptAmountBs), vatBs = Number(document.vatAmountBs);
           if (!document.invoiceNumber?.trim() || documentKeys.has(key) ||
               !isValidIsoDate(document.invoiceDate) ||
               !hasConsistentFiscalDocumentAmounts(document) ||
