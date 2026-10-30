@@ -1467,34 +1467,42 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
         : voucher
     ) : islrVouchers;
-    const nextSnapshot = {
-      companies, currentCompanyId, accounts,
-      journalEntries: [...journalEntries, journal], purchases: [...purchases, note], sales,
-      products: nextProducts, movements: nextMovements, vatVouchers: nextVatVouchers, islrVouchers: nextIslrVouchers,
-      bankAccounts, bankStatementMovements, creditSettlements, displayCurrency
-    };
     if (!window.sicovenStore?.save) {
       throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
     }
-    // Encola esta escritura junto con el resto de snapshots para impedir
-    // que un guardado concurrente antiguo sobrescriba la devolución confirmada.
-    const persistence = saveQueueRef.current.then(async () => {
-      const persisted = await window.sicovenStore!.save(token, nextSnapshot);
-      if (persisted?.ok !== true) {
-        throw new Error('SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
-      }
+    let resolvePersistence!: () => void;
+    let rejectPersistence!: (error: Error) => void;
+    const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+      resolvePersistence = resolve;
+      rejectPersistence = reject;
     });
-    // La cola sigue disponible incluso si esta operación falla; el error propio
-    // se conserva en persistence y se propaga al formulario antes de publicar estado.
-    saveQueueRef.current = persistence.then(() => undefined, () => undefined);
-    await persistence;
-    setJournalEntries(nextSnapshot.journalEntries);
-    setMovements(nextMovements);
-    setProducts(nextProducts);
-    setPurchases(nextSnapshot.purchases);
-    setVatVouchers(nextVatVouchers);
-    setIslrVouchers(nextIslrVouchers);
-    setStorageError(null);
+    persistenceWaitersRef.current.push({ resolve: resolvePersistence, reject: rejectPersistence });
+    // Publica mutaciones funcionales para combinar la nota con cualquier otra
+    // operación que se procese en el mismo ciclo; el efecto serializado guarda
+    // el snapshot completo y SQLite valida todo dentro de una sola transacción.
+    setJournalEntries(prev => [...prev, journal]);
+    setMovements(prev => [...prev, ...stampMovements.map(item => item.movement)]);
+    setProducts(prev => prev.map(item => {
+      const returned = stampMovements.find(entry => entry.product.id === item.id);
+      if (!returned || item.companyId !== currentCompany.id) return item;
+      const newStock = Number(item.currentStock) - Number(returned.movement.quantity);
+      return { ...item, currentStock: newStock,
+        avgCostBs: newStock > 0 ? item.avgCostBs : 0,
+        avgCostUsd: newStock > 0 ? item.avgCostUsd : 0 };
+    }));
+    setPurchases(prev => [...prev, note]);
+    setVatVouchers(prev => prev.map(voucher =>
+      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id && !voucher.requiresFiscalCorrection
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+        : voucher
+    ));
+    setIslrVouchers(prev => prev.map(voucher =>
+      voucher.companyId === currentCompany.id && voucher.invoiceNumber === purchase.invoiceNumber &&
+      voucher.supplierRif === purchase.supplierRif && !voucher.requiresFiscalCorrection
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+        : voucher
+    ));
+    await persistenceConfirmation;
     return note;
       });
     } finally {
