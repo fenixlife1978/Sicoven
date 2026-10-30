@@ -9,6 +9,12 @@ function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
 
+function isValidIsoDate(value) {
+  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  const parsed = new Date(value + 'T00:00:00.000Z');
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+}
+
 function assertAppendOnlyCollection(previousState, nextState, collectionName, mutableKeys = [], monotonicKeys = []) {
   const oldItems = asArray(previousState[collectionName]);
   const newItems = asArray(nextState[collectionName]);
@@ -362,7 +368,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     const duplicateNoteNumber = asArray(nextState.purchases).some(item =>
       item.id !== note.id && item.companyId === note.companyId && item.documentType === '03' &&
       normalizeDocument(item.creditNoteNumber || item.invoiceNumber) === normalizeDocument(note.creditNoteNumber));
-    if (!original || original.isCancelled || normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
+    if (!original || original.isCancelled || !isValidIsoDate(original.invoiceDate) || !isValidIsoDate(note.invoiceDate) ||
+        normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
         note.affectedInvoiceNumber !== original.invoiceNumber || note.invoiceDate < original.invoiceDate ||
         (company?.closedThroughDate && note.invoiceDate <= company.closedThroughDate) ||
         duplicateNoteNumber ||
