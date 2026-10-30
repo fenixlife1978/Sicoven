@@ -15,6 +15,7 @@ export interface CostLayer {
   unitCostUsd: number;
   date?: string;
   documentRef?: string;
+  sourceMovementId?: string;
 }
 
 export interface InventoryCostResult {
@@ -33,6 +34,9 @@ export interface FifoMovementSnapshot {
   date: string;
   documentRef?: string;
   balanceQty: number;
+  id?: string;
+  concept?: string;
+  correctionForMovementId?: string;
 }
 
 /**
@@ -50,16 +54,20 @@ export function reconstructFifoLayers(
     .sort((a, b) => a.movement.date.localeCompare(b.movement.date) || a.index - b.index);
   const layers: CostLayer[] = [];
   let runningQuantity = 0;
-  const consumeLayers = (quantity: number, reference: string) => {
+  const consumeLayers = (quantity: number, reference: string, sourceMovementId?: string) => {
     let remaining = quantity;
-    for (const layer of layers) {
+    const candidates = sourceMovementId
+      ? layers.filter(layer => layer.sourceMovementId === sourceMovementId)
+      : layers;
+    for (const layer of candidates) {
       const consumed = Math.min(layer.quantity, remaining);
       layer.quantity -= consumed;
       remaining -= consumed;
       if (remaining <= 1e-8) break;
     }
     if (remaining > 1e-8) {
-      throw new Error('El historial PEPS no contiene capas suficientes para reconstruir ' + reference + '.');
+      throw new Error('El historial PEPS no contiene cantidad suficiente en la capa ' +
+        (sourceMovementId || 'FIFO') + ' para reconstruir ' + reference + '.');
     }
   };
   for (const { movement } of ordered) {
@@ -78,16 +86,21 @@ export function reconstructFifoLayers(
     }
     if (movement.type === 'ENTRADA') {
       if (!validPositive(quantity)) throw new Error('Una entrada PEPS debe contener una cantidad positiva.');
-      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef });
+      layers.push({ quantity, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
       runningQuantity += quantity;
     } else if (movement.type === 'SALIDA') {
       if (!validPositive(quantity)) throw new Error('Una salida PEPS debe contener una cantidad positiva.');
-      consumeLayers(quantity, movement.documentRef || date);
+      if (movement.concept === 'DEVOLUCION_COMPRA') {
+        if (!movement.correctionForMovementId) throw new Error('Una devolución PEPS a proveedor no identifica la entrada original que debe descargar.');
+        consumeLayers(quantity, movement.documentRef || date, movement.correctionForMovementId);
+      } else {
+        consumeLayers(quantity, movement.documentRef || date);
+      }
       runningQuantity -= quantity;
     } else if (movement.type === 'AJUSTE') {
       const delta = balanceQuantity - runningQuantity;
       if (delta > 1e-8) {
-        layers.push({ quantity: delta, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef });
+        layers.push({ quantity: delta, unitCostBs, unitCostUsd, date, documentRef: movement.documentRef, sourceMovementId: movement.id });
       } else if (delta < -1e-8) {
         consumeLayers(Math.abs(delta), movement.documentRef || date);
       }
