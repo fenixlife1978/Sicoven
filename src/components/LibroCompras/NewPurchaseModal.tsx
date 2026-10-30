@@ -396,7 +396,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
               <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS' || paymentTerm === 'CREDITO'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
             </div>
-            <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>\n            {paymentTerm === 'CREDITO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El IGTF no se anticipa en una factura a crédito. La obligación se evalúa cuando se realice el débito o se cancele la deuda; registre el impuesto en el flujo de pago cuando esté habilitado y conciliado.</p>}
+            <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
+            {paymentTerm === 'CREDITO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El IGTF no se anticipa en una factura a crédito. La obligación se evalúa cuando se realice el débito o se cancele la deuda; registre el impuesto en el flujo de pago cuando esté habilitado y conciliado.</p>}
             <p className="text-[11px] text-amber-900">Antes de activar el cálculo del IGTF, el contador debe validar que la operación esté sujeta al impuesto, la base imponible aplicable y el tratamiento contable y tributario vigente. El método de pago por sí solo no determina la obligación fiscal; active esta opción únicamente después de esa revisión.</p>
           </div>
 
