@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   calculateWeightedAverageCost,
   calculateFifoIssue,
+  reconstructFifoLayers,
   validateInventoryMovement,
   normalizeProductionRecipe,
   getDefaultInventoryAccountCode,
@@ -23,6 +24,32 @@ describe('motor de inventario contable', () => {
     const result = calculateWeightedAverageCost(10, 100, 5, 180, 80);
     assert.ok(Math.abs(result.unitCostBs - (1900 / 15)) < 1e-8);
     assert.equal(result.totalCostBs, 1900);
+  });
+
+  it('reconstruye capas PEPS desde el Kardex y valida la existencia actual', () => {
+    const layers = reconstructFifoLayers([
+      { type: 'ENTRADA', quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 5 },
+      { type: 'ENTRADA', quantity: 3, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', balanceQty: 8 },
+      { type: 'SALIDA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-03', balanceQty: 6 }
+    ], 6);
+    assert.deepEqual(layers.map(layer => layer.quantity), [3, 3]);
+    assert.equal(layers[0].unitCostBs, 10);
+    assert.equal(layers[1].unitCostBs, 20);
+  });
+
+  it('bloquea PEPS si faltan capas de apertura o un movimiento excede las capas existentes', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 2 }
+    ], 3), /no coinciden con la existencia actual/);
+    assert.throws(() => reconstructFifoLayers([
+      { type: 'SALIDA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 0 }
+    ], 0), /no contiene capas suficientes/);
+  });
+
+  it('bloquea PEPS cuando los saldos históricos no concilian', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 3 }
+    ], 3), /saldo de Kardex no concilia/);
   });
 
   it('PEPS consume primero las capas más antiguas', () => {
