@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Account, JournalEntry } from './accounting';
-import { buildReversalItems, validateSaleInventoryReturnReconciliation } from './journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from './journalReversal';
 
 const accounts: Account[] = [
   { code:'1.1', name:'Banco', type:'ACTIVO', level:2, isMovement:true },
@@ -168,4 +168,105 @@ test('bloquea doble reversión de costo si el asiento original ya contiene inven
   });
   assert.equal(result.ready, false);
   assert.match(result.reason || '', /duplicaría el efecto del Kardex/);
+});
+
+
+const bankAccount = {
+  id: 'bank-1', companyId: 'c-1', accountCode: '1.1.1.01',
+  bankName: 'Banco de prueba', accountNumber: '0001', currency: 'BS' as const,
+  initialBalanceBs: 0, initialBalanceUsd: 0
+};
+const bankSource: JournalEntry = {
+  id: 'bank-journal', companyId: 'c-1', entryNumber: 20, date: '2026-10-01',
+  description: 'Pago bancario', type: 'MANUAL', bcvRate: 100,
+  createdAt: '2026-10-01T10:00:00.000Z',
+  items: [
+    { accountCode: '6.1', accountName: 'Gastos', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+    { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 }
+  ]
+};
+const bankReversalItems: JournalEntryItem[] = [
+  { accountCode: '6.1', accountName: 'Gastos', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 },
+  { accountCode: '1.1.1.01', accountName: 'Banco', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 }
+];
+const originalBankStatement = {
+  id: 'bank-row-1', companyId: 'c-1', bankAccountId: 'bank-1',
+  date: '2026-10-01', reference: 'TRX-001', description: 'Pago',
+  type: 'DEBIT' as const, amountBs: 1000, amountUsd: 10, isReconciled: true,
+  reconciledWithJournalEntryId: bankSource.id,
+  reconciledJournalEntryIds: [bankSource.id]
+};
+const oppositeBankStatement = {
+  ...originalBankStatement, id: 'bank-row-2', date: '2026-10-03',
+  reference: 'REV-001', description: 'Reverso del pago', type: 'CREDIT' as const,
+  isReconciled: false, reconciledWithJournalEntryId: undefined,
+  reconciledJournalEntryIds: undefined
+};
+
+test('does not require bank reversal evidence for an entry never reconciled to a statement', () => {
+  const result = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount], statementMovements: []
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.pairs.length, 0);
+});
+
+test('blocks a reconciled bank entry when the opposite statement transaction is missing', () => {
+  const result = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount], statementMovements: [originalBankStatement]
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.reason || '', /Falta importar el movimiento bancario inverso exacto/);
+});
+
+test('accepts only one exact opposite bank statement line and returns its reconciliation pair', () => {
+  const result = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount], statementMovements: [originalBankStatement, oppositeBankStatement]
+  });
+  assert.equal(result.ready, true);
+  assert.deepEqual(result.pairs, [{
+    originalStatementId: 'bank-row-1', reversalStatementId: 'bank-row-2', bankAccountId: 'bank-1'
+  }]);
+});
+
+test('blocks ambiguous or wrong-amount bank reversal candidates', () => {
+  const ambiguous = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount],
+    statementMovements: [originalBankStatement, oppositeBankStatement, { ...oppositeBankStatement, id: 'bank-row-3' }]
+  });
+  assert.equal(ambiguous.ready, false);
+  assert.match(ambiguous.reason || '', /más de un posible/);
+  const wrongAmount = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount], statementMovements: [
+      originalBankStatement, { ...oppositeBankStatement, amountBs: 900 }
+    ]
+  });
+  assert.equal(wrongAmount.ready, false);
+});
+
+test('blocks a bank reversal when the contra-entry does not offset the bank account line', () => {
+  const invalidItems = bankReversalItems.map((item,index) =>
+    index === 1 ? { ...item, debitBs: 900, debitUsd: 9 } : item
+  );
+  const result = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: invalidItems,
+    bankAccounts: [bankAccount], statementMovements: [originalBankStatement, oppositeBankStatement]
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.reason || '', /no compensa exactamente/);
+});
+
+test('blocks an original statement row that has been reassigned to another journal entry', () => {
+  const reassigned = { ...originalBankStatement, reconciledWithJournalEntryId: 'other-entry' };
+  const result = validateBankStatementReversal({
+    companyId: 'c-1', source: bankSource, reversalItems: bankReversalItems,
+    bankAccounts: [bankAccount], statementMovements: [reassigned, oppositeBankStatement]
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.reason || '', /vinculado posteriormente a otro asiento/);
 });
