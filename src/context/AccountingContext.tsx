@@ -2924,7 +2924,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         entry.id === journalEntryId && entry.companyId === currentCompany.id
       );
       if (!linkedEntry) throw new Error('El asiento seleccionado no pertenece a la empresa activa.');
-      if (linkedEntry.date !== statement.date) throw new Error('La fecha del asiento no coincide con la fecha del movimiento bancario. Revise el cotejo antes de conciliar.');
 
       const alreadyUsed = bankStatementMovements.some(m =>
         m.id !== statement.id &&
