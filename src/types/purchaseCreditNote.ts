@@ -1,5 +1,11 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
 
+export interface PurchaseCreditNoteLineRequest {
+  productId: string;
+  originalMovementId: string;
+  quantity: number;
+}
+
 export interface PurchaseCreditNoteAmounts {
   inventoryCostBs: number;
   taxableBaseBs: number;
@@ -20,32 +26,41 @@ export interface PurchaseCreditNoteAmounts {
   igtfAmountUsd: number;
   totalAmountUsd: number;
   netPayableReductionUsd: number;
+  lines: Array<{
+    productId: string;
+    originalMovementId: string;
+    quantity: number;
+    unitCostBs: number;
+    inventoryCostBs: number;
+  }>;
 }
 
 export interface PurchaseCreditNoteRequest {
   purchaseId: string;
-  productId: string;
-  originalMovementId: string;
-  quantity: number;
+  lines: PurchaseCreditNoteLineRequest[];
   returnDate: string;
   creditNoteNumber: string;
   controlNumber: string;
   reason: string;
 }
 
-export interface PurchaseCreditNoteDraft {
-  purchase: PurchaseRecord;
+export interface PurchaseCreditNoteDraftLine {
   product: InventoryProduct;
-  products: InventoryProduct[];
   originalMovement: InventoryMovement;
   quantity: number;
   previouslyReturnedQuantity: number;
+  currentStock: number;
+  currentAverageCostBs: number;
+}
+
+export interface PurchaseCreditNoteDraft {
+  purchase: PurchaseRecord;
+  products: InventoryProduct[];
+  lines: PurchaseCreditNoteDraftLine[];
   returnDate: string;
   creditNoteNumber: string;
   controlNumber: string;
   reason: string;
-  currentStock: number;
-  currentAverageCostBs: number;
   closedThroughDate?: string;
 }
 
@@ -53,19 +68,14 @@ const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 10
 const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 
 export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): PurchaseCreditNoteAmounts {
-  const { purchase, product, products, originalMovement } = draft;
-  const quantity = Number(draft.quantity);
+  const { purchase, products } = draft;
   const rate = Number(purchase.bcvRate);
   if (purchase.documentType !== '01' || purchase.isCancelled) throw new Error('La factura original no está vigente o no es una factura ordinaria.');
   if (purchase.paymentTerm !== 'CREDITO') throw new Error('Por ahora solo se admiten devoluciones de facturas a crédito; contado requiere conciliación de caja/bancos o saldo a favor.');
   if (!purchase.inventoryLines?.length) throw new Error('La factura no conserva líneas de inventario estructuradas.');
-  if (originalMovement.companyId !== purchase.companyId || originalMovement.productId !== product.id ||
-      originalMovement.type !== 'ENTRADA' || originalMovement.concept !== 'COMPRA' ||
-      normalize(originalMovement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber)) {
-    throw new Error('La entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
-  }
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.returnDate) || draft.returnDate < originalMovement.date) {
-    throw new Error('La fecha de la nota de crédito no puede ser anterior a la entrada original.');
+  if (!Array.isArray(draft.lines) || draft.lines.length === 0) throw new Error('Agregue al menos un artículo a la nota de crédito.');
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.returnDate) || draft.returnDate < purchase.invoiceDate) {
+    throw new Error('La fecha de la nota de crédito no puede ser anterior a la factura original.');
   }
   if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
     throw new Error('La fecha de la nota pertenece a un período contable cerrado.');
@@ -74,54 +84,88 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     throw new Error('La nota requiere número, control y una justificación de al menos 10 caracteres.');
   }
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('La factura no conserva una tasa BCV válida.');
-  if (!Number.isFinite(quantity) || quantity <= 0 ||
-      !Number.isFinite(draft.previouslyReturnedQuantity) || draft.previouslyReturnedQuantity < 0) {
-    throw new Error('La cantidad de devolución no es válida.');
-  }
-  const line = purchase.inventoryLines.find(item => item.productId === product.id);
-  if (!line || Math.abs(Number(line.quantity) - Number(originalMovement.quantity)) > 0.000001 ||
-      Math.abs(Number(line.unitCostBs) - Number(originalMovement.unitCostBs)) > 0.02) {
-    throw new Error('La línea de factura no concilia con la entrada original del Kardex.');
-  }
-  if (draft.previouslyReturnedQuantity + quantity > Number(line.quantity) + 0.000001) {
-    throw new Error('La cantidad acumulada de devoluciones supera la cantidad facturada.');
-  }
-  if (quantity > draft.currentStock + 0.000001) throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
-  if (product.costingMethod === 'PEPS') throw new Error('PEPS requiere identificación y descarga del lote original; esta devolución no se puede automatizar.');
-  if (!Number.isFinite(draft.currentAverageCostBs) ||
-      Math.abs(draft.currentAverageCostBs - Number(line.unitCostBs)) > 0.01) {
-    throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
-  }
-
   if (Number(purchase.islrSubtrahendBs || 0) > 0 && Number(purchase.islrWithheldBs || 0) > 0) {
     throw new Error('La retención ISLR original tiene sustraendo; el prorrateo automático no es fiscalmente fiable. Requiere cálculo específico de la base y sustraendo de la nota.');
   }
-  const lines = purchase.inventoryLines;
-  let taxableLines = 0;
-  let exemptLines = 0;
+
+  const requestedProducts = new Set<string>();
+  const requestedMovements = new Set<string>();
+  let inventoryCostBs = 0;
+  let taxableBaseBs = 0;
+  let exemptAmountBs = 0;
+  const lineAmounts: PurchaseCreditNoteAmounts['lines'] = [];
+
+  let taxableInvoiceLines = 0;
+  let exemptInvoiceLines = 0;
   const taxableRates = new Set<number>();
-  for (const item of lines) {
-    const matchingProduct = products.find(candidate => candidate.id === item.productId && candidate.companyId === purchase.companyId);
+  for (const invoiceLine of purchase.inventoryLines) {
+    const matchingProduct = products.find(candidate => candidate.id === invoiceLine.productId && candidate.companyId === purchase.companyId);
     if (!matchingProduct) throw new Error('No se puede certificar el tratamiento fiscal de todas las líneas de la factura.');
-    const value = Number(item.quantity) * Number(item.unitCostBs);
-    if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptLines += value;
+    const value = Number(invoiceLine.quantity) * Number(invoiceLine.unitCostBs);
+    if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptInvoiceLines += value;
     else {
-      taxableLines += value;
+      taxableInvoiceLines += value;
       taxableRates.add(matchingProduct.vatTreatment === 'REDUCIDA_8' ? 8 : 16);
     }
   }
   if (taxableRates.size > 1 || (taxableRates.size === 1 && !taxableRates.has(Number(purchase.taxRate)))) {
     throw new Error('La factura contiene alícuotas de IVA mixtas o distintas a la tasa registrada. No se puede prorratear la nota con un único porcentaje.');
   }
-  if (Math.abs(money(taxableLines) - money(purchase.taxableBaseBs)) > 0.02 ||
-      Math.abs(money(exemptLines) - money(purchase.exemptAmountBs)) > 0.02) {
+  if (Math.abs(money(taxableInvoiceLines) - money(purchase.taxableBaseBs)) > 0.02 ||
+      Math.abs(money(exemptInvoiceLines) - money(purchase.exemptAmountBs)) > 0.02) {
     throw new Error('La clasificación fiscal de los artículos no concilia con la base imponible y el exento de la factura.');
   }
-  const lineValue = money(quantity * Number(line.unitCostBs));
-  const isExempt = product.vatTreatment === 'EXENTO' || product.vatTreatment === 'EXONERADO';
-  const taxableBaseBs = isExempt ? 0 : lineValue;
-  const exemptAmountBs = isExempt ? lineValue : 0;
-  const inventoryCostBs = lineValue;
+
+  for (const requested of draft.lines) {
+    const product = products.find(item => item.id === requested.product.id && item.companyId === purchase.companyId);
+    const movement = requested.originalMovement;
+    const quantity = Number(requested.quantity);
+    if (!product || requestedProducts.has(product.id) || requestedMovements.has(movement.id)) {
+      throw new Error('La nota contiene artículos o entradas de Kardex duplicados o ajenos a la empresa.');
+    }
+    requestedProducts.add(product.id);
+    requestedMovements.add(movement.id);
+    if (movement.companyId !== purchase.companyId || movement.productId !== product.id ||
+        movement.type !== 'ENTRADA' || movement.concept !== 'COMPRA' ||
+        normalize(movement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber)) {
+      throw new Error('Una entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
+    }
+    if (!Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(requested.previouslyReturnedQuantity) || requested.previouslyReturnedQuantity < 0) {
+      throw new Error('La cantidad de devolución no es válida.');
+    }
+    const line = purchase.inventoryLines.find(item => item.productId === product.id);
+    if (!line || Math.abs(Number(line.quantity) - Number(movement.quantity)) > 0.000001 ||
+        Math.abs(Number(line.unitCostBs) - Number(movement.unitCostBs)) > 0.02) {
+      throw new Error('La línea de factura no concilia con la entrada original del Kardex.');
+    }
+    if (requested.previouslyReturnedQuantity + quantity > Number(line.quantity) + 0.000001) {
+      throw new Error('La cantidad acumulada de devoluciones supera la cantidad facturada.');
+    }
+    if (quantity > Number(requested.currentStock) + 0.000001) {
+      throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
+    }
+    if (product.costingMethod === 'PEPS') {
+      throw new Error('PEPS requiere identificación y descarga del lote original; esta devolución no se puede automatizar.');
+    }
+    if (!Number.isFinite(requested.currentAverageCostBs) ||
+        Math.abs(requested.currentAverageCostBs - Number(line.unitCostBs)) > 0.01) {
+      throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
+    }
+    const lineValue = money(quantity * Number(line.unitCostBs));
+    const isExempt = product.vatTreatment === 'EXENTO' || product.vatTreatment === 'EXONERADO';
+    inventoryCostBs += lineValue;
+    if (isExempt) exemptAmountBs += lineValue;
+    else taxableBaseBs += lineValue;
+    lineAmounts.push({
+      productId: product.id, originalMovementId: movement.id,
+      quantity, unitCostBs: Number(line.unitCostBs), inventoryCostBs: lineValue
+    });
+  }
+
+  inventoryCostBs = money(inventoryCostBs);
+  taxableBaseBs = money(taxableBaseBs);
+  exemptAmountBs = money(exemptAmountBs);
   const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * Number(purchase.taxRate) / 100) : 0;
   const vatWithheldBs = Number(purchase.vatAmountBs) > 0
     ? money(Number(purchase.vatWithheldBs || 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
@@ -141,6 +185,6 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     exemptAmountUsd: toUsd(exemptAmountBs), vatAmountUsd: toUsd(vatAmountBs),
     vatWithheldUsd: toUsd(vatWithheldBs), islrWithheldUsd: toUsd(islrWithheldBs),
     igtfAmountUsd: toUsd(igtfAmountBs), totalAmountUsd: toUsd(totalAmountBs),
-    netPayableReductionUsd: toUsd(netPayableReductionBs)
+    netPayableReductionUsd: toUsd(netPayableReductionBs), lines: lineAmounts
   };
 }
