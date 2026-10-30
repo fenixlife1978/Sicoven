@@ -328,7 +328,7 @@ export function validatePurchaseInventoryReconciliation(input: {
     ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
     ['2.1.1.01', { debitBs: 0, creditBs: expectedPayable }]
   ]);
-  const journalAccountsMatch = journalItemsValid && [...expectedAccounts.entries()].every(([code, expected]) => {
+  const journalAccountsMatch = journalItemsValid && [...journalByAccount.keys()].every(code => expectedAccounts.has(code)) && [...expectedAccounts.entries()].every(([code, expected]) => {
     const actual = journalByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
     return Math.abs(actual.debitBs - expected.debitBs) <= 0.02 &&
       Math.abs(actual.creditBs - expected.creditBs) <= 0.02 &&
