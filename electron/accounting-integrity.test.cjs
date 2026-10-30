@@ -87,7 +87,7 @@ test('SQLite rejects a purchase whose declared inventory lines are missing from 
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: 'FAC-100', documentType: '01',
-    taxableBaseBs: 200, exemptAmountBs: 0, journalEntryId: 'purchase-entry',
+    taxableBaseBs: 200, exemptAmountBs: 0, bcvRate: 100, journalEntryId: 'purchase-entry',
     inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
   };
   const entry = {
@@ -122,7 +122,7 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
     id: 'movement-new', companyId: 'company-1', productId: 'p-1',
     date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
     documentRef: 'FAC-100', counterpartyRif: 'J-12345678-9',
-    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2
+    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(
     emptyState(),
