@@ -103,7 +103,7 @@ test('SQLite rejects supplier debit/credit notes imported as new purchase record
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState(), purchases: [note] }
-  ), /bloqueó una nota de débito\/crédito de proveedor/);
+  ), /cada nota de crédito debe tener exactamente su salida de Kardex asociada/);
 });
 
 test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
@@ -437,7 +437,7 @@ const supplierCreditFixture = () => {
     date: '2026-10-10', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA',
     documentRef: 'NC-PROV-NC-001', quantity: 1, unitCostBs: 100,
     totalCostBs: 100, totalCostUsd: 1, correctionForMovementId: 'purchase-movement',
-    journalEntryId: 'credit-entry'
+    journalEntryId: 'credit-entry', counterpartyRif: 'J-12345678-9'
   };
   const note = {
     id: 'purchase-credit-note', companyId: 'company-1', opNumber: 2,
