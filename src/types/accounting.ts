@@ -50,7 +50,8 @@ export type EntryType =
   | 'RETENCION_ISLR'
   | 'INVENTARIO'
   | 'AJUSTE'
-  | 'CIERRE';
+  | 'CIERRE'
+  | 'ANTICIPO_PROVEEDOR';
 
 export interface JournalEntry {
   id: string;
