@@ -518,6 +518,18 @@ test('SQLite rejects supplier credit note without the linked physical return', (
   assert.throws(() => validateAccountingSnapshot(prior, next), /cada línea de nota de crédito debe tener exactamente su salida/);
 });
 
+test('SQLite rejects a return movement linked to the note but assigned to another product or date', () => {
+  for (const mutate of [
+    movement => { movement.productId = 'different-product'; },
+    movement => { movement.date = '2026-10-11'; },
+    movement => { movement.unitCostBs = 99; }
+  ]) {
+    const { prior, next } = supplierCreditFixture();
+    mutate(next.movements[1]);
+    assert.throws(() => validateAccountingSnapshot(prior, next), /la salida física no concilia/);
+  }
+});
+
 test('SQLite rejects supplier credit note whose journal does not reverse VAT or AP correctly', () => {
   const { prior, next } = supplierCreditFixture();
   next.journalEntries[1].items[0].debitBs = 50;
