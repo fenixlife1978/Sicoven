@@ -499,10 +499,21 @@ function validateAccountingSnapshot(previousState, nextState) {
     const sourceLineTotal = money(sourceLines.reduce((sum, item) =>
       sum + Number(item.quantity || 0) * Number(item.unitCostBs || 0), 0));
     const sourceEntry = original.journalEntryId ? nextById.get(String(original.journalEntryId)) : undefined;
+    const sourceProducts = asArray(nextState.products);
+    const sourceInventoryAccounts = new Set();
+    for (const sourceLine of sourceLines) {
+      const sourceProduct = sourceProducts.find(item =>
+        String(item.id) === String(sourceLine.productId) && String(item.companyId) === String(original.companyId));
+      if (!sourceProduct) {
+        sourceInventoryAccounts.clear();
+        break;
+      }
+      sourceInventoryAccounts.add(String(sourceProduct.inventoryAccountCode || '1.1.4.01'));
+    }
     const sourceInventoryDebit = sourceEntry?.items?.reduce((sum, item) =>
-      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0), 0) || 0;
+      sum + (sourceInventoryAccounts.has(String(item.accountCode)) ? Number(item.debitBs || 0) : 0), 0) || 0;
     const sourceInventoryDebitUsd = sourceEntry?.items?.reduce((sum, item) =>
-      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) : 0), 0) || 0;
+      sum + (sourceInventoryAccounts.has(String(item.accountCode)) ? Number(item.debitUsd || 0) : 0), 0) || 0;
     const sourceRate = Number(original.bcvRate);
     const sourceReconciles = sourceLines.length > 0 && Number.isFinite(sourceRate) && sourceRate > 0 &&
       Math.abs(sourceLineTotal - Number(original.taxableBaseBs || 0) - Number(original.exemptAmountBs || 0)) <= 0.02 &&
