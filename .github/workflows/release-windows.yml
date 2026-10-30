@@ -1,16 +1,8 @@
 name: SICOVEN Windows Release
 on:
-  pull_request:
-    branches:
-      - 'main'
   push:
-    branches:
-      - 'main'
-      - 'sqlite-desktop-release'
     tags:
       - 'v*'
-    paths-ignore:
-      - '.github/workflows/**'
   workflow_dispatch:
 permissions:
   contents: write
