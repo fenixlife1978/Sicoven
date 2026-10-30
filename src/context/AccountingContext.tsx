@@ -1032,8 +1032,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const items: JournalEntryItem[] = [];
 
     // Debe: Gasto u Operación / Inventario (Base Imponible)
-    const debitAccountCode = purchaseData.taxableBaseBs > 0 ? '1.1.4.01' : '6.1.1.04';
-    const debitAccountName = purchaseData.taxableBaseBs > 0
+    const hasInventoryLines = Array.isArray(purchaseData.inventoryLines) && purchaseData.inventoryLines.length > 0;
+    const debitAccountCode = hasInventoryLines || purchaseData.taxableBaseBs > 0 ? '1.1.4.01' : '6.1.1.04';
+    const debitAccountName = debitAccountCode === '1.1.4.01'
       ? 'Inventario de Mercancías para la Venta'
       : 'Honorarios Profesionales (Contables, Legales, Asesoría)';
 
