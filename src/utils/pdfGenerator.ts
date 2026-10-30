@@ -803,7 +803,7 @@ export async function exportComprasPdf(
       formatNumberVe(sign * p.vatAmountBs),
       p.retentionRate > 0 ? `${p.retentionRate}%` : '0%',
       p.vatWithheldBs > 0 ? formatNumberVe(sign * p.vatWithheldBs) : '-',
-      p.islrWithheldBs > 0 ? formatNumberVe(sign * p.islrWithheldBs) : '-'
+      (p.islrWithheldBs || 0) > 0 ? formatNumberVe(sign * (p.islrWithheldBs || 0)) : '-'
     ];
   });
 
