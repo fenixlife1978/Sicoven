@@ -448,9 +448,12 @@ export function assessJournalReversal(input: {
   const documentKind = sale ? 'SALE' : purchase ? 'PURCHASE' : 'GENERAL';
   const documentId = sale?.id || purchase?.id;
   const reference = sale?.invoiceNumber || purchase?.invoiceNumber;
+  const normalizedReferences = reference
+    ? new Set([String(reference).trim().toUpperCase(), ('FAC-' + reference).trim().toUpperCase()])
+    : new Set<string>();
   const linkedMovements = movements.filter(item => item.companyId === companyId &&
     (item.journalEntryId === source.id ||
-      Boolean(reference && [reference, 'FAC-' + reference].includes(String(item.documentRef || '').trim().toUpperCase()))));
+      Boolean(reference && normalizedReferences.has(String(item.documentRef || '').trim().toUpperCase()))));
   const linkedBankRows = bankStatementMovements.filter(item => item.companyId === companyId &&
     (item.reconciledWithJournalEntryId === source.id || item.reconciledJournalEntryIds?.includes(source.id)));
   const kind = sale ? 'SALE_COLLECTION' : purchase ? 'PURCHASE_PAYMENT' : '';
