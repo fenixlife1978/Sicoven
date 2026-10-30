@@ -15,6 +15,7 @@ const localToday = () => {
 
 export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) => {
   const { products, movements, addPurchaseCreditNote, isStorageReady, storageError } = useAccounting();
+  const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const [returnDate, setReturnDate] = useState(localToday);
   const [creditNoteNumber, setCreditNoteNumber] = useState('');
   const [controlNumber, setControlNumber] = useState('');
@@ -63,8 +64,8 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
     if (submitting) return;
     setError('');
     setSuccess('');
-    if (!isStorageReady) {
-      setError(storageError || 'SQLite local no está lista. No se puede registrar la devolución.');
+    if (!sqliteAvailable || !isStorageReady) {
+      setError(storageError || 'La edición de escritorio con SQLite local no está disponible. No se puede registrar la devolución.');
       return;
     }
     if (!eligible) {
@@ -155,11 +156,11 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
             <label className="block text-xs font-semibold text-slate-700">Motivo y soporte de la devolución
               <textarea required minLength={10} rows={3} value={reason} onChange={event => setReason(event.target.value)} placeholder="Describa el motivo, acuerdo con el proveedor y soporte documental…" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
             </label>
-            <p className="rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-600">Al confirmar, SICOVEN calculará proporcionalmente base, IVA, retenciones e IGTF; reducirá CxP; registrará la salida de Kardex y el contra-asiento enlazado. SQLite valida el conjunto dentro de una transacción. Si cualquier conciliación falla, no se mostrará éxito. Los comprobantes de retención afectados quedarán señalados para revisión fiscal antes de declarar.</p>
+            <p className="rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-600">Al confirmar, SICOVEN calculará proporcionalmente base, IVA, retenciones e IGTF; reducirá CxP; registrará la salida de Kardex y el contra-asiento enlazado. SQLite valida el conjunto dentro de una transacción. Si cualquier conciliación falla, no se mostrará éxito. Los comprobantes de retención afectados quedarán señalados para revisión fiscal antes de declarar. Esta acción requiere la edición de escritorio conectada a SQLite local.</p>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancelar</button>
-            <button type="submit" disabled={submitting || !eligible || invalidRows.length > 0 || !isStorageReady || Boolean(success)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
+            <button type="submit" disabled={submitting || !eligible || invalidRows.length > 0 || !sqliteAvailable || !isStorageReady || Boolean(success)} className="inline-flex items-center gap-2 rounded-lg bg-emerald-700 px-4 py-2 text-xs font-bold text-white hover:bg-emerald-600 disabled:cursor-not-allowed disabled:opacity-50">
               {submitting ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando y confirmando en SQLite…</> : 'Registrar nota de crédito y devolución'}
             </button>
           </div>
