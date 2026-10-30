@@ -53,7 +53,7 @@ export function calculateOutstandingSupplierAdvance(
     String(item.supplierRif || '').trim().toUpperCase() === rif
   );
   const usedUsd = active.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
-  const usedBs = active.reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+  const usedBs = active.reduce((sum, item) => sum + Number(item.advanceBookValueBs ?? item.amountBs ?? 0), 0);
   const outstandingUsd = money(balance.totalCreditUsd - usedUsd);
   const outstandingBs = money(balance.totalCreditBs - usedBs);
   if (outstandingUsd < -0.005 || outstandingBs < -0.02) {
