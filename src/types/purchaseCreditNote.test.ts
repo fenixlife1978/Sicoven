@@ -102,9 +102,31 @@ test('bloquea devolución superior a existencia o cantidad original disponible',
 test('bloquea PEPS, costo promedio divergente y fecha en período cerrado', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     product: { ...product, costingMethod: 'PEPS' }
-  })), /PEPS requiere/);
+  })), /capa PEPS/);
   assert.throws(() => calculatePurchaseCreditNote(draft({ currentAverageCostBs: 95 })), /costo promedio actual difiere/);
   assert.throws(() => calculatePurchaseCreditNote(draft({ closedThroughDate: '2026-10-10' })), /período contable cerrado/);
+});
+
+test('PEPS devuelve al costo de la capa original solo si conserva cantidad suficiente', () => {
+  const pepsProduct = { ...product, costingMethod: 'PEPS' as const };
+  const result = calculatePurchaseCreditNote({
+    ...draft({ product: pepsProduct }),
+    lines: [{
+      product: pepsProduct, originalMovement, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100,
+      fifoLayerAvailableQuantity: 1
+    }]
+  });
+  assert.equal(result.inventoryCostBs, 100);
+  assert.equal(result.lines[0].unitCostBs, 100);
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft({ product: pepsProduct }),
+    lines: [{
+      product: pepsProduct, originalMovement, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100,
+      fifoLayerAvailableQuantity: 0.5
+    }]
+  }), /capa PEPS de la compra original/);
 });
 
 test('rechaza fechas con formato ISO pero imposibles en el calendario', () => {
