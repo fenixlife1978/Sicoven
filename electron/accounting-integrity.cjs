@@ -417,6 +417,23 @@ function validateAccountingSnapshot(previousState, nextState) {
         normalizeDocument(journal.referenceDoc) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber)) {
       throw new Error('SQLite rechazó la nota de crédito: la factura original o el asiento fiscal no están conciliados.');
     }
+    const linkedCreditNoteCorrection = voucher => {
+      if (!voucher?.requiresFiscalCorrection || !voucher.correctionEntryId) return false;
+      const correction = nextById.get(String(voucher.correctionEntryId));
+      return Boolean(correction && asArray(nextState.purchases).some(candidate =>
+        candidate.companyId === original.companyId && candidate.documentType === '03' &&
+        candidate.originalPurchaseId === original.id && candidate.journalEntryId === correction.id &&
+        normalizeDocument(correction.referenceDoc) === normalizeDocument('NC-PROV-' + candidate.creditNoteNumber)));
+    };
+    const originalVatVoucher = asArray(nextState.vatVouchers).find(voucher =>
+      voucher.companyId === original.companyId && voucher.purchaseRecordId === original.id);
+    const originalIslrVoucher = asArray(nextState.islrVouchers).find(voucher =>
+      voucher.companyId === original.companyId && voucher.invoiceNumber === original.invoiceNumber &&
+      voucher.supplierRif === original.supplierRif);
+    if ((Number(note.vatWithheldBs || 0) > 0 && originalVatVoucher && !linkedCreditNoteCorrection(originalVatVoucher)) ||
+        (Number(note.islrWithheldBs || 0) > 0 && originalIslrVoucher && !linkedCreditNoteCorrection(originalIslrVoucher))) {
+      throw new Error('SQLite rechazó la nota de crédito: falta enlazar los comprobantes de retención IVA/ISLR afectados para revisión fiscal.');
+    }
     const journalMovementIds = new Set();
     let totalInventoryCost = 0;
     for (const line of lines) {
