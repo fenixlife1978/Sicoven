@@ -223,8 +223,9 @@ export function validatePurchaseInventoryReconciliation(input: {
   purchase: PurchaseRecord;
   movements: InventoryMovement[];
   journalEntries: JournalEntry[];
+  products?: InventoryProduct[];
 }): PurchaseInventoryReconciliation {
-  const { companyId, purchase, movements, journalEntries } = input;
+  const { companyId, purchase, movements, journalEntries, products } = input;
   const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
   const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -256,10 +257,18 @@ export function validatePurchaseInventoryReconciliation(input: {
   const purchaseJournal = purchase.journalEntryId
     ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId)
     : undefined;
+  const inventoryAccountByProduct = new Map((products || []).filter(product => product.companyId === companyId)
+    .map(product => [product.id, product.inventoryAccountCode || '1.1.4.01']));
+  const expectedInventoryByAccount = new Map<string, number>();
+  for (const line of lines) {
+    const accountCode = inventoryAccountByProduct.get(line.productId) || '1.1.4.01';
+    expectedInventoryByAccount.set(accountCode, money((expectedInventoryByAccount.get(accountCode) || 0) + Number(line.quantity || 0) * Number(line.unitCostBs || 0)));
+  }
+  const inventoryAccountCodes = new Set(expectedInventoryByAccount.keys());
   const journalInventoryDebit = money(purchaseJournal?.items.reduce((sum, item) =>
-    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs ?? 0) - Number(item.creditBs ?? 0) : 0), 0) || 0);
+    sum + (inventoryAccountCodes.has(item.accountCode) ? Number(item.debitBs ?? 0) - Number(item.creditBs ?? 0) : 0), 0) || 0);
   const journalInventoryDebitUsd = Number(purchaseJournal?.items.reduce((sum, item) =>
-    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd ?? 0) - Number(item.creditUsd ?? 0) : 0), 0) || 0);
+    sum + (inventoryAccountCodes.has(item.accountCode) ? Number(item.debitUsd ?? 0) - Number(item.creditUsd ?? 0) : 0), 0) || 0);
   const productIds = new Set<string>();
   const validLines = lines.length > 0 && lines.every(line => {
     const quantity = Number(line.quantity);
@@ -293,7 +302,7 @@ export function validatePurchaseInventoryReconciliation(input: {
         Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
     }) && Math.abs(movementTotal - lineTotal) <= 0.02;
 
-  const allowedAccounts = new Set(['1.1.4.01', '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
+  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
   const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
   const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
     const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
@@ -311,7 +320,7 @@ export function validatePurchaseInventoryReconciliation(input: {
     journalByAccount.set(item.accountCode, current);
   }
   const expectedAccounts = new Map<string, { debitBs: number; creditBs: number }>([
-    ['1.1.4.01', { debitBs: baseTotal, creditBs: 0 }],
+    ...[...expectedInventoryByAccount.entries()].map(([code, amount]) => [code, { debitBs: amount, creditBs: 0 }] as [string, { debitBs: number; creditBs: number }]),
     ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
