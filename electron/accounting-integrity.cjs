@@ -845,10 +845,29 @@ function validateAccountingSnapshot(previousState, nextState) {
         ? journal.items.filter(item => item.accountCode === targetPayableCode)
             .reduce((sum, item) => sum + Number(item.debitUsd || 0), 0)
         : 0;
+      const payableCreditBs = targetPayableCode
+        ? journal.items.filter(item => item.accountCode === targetPayableCode)
+            .reduce((sum, item) => sum + Number(item.creditBs || 0), 0)
+        : 0;
+      const payableCreditUsd = targetPayableCode
+        ? journal.items.filter(item => item.accountCode === targetPayableCode)
+            .reduce((sum, item) => sum + Number(item.creditUsd || 0), 0)
+        : 0;
+      const invoiceRate = Number(target?.bcvRate) > 0
+        ? Number(target.bcvRate)
+        : (Number(target?.totalAmountUsd) > 0 ? Number(target.totalAmountBs) / Number(target.totalAmountUsd) : 0);
+      const expectedPayableDebitBs = Math.round(amountUsd * invoiceRate * 100) / 100;
+      const advanceDebitBs = journal.items.filter(item => item.accountCode === '1.1.2.03')
+        .reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+      const advanceDebitUsd = journal.items.filter(item => item.accountCode === '1.1.2.03')
+        .reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
       if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
           String(target.supplierRif || '').trim().toUpperCase() !== rif ||
           !targetPayableCode || payableDebitBs <= 0 ||
-          Math.abs(payableDebitUsd - amountUsd) > 0.01) {
+          Math.abs(payableDebitBs - expectedPayableDebitBs) > 0.02 ||
+          Math.abs(payableDebitUsd - amountUsd) > 0.01 ||
+          payableCreditBs > 0.02 || payableCreditUsd > 0.0001 ||
+          advanceDebitBs > 0.02 || advanceDebitUsd > 0.0001 || !Number.isFinite(invoiceRate) || invoiceRate <= 0) {
         throw new Error('SQLite rechazó la aplicación de anticipo: la factura, su asiento original y la cuenta auxiliar de CxP no concilian.');
       }
     }
