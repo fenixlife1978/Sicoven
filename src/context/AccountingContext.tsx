@@ -1323,7 +1323,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('El número de nota de crédito ya está registrado en esta empresa.');
     }
     const readiness = validatePurchaseInventoryReconciliation({
-      companyId: currentCompany.id, purchase, movements, journalEntries
+      companyId: currentCompany.id, purchase, movements, journalEntries, products
     });
     if (!readiness.ready) throw new Error('La factura original no está conciliada: ' + (readiness.reason || 'revise factura, Kardex y asiento.'));
     if (!Array.isArray(request.lines) || request.lines.length === 0) {
