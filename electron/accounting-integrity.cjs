@@ -834,11 +834,22 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     if (settlement.kind === 'REFUND_RECEIVED') {
       const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode);
+      const cashReceivedBs = Number(settlement.cashReceivedBs ?? 0);
       const treasuryDebit = journal.items.reduce((sum, item) =>
         sum + (item.accountCode === settlement.treasuryAccountCode ? Number(item.debitBs || 0) : 0), 0);
-      if (!bank || Number(settlement.cashReceivedBs ?? 0) <= 0 ||
-          Math.abs(treasuryDebit - Number(settlement.cashReceivedBs)) >= 0.01) {
-        throw new Error('SQLite rechazó un reembolso de anticipo sin cuenta bancaria/caja y efectivo recibido conciliados con el asiento.');
+      const expectedFx = Math.round((cashReceivedBs - bookBs) * 100) / 100;
+      const gainBs = journal.items.filter(item => item.accountCode === '4.2.1.01')
+        .reduce((sum, item) => sum + Number(item.creditBs || 0) - Number(item.debitBs || 0), 0);
+      const lossBs = journal.items.filter(item => item.accountCode === '6.1.1.08')
+        .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+      const allowedCodes = new Set([settlement.treasuryAccountCode, '1.1.2.03',
+        ...(expectedFx > 0.009 ? ['4.2.1.01'] : expectedFx < -0.009 ? ['6.1.1.08'] : [])]);
+      if (!bank || cashReceivedBs <= 0 ||
+          Math.abs(treasuryDebit - cashReceivedBs) >= 0.01 ||
+          journal.items.some(item => !allowedCodes.has(item.accountCode)) ||
+          Math.abs(gainBs - Math.max(0, expectedFx)) >= 0.01 ||
+          Math.abs(lossBs - Math.max(0, -expectedFx)) >= 0.01) {
+        throw new Error('SQLite rechazó un reembolso de anticipo cuya cuenta de tesorería, efectivo recibido o diferencial cambiario no concilian exactamente.');
       }
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
@@ -878,14 +889,24 @@ function validateAccountingSnapshot(previousState, nextState) {
         .reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
       const advanceDebitUsd = journal.items.filter(item => item.accountCode === '1.1.2.03')
         .reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+      const expectedFx = Math.round((expectedPayableDebitBs - bookBs) * 100) / 100;
+      const gainBs = journal.items.filter(item => item.accountCode === '4.2.1.01')
+        .reduce((sum, item) => sum + Number(item.creditBs || 0) - Number(item.debitBs || 0), 0);
+      const lossBs = journal.items.filter(item => item.accountCode === '6.1.1.08')
+        .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+      const allowedCodes = new Set([targetPayableCode, '1.1.2.03',
+        ...(expectedFx > 0.009 ? ['4.2.1.01'] : expectedFx < -0.009 ? ['6.1.1.08'] : [])]);
       if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
           String(target.supplierRif || '').trim().toUpperCase() !== rif ||
           !targetPayableCode || payableDebitBs <= 0 ||
           Math.abs(payableDebitBs - expectedPayableDebitBs) > 0.02 ||
           Math.abs(payableDebitUsd - amountUsd) > 0.01 ||
           payableCreditBs > 0.02 || payableCreditUsd > 0.0001 ||
-          advanceDebitBs > 0.02 || advanceDebitUsd > 0.0001 || !Number.isFinite(invoiceRate) || invoiceRate <= 0) {
-        throw new Error('SQLite rechazó la aplicación de anticipo: la factura, su asiento original y la cuenta auxiliar de CxP no concilian.');
+          advanceDebitBs > 0.02 || advanceDebitUsd > 0.0001 || !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+          journal.items.some(item => !allowedCodes.has(item.accountCode)) ||
+          Math.abs(gainBs - Math.max(0, expectedFx)) >= 0.01 ||
+          Math.abs(lossBs - Math.max(0, -expectedFx)) >= 0.01) {
+        throw new Error('SQLite rechazó la aplicación de anticipo: la factura, CxP y el diferencial cambiario no concilian exactamente.');
       }
     }
     if (settlement.isReversed) {
