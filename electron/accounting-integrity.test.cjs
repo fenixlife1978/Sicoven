@@ -591,6 +591,16 @@ test('SQLite reconciles supplier credit note against the payable auxiliary used 
   assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado o no revierte CxP/);
 });
 
+test('SQLite rejects supplier credit note amounts posted to the opposite side of the payable auxiliary', () => {
+  const { prior, next } = supplierCreditFixture();
+  const entry = next.journalEntries.find(item => item.id === 'credit-entry');
+  entry.items.push(
+    { accountCode: '2.1.1.01', debitBs: 0, creditBs: 1, debitUsd: 0, creditUsd: 0.01 },
+    { accountCode: '1.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 }
+  );
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado o no revierte CxP/);
+});
+
 test('SQLite rejects a retention correction flag linked to an unrelated entry', () => {
   const { prior, next } = supplierCreditFixture();
   next.vatVouchers[0].correctionEntryId = 'unrelated-entry';
