@@ -66,6 +66,75 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
   }
 }
 
+function purchaseJournalMatchesInvoice(purchase, entry) {
+  if (!purchase || !entry || entry.type !== 'COMPRA' || entry.companyId !== purchase.companyId ||
+      entry.date !== purchase.invoiceDate ||
+      String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
+        ('FAC-' + String(purchase.invoiceNumber || '')).trim().toUpperCase().replace(/\s+/g, '')) return false;
+  const taxableBase = Number(purchase.taxableBaseBs);
+  const exemptBase = Number(purchase.exemptAmountBs);
+  const vat = Number(purchase.vatAmountBs);
+  const vatWithheld = Number(purchase.vatWithheldBs ?? 0);
+  const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
+  const igtf = Number(purchase.igtfAmountBs ?? 0);
+  const total = Number(purchase.totalAmountBs);
+  const rate = Number(purchase.bcvRate);
+  const taxRate = Number(purchase.taxRate);
+  const base = taxableBase + exemptBase;
+  const payable = total - vatWithheld - islrWithheld;
+  const values = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate, taxRate];
+  if (!values.every(value => Number.isFinite(value) && value >= 0) ||
+      rate <= 0 || taxRate > 100 || payable <= 0 ||
+      Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
+      Math.abs(total - (base + vat + igtf)) > 0.02) return false;
+
+  const allowed = new Set(['1.1.4.01', '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
+  const items = asArray(entry.items);
+  if (!items.length || !items.every(item => {
+    const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
+    return Boolean(item.accountCode) && allowed.has(item.accountCode) &&
+      amounts.every(value => Number.isFinite(value) && value >= 0) &&
+      !(amounts[0] > 0 && amounts[1] > 0) && !(amounts[2] > 0 && amounts[3] > 0);
+  })) return false;
+
+  const byAccount = new Map();
+  for (const item of items) {
+    const current = byAccount.get(item.accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    current.debitBs += Number(item.debitBs ?? 0);
+    current.creditBs += Number(item.creditBs ?? 0);
+    current.debitUsd += Number(item.debitUsd ?? 0);
+    current.creditUsd += Number(item.creditUsd ?? 0);
+    byAccount.set(item.accountCode, current);
+  }
+  const expected = new Map([
+    ['1.1.4.01', { debitBs: base, creditBs: 0 }],
+    ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
+    ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
+    ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
+    ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
+    ['2.1.1.01', { debitBs: 0, creditBs: payable }]
+  ]);
+  for (const [accountCode, amount] of expected) {
+    const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    if (Math.abs(actual.debitBs - amount.debitBs) > 0.02 ||
+        Math.abs(actual.creditBs - amount.creditBs) > 0.02 ||
+        Math.abs(actual.debitUsd - amount.debitBs / rate) > 0.0001 ||
+        Math.abs(actual.creditUsd - amount.creditBs / rate) > 0.0001) return false;
+  }
+  const debitBs = items.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
+  const creditBs = items.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
+  const debitUsd = items.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
+  const creditUsd = items.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
+  return Math.abs(debitBs - creditBs) <= 0.02 && Math.abs(debitUsd - creditUsd) <= 0.0001 &&
+    Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001 &&
+    Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001;
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
@@ -349,8 +418,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         purchaseEntry.type !== 'COMPRA' ||
         !Number.isFinite(inventoryDebitBs) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
         !Number.isFinite(inventoryDebitUsd) ||
-        Math.abs(inventoryDebitUsd - lineTotal / Number(purchase.bcvRate)) > 0.0001) {
-      throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo total conciliado de las líneas de Kardex.');
+        Math.abs(inventoryDebitUsd - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
+        !purchaseJournalMatchesInvoice(purchase, purchaseEntry)) {
+      throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }
   }
 
@@ -411,8 +481,10 @@ function validateAccountingSnapshot(previousState, nextState) {
         if (matches.length !== 1) return false;
         const sourceMovement = matches[0];
         const expectedBs = money(Number(sourceLine.quantity) * Number(sourceLine.unitCostBs));
-        return sourceMovement.date === original.invoiceDate &&
-          normalizeRif(sourceMovement.counterpartyRif) === normalizeRif(original.supplierRif) &&
+        const movementRif = normalizeRif(sourceMovement.counterpartyRif);
+        const supplierRif = normalizeRif(original.supplierRif);
+        return sourceMovement.date === original.invoiceDate && Boolean(movementRif) && Boolean(supplierRif) &&
+          movementRif === supplierRif &&
           Math.abs(Number(sourceMovement.quantity) - Number(sourceLine.quantity)) <= 0.000001 &&
           Math.abs(Number(sourceMovement.unitCostBs) - Number(sourceLine.unitCostBs)) <= 0.02 &&
           Math.abs(money(Number(sourceMovement.totalCostBs)) - expectedBs) <= 0.02 &&
@@ -421,7 +493,8 @@ function validateAccountingSnapshot(previousState, nextState) {
       }) &&
       sourceEntry?.type === 'COMPRA' && sourceEntry.companyId === original.companyId &&
       Math.abs(sourceInventoryDebit - sourceLineTotal) <= 0.02 &&
-      Math.abs(sourceInventoryDebitUsd - sourceLineTotal / sourceRate) <= 0.0001;
+      Math.abs(sourceInventoryDebitUsd - sourceLineTotal / sourceRate) <= 0.0001 &&
+      purchaseJournalMatchesInvoice(original, sourceEntry);
     const journal = nextById.get(String(note.journalEntryId));
     if (!sourceReconciles || !journal || journal.companyId !== note.companyId ||
         journal.type !== 'AJUSTE' || journal.date !== note.invoiceDate ||

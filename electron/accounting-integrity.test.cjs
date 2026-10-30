@@ -122,7 +122,10 @@ test('SQLite rejects a purchase whose declared inventory lines are missing from 
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: 'FAC-100', documentType: '01',
-    taxableBaseBs: 200, exemptAmountBs: 0, bcvRate: 100, journalEntryId: 'purchase-entry',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2, taxableBaseUsd: 2, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-entry',
     inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
   };
   const entry = {
@@ -141,7 +144,10 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: '100', documentType: '01',
-    taxableBaseBs: 200, exemptAmountBs: 0, bcvRate: 100, journalEntryId: 'purchase-entry',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2, taxableBaseUsd: 2, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-entry',
     inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
   };
   const entry = {
@@ -169,7 +175,10 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: '100', documentType: '01',
-    taxableBaseBs: 200, exemptAmountBs: 0, bcvRate: 100, journalEntryId: 'purchase-entry',
+    totalAmountBs: 200, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 0, vatAmountBs: 0,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2, taxableBaseUsd: 2, vatAmountUsd: 0, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-entry',
     inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
   };
   const entry = {
@@ -669,4 +678,20 @@ test('Production SQLite persistence rolls back atomically on audit failure and s
     if (db?.open) db.close();
     fs.rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test('SQLite rejects supplier credit notes when the original payable or tax journal is not reconciled', () => {
+  const { prior, next } = supplierCreditFixture();
+  const alteredOriginal = {
+    ...prior.journalEntries[0],
+    items: prior.journalEntries[0].items.map(item => item.accountCode === '2.1.1.01'
+      ? { ...item, creditBs: 200, creditUsd: 2 } : item)
+  };
+  const alteredPrior = { ...prior, journalEntries: [alteredOriginal] };
+  const alteredNext = {
+    ...next,
+    journalEntries: [alteredOriginal, ...next.journalEntries.filter(item => item.id !== alteredOriginal.id)]
+  };
+  assert.throws(() => validateAccountingSnapshot(alteredPrior, alteredNext),
+    /factura original o el asiento fiscal no están conciliados/);
 });
