@@ -89,3 +89,60 @@ test('rechaza distribución que no cuadra, fuentes duplicadas y liquidaciones le
     [{ id: 'nc-1', amountUsd: 10, bookValueBs: 1000 }], [legacy], 'company-1', 'J-12345678-9', 1
   ), /sin distribución por nota/);
 });
+
+
+test('rechaza notas fuente duplicadas antes de producir asignaciones ambiguas', () => {
+  assert.throws(() => allocateSupplierAdvanceCreditNotes([
+    { id: 'nc-1', amountUsd: 10, bookValueBs: 900 },
+    { id: 'nc-1', amountUsd: 10, bookValueBs: 900 }
+  ], [], 'company-1', 'J-12345678-9', 5), /identificadores vacíos o duplicados/);
+});
+
+test('rechaza historial cuya distribución no coincide con el importe liquidado', () => {
+  const invalid = {
+    id: 'settlement-invalid', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', sourceCreditNoteIds: ['nc-1'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-1', amountUsd: 4, bookValueBs: 360 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 5, amountBs: 360,
+    advanceBookValueBs: 360, bcvRate: 100, journalEntryId: 'entry-1',
+    createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceCreditNotes(
+    [{ id: 'nc-1', amountUsd: 10, bookValueBs: 900 }],
+    [invalid], 'company-1', 'J-12345678-9', 1
+  ), /no es conciliable/);
+});
+
+test('rechaza historial que consume más saldo que la nota fuente', () => {
+  const overdrawn = {
+    id: 'settlement-overdrawn', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', sourceCreditNoteIds: ['nc-1'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-1', amountUsd: 11, bookValueBs: 990 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 11, amountBs: 990,
+    advanceBookValueBs: 990, bcvRate: 100, journalEntryId: 'entry-1',
+    createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  assert.throws(() => allocateSupplierAdvanceCreditNotes(
+    [{ id: 'nc-1', amountUsd: 10, bookValueBs: 900 }],
+    [overdrawn], 'company-1', 'J-12345678-9', 1
+  ), /exceden el saldo/);
+});
+
+test('mantiene aisladas las asignaciones históricas por empresa y proveedor', () => {
+  const otherCompany = {
+    id: 'settlement-other-company', companyId: 'company-2', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', sourceCreditNoteIds: ['nc-1'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-1', amountUsd: 8, bookValueBs: 720 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 8, amountBs: 720,
+    advanceBookValueBs: 720, bcvRate: 100, journalEntryId: 'entry-2',
+    createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  const otherSupplier = {
+    ...otherCompany, id: 'settlement-other-supplier', companyId: 'company-1',
+    supplierRif: 'J-99999999-9'
+  };
+  assert.deepEqual(allocateSupplierAdvanceCreditNotes(
+    [{ id: 'nc-1', amountUsd: 10, bookValueBs: 900 }],
+    [otherCompany, otherSupplier], 'company-1', 'J-12345678-9', 10
+  ), [{ creditNoteId: 'nc-1', amountUsd: 10, bookValueBs: 900 }]);
+});
