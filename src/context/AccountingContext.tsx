@@ -568,7 +568,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setBankAccounts([]);
             setBankStatementMovements([]);
             setCreditSettlements([]);
-            await window.sicovenStore.save(token, stateSnapshot);
+            // No reutilizar stateSnapshot aquí: fue capturada antes de que React
+            // aplicara los setState de limpieza y podría reintroducir datos antiguos
+            // del navegador en una SQLite recién creada.
+            const emptyAccountingState = {
+              companies: [],
+              currentCompanyId: '',
+              accounts: DEFAULT_CHART_OF_ACCOUNTS,
+              journalEntries: [],
+              purchases: [],
+              sales: [],
+              products: [],
+              movements: [],
+              vatVouchers: [],
+              islrVouchers: [],
+              bankAccounts: [],
+              bankStatementMovements: [],
+              creditSettlements: [],
+              displayCurrency: 'DUAL' as const
+            };
+            const initialSave = await window.sicovenStore.save(token, emptyAccountingState);
+            if (initialSave?.ok !== true) {
+              throw new Error('SQLite no confirmó la inicialización del estado contable vacío.');
+            }
           }
         }
         initialized = true;
