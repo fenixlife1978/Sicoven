@@ -66,7 +66,7 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
   }
 }
 
-function purchaseJournalMatchesInvoice(purchase, entry) {
+function purchaseJournalMatchesInvoice(purchase, entry, products = []) {
   if (!purchase || !entry || entry.type !== 'COMPRA' || entry.companyId !== purchase.companyId ||
       entry.date !== purchase.invoiceDate ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
@@ -88,7 +88,19 @@ function purchaseJournalMatchesInvoice(purchase, entry) {
       Math.abs(vat - Math.round((taxableBase * taxRate / 100 + Number.EPSILON) * 100) / 100) > 0.02 ||
       Math.abs(total - (base + vat + igtf)) > 0.02) return false;
 
-  const allowed = new Set(['1.1.4.01', '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
+  const inventoryByAccount = new Map();
+  if (Array.isArray(purchase.inventoryLines) && purchase.inventoryLines.length > 0) {
+    for (const line of purchase.inventoryLines) {
+      const product = asArray(products).find(item => String(item.id) === String(line.productId) &&
+        String(item.companyId) === String(purchase.companyId));
+      if (!product) return false;
+      const code = String(product.inventoryAccountCode || '1.1.4.01');
+      const amount = Number(line.quantity) * Number(line.unitCostBs);
+      if (!code || !Number.isFinite(amount) || amount <= 0) return false;
+      inventoryByAccount.set(code, (inventoryByAccount.get(code) || 0) + amount);
+    }
+  } else inventoryByAccount.set('1.1.4.01', base);
+  const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
   const items = asArray(entry.items);
   if (!items.length || !items.every(item => {
     const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
@@ -107,7 +119,7 @@ function purchaseJournalMatchesInvoice(purchase, entry) {
     byAccount.set(item.accountCode, current);
   }
   const expected = new Map([
-    ['1.1.4.01', { debitBs: base, creditBs: 0 }],
+    ...[...inventoryByAccount.entries()].map(([code, amount]) => [code, { debitBs: money(amount), creditBs: 0 }]),
     ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
@@ -419,18 +431,26 @@ function validateAccountingSnapshot(previousState, nextState) {
     const purchaseEntry = purchase.journalEntryId
       ? nextById.get(String(purchase.journalEntryId))
       : undefined;
-    const inventoryDebits = purchaseEntry?.items?.reduce((sum, item) => ({
-      debitBs: sum.debitBs + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0),
-      debitUsd: sum.debitUsd + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) : 0)
-    }), { debitBs: 0, debitUsd: 0 });
-    const inventoryDebitBs = Number(inventoryDebits?.debitBs);
-    const inventoryDebitUsd = Number(inventoryDebits?.debitUsd);
+    const purchaseProducts = asArray(nextState.products);
+    const inventoryExpectedByAccount = new Map();
+    for (const line of lines) {
+      const product = purchaseProducts.find(item => String(item.id) === String(line.productId) &&
+        String(item.companyId) === String(purchase.companyId));
+      if (!product) throw new Error('SQLite rechazó la compra: no existe el artículo asociado a la línea ' + line.productId + '.');
+      const code = String(product.inventoryAccountCode || '1.1.4.01');
+      inventoryExpectedByAccount.set(code, money((inventoryExpectedByAccount.get(code) || 0) +
+        Number(line.quantity) * Number(line.unitCostBs)));
+    }
+    const inventoryDebitBs = purchaseEntry?.items?.reduce((sum, item) =>
+      sum + (inventoryExpectedByAccount.has(String(item.accountCode)) ? Number(item.debitBs || 0) : 0), 0);
+    const inventoryDebitUsd = purchaseEntry?.items?.reduce((sum, item) =>
+      sum + (inventoryExpectedByAccount.has(String(item.accountCode)) ? Number(item.debitUsd || 0) : 0), 0);
     if (!purchaseEntry || purchaseEntry.companyId !== purchase.companyId ||
         purchaseEntry.type !== 'COMPRA' ||
-        !Number.isFinite(inventoryDebitBs) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
-        !Number.isFinite(inventoryDebitUsd) ||
-        Math.abs(inventoryDebitUsd - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
-        !purchaseJournalMatchesInvoice(purchase, purchaseEntry)) {
+        !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
+        !Number.isFinite(Number(inventoryDebitUsd)) ||
+        Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
+        !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts)) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }
   }
@@ -509,7 +529,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       sourceEntry?.type === 'COMPRA' && sourceEntry.companyId === original.companyId &&
       Math.abs(sourceInventoryDebit - sourceLineTotal) <= 0.02 &&
       Math.abs(sourceInventoryDebitUsd - sourceLineTotal / sourceRate) <= 0.0001 &&
-      purchaseJournalMatchesInvoice(original, sourceEntry);
+      purchaseJournalMatchesInvoice(original, sourceEntry, asArray(nextState.products));
     const journal = nextById.get(String(note.journalEntryId));
     if (!sourceReconciles || !journal || journal.companyId !== note.companyId ||
         journal.type !== 'AJUSTE' || journal.date !== note.invoiceDate ||
