@@ -1419,8 +1419,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     const finalPurchase: PurchaseRecord = {
       ...purchaseData,
-      // Persistir la misma tasa usada en el asiento; no dejar un BCV vacío/antiguo
-      // cuando el dominio haya aplicado la tasa vigente de la empresa como respaldo.
+      // Persistir la tasa explícita y validada usada en el asiento.
       bcvRate: rate,
       totalAmountUsd: purchaseData.totalAmountBs / rate,
       taxableBaseUsd: purchaseData.taxableBaseBs / rate,
