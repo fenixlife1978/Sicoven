@@ -7,6 +7,9 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const login = read('src/components/LoginScreen.tsx');
 assert.match(login, /El acceso web no está habilitado/);
 assert.doesNotMatch(login, /onLogin\(['"]session-token['"]/);
+assert.doesNotMatch(login, /Admin123|handleQuickFill|quick-credentials-btn/);
+assert.match(login, /initializeAdmin/);
+assert.match(login, /Crear administrador inicial/);
 
 const app = read('src/App.tsx');
 assert.match(app, /restoreSession\(token\)/);
@@ -16,6 +19,9 @@ assert.ok(app.indexOf('if (!auth) return') < app.lastIndexOf('<AccountingProvide
 
 const main = read('electron/main.cjs');
 assert.match(main, /CREATE TABLE IF NOT EXISTS auth_sessions/);
+assert.match(main, /sicoven:auth-setup-status/);
+assert.match(main, /sicoven:auth-initialize/);
+assert.doesNotMatch(main, /hashPassword\('Admin123'\)/);
 assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
 assert.match(main, /actor\.role !== 'admin'/);
@@ -37,5 +43,6 @@ assert.doesNotMatch(admins, /localStorage\.setItem\(WEB_ADMINS_STORAGE_KEY/);
 
 const preload = read('electron/preload.cjs');
 assert.match(preload, /restoreSession: \(token\) => ipcRenderer\.invoke\('sicoven:auth-restore', token\)/);
+assert.match(preload, /initializeAdmin: \(input\) => ipcRenderer\.invoke\('sicoven:auth-initialize', input\)/);
 
 console.log('SICOVEN auth hardening checks passed.');

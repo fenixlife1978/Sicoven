@@ -20,6 +20,8 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
   const [busy, setBusy] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ text: string; type: 'error' | 'success' } | null>(null);
   const [licenseStatus, setLicenseStatus] = useState<{ authorized: boolean; status: string } | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
+  const [setupStatusLoaded, setSetupStatusLoaded] = useState(false);
 
   useEffect(() => {
     let mounted = true;
@@ -31,11 +33,25 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     return () => { mounted = false; };
   }, []);
 
-  const handleQuickFill = () => {
-    setUsername('admin');
-    setPassword('Admin123');
-    setStatusMessage(null);
-  };
+  useEffect(() => {
+    let mounted = true;
+    const setupStatus = window.sicovenStore?.getAuthSetupStatus;
+    if (!setupStatus) {
+      setSetupStatusLoaded(true);
+      return () => { mounted = false; };
+    }
+    setupStatus()
+      .then((result) => {
+        if (mounted) setSetupRequired(Boolean(result?.required));
+      })
+      .catch(() => {
+        if (mounted) setSetupRequired(false);
+      })
+      .finally(() => {
+        if (mounted) setSetupStatusLoaded(true);
+      });
+    return () => { mounted = false; };
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -45,7 +61,21 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
     try {
       const userVal = username.trim();
       if (!userVal || !password) {
-        throw new Error('Ingrese sus credenciales para acceder al sistema.');
+        throw new Error(setupRequired
+          ? 'Ingrese el usuario y la contraseña del administrador inicial.'
+          : 'Ingrese sus credenciales para acceder al sistema.');
+      }
+
+      if (setupRequired) {
+        if (!/^[A-Za-z0-9._-]{3,32}$/.test(userVal)) {
+          throw new Error('El usuario inicial debe tener entre 3 y 32 caracteres válidos.');
+        }
+        if (password.length < 10) {
+          throw new Error('La contraseña inicial debe tener al menos 10 caracteres.');
+        }
+        const initialized = await window.sicovenStore?.initializeAdmin({ username: userVal, password });
+        if (!initialized?.ok) throw new Error(initialized?.message || 'No se pudo crear el administrador inicial.');
+        setSetupRequired(false);
       }
 
       if (window.sicovenStore?.login) {
@@ -547,7 +577,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               id="username"
               name="username"
               type="text"
-              placeholder="Usuario o correo electrónico"
+              placeholder={setupRequired ? "Cree su usuario administrador" : "Usuario o correo electrónico"}
               autoComplete="username"
               maxLength={254}
               required
@@ -567,9 +597,9 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
               id="password"
               name="password"
               type={showPassword ? 'text' : 'password'}
-              placeholder="Contraseña"
-              autoComplete="current-password"
-              maxLength={1024}
+              placeholder={setupRequired ? "Contraseña inicial (mínimo 10 caracteres)" : "Contraseña"}
+              autoComplete={setupRequired ? "new-password" : "current-password"}
+              maxLength={256}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -599,26 +629,18 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
             </button>
           </label>
 
-          <button className="submit-button" id="submitButton" type="submit" disabled={busy}>
+          {setupRequired && <p role="status" style={{ margin: '0 0 10px', padding: '8px 12px', borderRadius: 8, background: 'rgba(255,255,255,.94)', color: '#18304f', fontSize: 12, fontWeight: 600 }}>
+            Primer inicio: cree el administrador de esta instalación. SICOVEN no utiliza una contraseña predeterminada.
+          </p>}
+
+          <button className="submit-button" id="submitButton" type="submit" disabled={busy || !setupStatusLoaded}>
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="M10 17l5-5-5-5"></path>
               <path d="M15 12H3"></path>
               <path d="M12 3h7a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-7"></path>
             </svg>
-            <span>{busy ? 'Verificando…' : 'Iniciar sesión'}</span>
+            <span>{busy ? (setupRequired ? 'Creando administrador…' : 'Verificando…') : (setupRequired ? 'Crear administrador inicial' : 'Iniciar sesión')}</span>
           </button>
-
-          <div className="quick-credentials-hint">
-            <button
-              type="button"
-              onClick={handleQuickFill}
-              className="quick-credentials-btn"
-              title="Autocompletar credenciales por defecto (admin / Admin123)"
-            >
-              Completar: admin / Admin123
-            </button>
-
-          </div>
 
           {(!licenseStatus || licenseStatus.status === 'trial' || !licenseStatus.authorized) && (
             <div style={{ marginTop: 12, display: 'grid', gap: 7, textAlign: 'center' }}>

@@ -65,12 +65,8 @@ function openDatabase() {
     db.prepare('UPDATE license_state SET trial_started_at=? WHERE id=1 AND trial_started_at IS NULL').run(new Date().toISOString());
   }
 
-  const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
-  if (count === 0) {
-    const credential = hashPassword('Admin123');
-    db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)').run('admin', credential.hash, credential.salt, 'admin');
-    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)').run('seed_admin_created', JSON.stringify({ username: 'admin' }));
-  }
+  // First-run security: never create a publicly known default administrator.
+  // The first administrator is initialized once through the guarded setup IPC.
 }
 
 function readLicenseRow() {
@@ -274,6 +270,43 @@ app.whenReady().then(async () => {
       BrowserWindow.getAllWindows().forEach(win => win.webContents.send('sicoven:license-status-changed', status));
     }
     return status;
+  });
+
+  ipcMain.handle('sicoven:auth-setup-status', () => ({
+    required: db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count === 0
+  }));
+
+  ipcMain.handle('sicoven:auth-initialize', (_event, input) => {
+    if (!licenseView().authorized) return { ok: false, message: 'Debe activar SICOVEN antes de crear el administrador inicial.' };
+    const username = normalizeUsername(input?.username);
+    const password = String(input?.password || '');
+    if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
+      return { ok: false, message: 'El usuario debe tener entre 3 y 32 caracteres: letras, números, punto, guion o guion bajo.' };
+    }
+    if (password.length < 10 || password.length > 256) {
+      return { ok: false, message: 'La contraseña inicial debe tener al menos 10 caracteres.' };
+    }
+    try {
+      const initialize = db.transaction(() => {
+        const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
+        if (count !== 0) throw new Error('INITIAL_SETUP_ALREADY_COMPLETED');
+        const credential = hashPassword(password);
+        const result = db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)')
+          .run(username, credential.hash, credential.salt, 'admin');
+        db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+          .run('initial_admin_created', JSON.stringify({ username, userId: Number(result.lastInsertRowid) }));
+      });
+      initialize();
+      return { ok: true };
+    } catch (error) {
+      if (String(error?.message || '').includes('INITIAL_SETUP_ALREADY_COMPLETED')) {
+        return { ok: false, message: 'La configuración inicial ya fue completada. Inicie sesión con el administrador registrado.' };
+      }
+      const detail = String(error?.message || '');
+      if (/UNIQUE constraint failed/i.test(detail)) return { ok: false, message: 'Ese usuario ya existe.' };
+      console.error('[SICOVEN] No se pudo inicializar el administrador:', detail);
+      return { ok: false, message: 'SQLite no pudo crear el administrador inicial. No se guardaron cambios.' };
+    }
   });
 
   ipcMain.handle('sicoven:auth-login', (_event, credentials) => {
