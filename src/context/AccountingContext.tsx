@@ -505,6 +505,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistenceFaultRef = useRef(false);
   const journalReversalInFlightRef = useRef(false);
+  const productionInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
@@ -2318,10 +2319,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
 
   const executeProduction = async (finishedProductId: string, outputQuantity: number, date: string, bcvRateInput: number, documentRef: string): Promise<InventoryMovement[]> => {
+    if (productionInFlightRef.current) throw new Error('Ya hay una orden de producción en proceso. Espere a que SQLite confirme el resultado.');
+    productionInFlightRef.current = true;
+    try {
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones; cierre y vuelva a abrir la aplicación.');
     if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista.');
     const finished = products.find(p => p.id === finishedProductId && p.companyId === currentCompany.id);
     if (!finished || (finished.itemType !== 'PRODUCTO_TERMINADO' && finished.itemType !== 'PRODUCTO_EN_PROCESO')) throw new Error('Seleccione un producto terminado o en proceso válido.');
+    if (![finished.currentStock, finished.avgCostBs, finished.avgCostUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
+      throw new Error('La existencia o el costo promedio del producto terminado no son válidos.');
+    }
     if (!Number.isFinite(outputQuantity) || outputQuantity <= 0) throw new Error('La cantidad producida debe ser mayor que cero.');
     if (!Number.isFinite(bcvRateInput) || bcvRateInput <= 0) throw new Error('La tasa BCV histórica debe ser mayor que cero.');
     const parsedProductionDate = new Date(date + 'T00:00:00Z');
@@ -2330,7 +2337,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const productionReference = String(documentRef || '').trim();
     if (!productionReference) throw new Error('La orden de producción requiere una referencia única.');
     if (journalEntries.some(entry => entry.companyId === currentCompany.id &&
-        entry.type === 'INVENTARIO' && String(entry.referenceDoc || '').trim().toUpperCase() === productionReference.toUpperCase())) {
+        entry.type === 'INVENTARIO' && String(entry.referenceDoc || '').trim().toUpperCase() === productionReference.toUpperCase()) ||
+        movements.some(movement => movement.companyId === currentCompany.id &&
+          movement.concept === 'PRODUCCION' && String(movement.documentRef || '').trim().toUpperCase() === productionReference.toUpperCase())) {
       throw new Error('La referencia de la orden de producción ya fue registrada.');
     }
     for (const productId of [finishedProductId, ...recipe.map(line => line.productId)]) {
@@ -2351,6 +2360,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     for (const line of recipe) {
       const component = products.find(p => p.id === line.productId && p.companyId === currentCompany.id);
       if (!component) throw new Error('Un componente de la matriz ya no existe en la empresa activa.');
+      if (![component.currentStock, component.avgCostBs, component.avgCostUsd].every(value => Number.isFinite(Number(value)) && Number(value) >= 0)) {
+        throw new Error('La existencia o el costo promedio del componente ' + component.code + ' no son válidos.');
+      }
       if (component.itemType !== 'MATERIA_PRIMA' && component.itemType !== 'PRODUCTO_EN_PROCESO') {
         throw new Error('Los componentes de producción deben clasificarse como materia prima o producto en proceso: ' + component.code + '.');
       }
@@ -2379,9 +2391,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           }
         }
         const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
-        if (layerQuantity < component.currentStock - 1e-8) layers.unshift({ quantity: component.currentStock - layerQuantity, unitCostBs: component.avgCostBs, unitCostUsd: component.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
-        const availableLayers = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
-        if (availableLayers > component.currentStock + 1e-8) throw new Error('El Kardex PEPS no concilia con la existencia actual de ' + component.code + '.');
+        if (Math.abs(layerQuantity - component.currentStock) > 1e-8) {
+          throw new Error('El Kardex PEPS no conserva las capas originales de ' + component.code + '. No se crearán capas de costo estimadas para completar la existencia.');
+        }
+        const availableLayers = layerQuantity;
         if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
         const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
         totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
@@ -2450,6 +2463,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setMovements(prev => [...prev, ...movementsToAdd]);
     await persistenceConfirmation;
     return movementsToAdd;
+    } finally {
+      productionInFlightRef.current = false;
+    }
   };
 
   const deleteVatVoucher = (id: string) => {
