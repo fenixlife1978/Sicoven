@@ -32,6 +32,7 @@ import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
+import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
@@ -3303,14 +3304,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const key = String(document.companyId) + '|' + String(document.invoiceNumber || '').trim().toLowerCase();
           const totalBs = Number(document.totalAmountBs), baseBs = Number(document.taxableBaseBs);
           const exemptBs = Number(document.exemptAmountBs), vatBs = Number(document.vatAmountBs);
-          const totalUsd = Number(document.totalAmountUsd), baseUsd = Number(document.taxableBaseUsd);
-          const vatUsd = Number(document.vatAmountUsd), rate = Number(document.bcvRate);
           if (!document.invoiceNumber?.trim() || documentKeys.has(key) ||
               !isValidIsoDate(document.invoiceDate) ||
-              !Number.isFinite(rate) || rate <= 0 ||
-              [totalBs,baseBs,exemptBs,vatBs,totalUsd,baseUsd,vatUsd].some(value => !Number.isFinite(value) || value < 0) ||
-              Math.abs(totalBs - baseBs - exemptBs - vatBs) > 0.02 ||
-              Math.abs(totalUsd - baseUsd - vatUsd - exemptBs / rate) > 0.02 ||
+              !hasConsistentFiscalDocumentAmounts(document) ||
               (document.paymentTerm !== undefined && !['CONTADO','CREDITO'].includes(document.paymentTerm)) ||
               (document.paymentTerm === 'CREDITO' && (!Number.isInteger(document.creditDays) || Number(document.creditDays) < 1 || !isValidIsoDate(document.dueDate)))) {
             throw new Error('La colección de ' + collectionName + ' contiene facturas duplicadas, fechas, importes, tasa BCV o condiciones de crédito inválidas.');
