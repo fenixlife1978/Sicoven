@@ -470,6 +470,19 @@ app.whenReady().then(async () => {
           }
         }
       }
+      const oldInventoryMovements = new Map((Array.isArray(priorState.movements) ? priorState.movements : [])
+        .map(item => [String(item.id), item]));
+      for (const movement of (Array.isArray(state.movements) ? state.movements : [])) {
+        if (oldInventoryMovements.has(String(movement.id))) continue;
+        auditInsert.run(movement.correctionForMovementId ? 'inventory_correction_posted' : 'inventory_movement_posted', JSON.stringify({
+          movementId: movement.id, companyId: movement.companyId, productId: movement.productId,
+          productCode: movement.productCode, productName: movement.productName, date: movement.date,
+          type: movement.type, concept: movement.concept, documentRef: movement.documentRef,
+          quantity: movement.quantity, totalCostBs: movement.totalCostBs, totalCostUsd: movement.totalCostUsd,
+          journalEntryId: movement.journalEntryId || null,
+          correctionForMovementId: movement.correctionForMovementId || null
+        }));
+      }
       const oldBankRows = new Map((Array.isArray(priorState.bankStatementMovements) ? priorState.bankStatementMovements : [])
         .map(item => [String(item.id), item]));
       for (const row of (Array.isArray(state.bankStatementMovements) ? state.bankStatementMovements : [])) {
