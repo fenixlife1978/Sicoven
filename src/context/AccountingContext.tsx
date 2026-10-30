@@ -114,7 +114,7 @@ interface AccountingContextType {
   registerTreasuryMovement: (draft: { bankAccountId: string; date: string; reference: string; description: string; type: 'INCOME' | 'EXPENSE' | 'TRANSFER'; amount: number; counterpartAccountCode?: string; destinationBankAccountId?: string }) => JournalEntry;
   addBankStatementMovement: (movement: Omit<BankStatementMovement, 'id' | 'companyId'>) => BankStatementMovement;
   deleteBankStatementMovement: (id: string) => void;
-  reconcileMovementManual: (statementMovementId: string, journalEntryId?: string) => void;
+  reconcileMovementManual: (statementMovementId: string, journalEntryId: string) => void;
   unreconcileMovement: (statementMovementId: string) => void;
   runAutoReconciliation: (bankAccountId: string) => { matchedCount: number; matchedRefs: string[] };
   unreconcileAll: (bankAccountId: string) => void;
@@ -2906,14 +2906,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const reconcileMovementManual = (statementMovementId: string, journalEntryId?: string) => {
+  const reconcileMovementManual = (statementMovementId: string, journalEntryId: string) => {
+    if (!journalEntryId?.trim()) throw new Error('Seleccione un asiento del Libro Diario antes de marcar el movimiento como conciliado.');
     const statement = bankStatementMovements.find(m =>
       m.id === statementMovementId && m.companyId === currentCompany.id
     );
     if (!statement) throw new Error('El movimiento bancario no pertenece a la empresa activa o ya no existe.');
     if (statement.isReconciled) throw new Error('El movimiento ya está conciliado. Desconcílielo antes de vincularlo nuevamente.');
 
-    if (journalEntryId) {
+    {
       const statementBank = bankAccounts.find(bank =>
         bank.id === statement.bankAccountId && bank.companyId === currentCompany.id
       );
@@ -2923,6 +2924,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         entry.id === journalEntryId && entry.companyId === currentCompany.id
       );
       if (!linkedEntry) throw new Error('El asiento seleccionado no pertenece a la empresa activa.');
+      if (linkedEntry.date !== statement.date) throw new Error('La fecha del asiento no coincide con la fecha del movimiento bancario. Revise el cotejo antes de conciliar.');
 
       const alreadyUsed = bankStatementMovements.some(m =>
         m.id !== statement.id &&
@@ -2957,10 +2959,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               ...m,
               isReconciled: true,
               matchedBy: 'MANUAL',
-              reconciledWithJournalEntryId: journalEntryId || m.reconciledWithJournalEntryId,
-              reconciledJournalEntryIds: journalEntryId
-                ? [...new Set([...(m.reconciledJournalEntryIds || []), journalEntryId])]
-                : m.reconciledJournalEntryIds,
+              reconciledWithJournalEntryId: journalEntryId,
+              reconciledJournalEntryIds: [...new Set([...(m.reconciledJournalEntryIds || []), journalEntryId])],
               reconciledAt: new Date().toISOString()
             }
           : m
@@ -3025,7 +3025,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const now = new Date().toISOString();
     const isUsdAccount = targetAccount.currency === 'USD';
     const matchesAmountAndNature = (stmt: BankStatementMovement, entry: JournalEntry) =>
-      entry.items.some(item => {
+      entry.date === stmt.date && entry.items.some(item => {
         if (item.accountCode !== bankCode) return false;
         const amount = isUsdAccount ? stmt.amountUsd : stmt.amountBs;
         const debit = isUsdAccount ? item.debitUsd : item.debitBs;
