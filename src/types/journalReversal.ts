@@ -87,8 +87,7 @@ export function validateSaleInventoryReturnReconciliation(input: {
   const invoiceRefs = new Set([normalize(invoiceNumber), normalize('FAC-' + invoiceNumber)]);
   const originals = movements.filter(movement =>
     movement.companyId === companyId && !movement.correctionForMovementId &&
-    (movement.journalEntryId === source.id ||
-      (invoiceRefs.has(normalize(movement.documentRef)) && movement.type === 'SALIDA' && movement.concept === 'VENTA'))
+    (movement.journalEntryId === source.id || invoiceRefs.has(normalize(movement.documentRef)))
   );
   const blocked = (reason: string): SaleInventoryReturnReadiness => ({
     ready: false, reason, originalMovementCount: originals.length, returnedMovementCount: 0
