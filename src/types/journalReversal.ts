@@ -265,6 +265,10 @@ export function validatePurchaseInventoryReconciliation(input: {
     expectedInventoryByAccount.set(accountCode, money((expectedInventoryByAccount.get(accountCode) || 0) + Number(line.quantity || 0) * Number(line.unitCostBs || 0)));
   }
   const inventoryAccountCodes = new Set(expectedInventoryByAccount.keys());
+  const payableAccountCodes = [...new Set((purchaseJournal?.items || [])
+    .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+    .map(item => item.accountCode))];
+  const payableAccountCode = payableAccountCodes.length === 1 ? payableAccountCodes[0] : undefined;
   const journalInventoryDebit = money(purchaseJournal?.items.reduce((sum, item) =>
     sum + (inventoryAccountCodes.has(item.accountCode) ? Number(item.debitBs ?? 0) - Number(item.creditBs ?? 0) : 0), 0) || 0);
   const journalInventoryDebitUsd = Number(purchaseJournal?.items.reduce((sum, item) =>
@@ -303,7 +307,7 @@ export function validatePurchaseInventoryReconciliation(input: {
         Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
     }) && Math.abs(movementTotal - lineTotal) <= 0.02;
 
-  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
+  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', ...(payableAccountCode ? [payableAccountCode] : [])]);
   const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
   const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
     const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
@@ -326,7 +330,7 @@ export function validatePurchaseInventoryReconciliation(input: {
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
     ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
-    ['2.1.1.01', { debitBs: 0, creditBs: expectedPayable }]
+    ...(payableAccountCode ? [[payableAccountCode, { debitBs: 0, creditBs: expectedPayable }] as [string, { debitBs: number; creditBs: number }]] : [])
   ]);
   const journalAccountsMatch = journalItemsValid && [...journalByAccount.keys()].every(code => expectedAccounts.has(code)) && [...expectedAccounts.entries()].every(([code, expected]) => {
     const actual = journalByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
@@ -347,7 +351,7 @@ export function validatePurchaseInventoryReconciliation(input: {
     Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
     Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001;
-  const journalMatchesInvoice = Boolean(purchaseJournal && purchaseJournal.type === 'COMPRA' &&
+  const journalMatchesInvoice = Boolean(purchaseJournal && payableAccountCode && purchaseJournal.type === 'COMPRA' &&
     purchaseJournal.companyId === companyId && purchaseJournal.date === purchase.invoiceDate &&
     normalize(purchaseJournal.referenceDoc) === expectedReference && validAmounts &&
     Number.isFinite(Number(purchaseJournal.bcvRate)) && Math.abs(Number(purchaseJournal.bcvRate) - rate) <= 0.000001 &&
