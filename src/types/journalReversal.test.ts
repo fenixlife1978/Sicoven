@@ -347,6 +347,16 @@ test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventar
   assert.equal(result.journalInventoryDebitUsd, 2);
 });
 
+test('bloquea la devolución si el asiento original usa una cuenta distinta a la del artículo', () => {
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [reconciledPurchaseJournal],
+    products: [reconciledInventoryProduct]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.journalMatchesInvoice, false);
+});
+
 test('bloquea conciliación de compra si proveedor, fecha, BCV o USD del Kardex difieren', () => {
   const variants = [
     { ...reconciledPurchaseMovement, counterpartyRif: 'J-99999999-9' },
