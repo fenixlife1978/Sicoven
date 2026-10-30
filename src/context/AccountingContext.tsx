@@ -1424,12 +1424,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!window.sicovenStore?.save) {
       throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
     }
-    // Espera escrituras anteriores y confirma SQLite antes de publicar cambios en React.
-    await saveQueueRef.current;
-    const persisted = await window.sicovenStore.save(token, nextSnapshot);
-    if (persisted?.ok !== true) {
-      throw new Error('SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
-    }
+    // Encola esta escritura junto con el resto de snapshots para impedir
+    // que un guardado concurrente antiguo sobrescriba la devolución confirmada.
+    const persistence = saveQueueRef.current.then(async () => {
+      const persisted = await window.sicovenStore!.save(token, nextSnapshot);
+      if (persisted?.ok !== true) {
+        throw new Error('SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
+      }
+    });
+    // La cola sigue disponible incluso si esta operación falla; el error propio
+    // se conserva en persistence y se propaga al formulario antes de publicar estado.
+    saveQueueRef.current = persistence.then(() => undefined, () => undefined);
+    await persistence;
     setJournalEntries(nextSnapshot.journalEntries);
     setMovements(nextMovements);
     setProducts(nextProducts);
