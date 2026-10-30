@@ -2,12 +2,12 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
-import { buildReversalItems, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement,
-    bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, reverseJournalEntry, closeAccountingPeriod
+    bankAccounts, bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -89,6 +89,12 @@ export const ReversionFiscalView: React.FC = () => {
         (movement.reconciledWithJournalEntryId === source.id ||
           movement.reconciledJournalEntryIds?.includes(source.id)))
     : [];
+  const bankReversalReadiness = source
+    ? validateBankStatementReversal({
+        companyId: currentCompany.id, source, reversalItems: preview,
+        bankAccounts, statementMovements: bankStatementMovements
+      })
+    : { ready: true, pairs: [] };
   const linkedDocumentId = linkedSale?.id || linkedPurchase?.id;
   const linkedSettlementKind = linkedSale ? 'SALE_COLLECTION' : linkedPurchase ? 'PURCHASE_PAYMENT' : undefined;
   const linkedCreditBalance = linkedDocumentId && linkedSettlementKind
@@ -100,7 +106,7 @@ export const ReversionFiscalView: React.FC = () => {
     : [];
   const reversalBlockReasons = [
     ...(requiresInventoryReview ? [saleInventoryReadiness?.reason || 'Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
-    ...(linkedBankMovements.length ? ['Hay movimientos bancarios que fueron conciliados con este asiento. La desconciliación no borra ese vínculo histórico. El flujo de reversión bancaria coordinada todavía no está habilitado, por lo que el contra-asiento permanece bloqueado.'] : []),
+    ...(linkedBankMovements.length && !bankReversalReadiness.ready ? [bankReversalReadiness.reason || 'No se pudo conciliar el movimiento bancario inverso.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
   const reversalDisabled = !source || Boolean(previewError) || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
@@ -334,6 +340,7 @@ export const ReversionFiscalView: React.FC = () => {
                   </table>
                 </div>
                 {(linkedBankMovements.length > 0 || activeLinkedSettlements.length > 0) && <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Conciliación de auxiliares pendiente</strong><p>Movimientos bancarios vinculados histórica o actualmente: {linkedBankMovements.length}</p><p>Cobros/pagos vigentes vinculados: {activeLinkedSettlements.length}</p><p>Estos importes no se compensarán por el solo hecho de generar un contra-asiento del Libro Diario.</p></div>}
+                {bankReversalReadiness.ready && bankReversalReadiness.pairs.length > 0 && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 space-y-1"><strong>Contrapartida bancaria verificada</strong><p>Se identificaron {bankReversalReadiness.pairs.length} movimiento(s) inverso(s) exacto(s) en el extracto. Al aprobar, el contra-asiento y ambas conciliaciones quedarán vinculados en la misma escritura local.</p></div>}
                 {saleInventoryReadiness?.ready && saleInventoryReadiness.originalMovementCount > 0 && <div className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900 space-y-1"><strong>Kardex de venta conciliado</strong><p>Salidas originales: {saleInventoryReadiness.originalMovementCount} · devoluciones con asiento conciliado: {saleInventoryReadiness.returnedMovementCount}</p><p>Se verificó la devolución total de las cantidades y la contrapartida de inventario/costo. La reversión de la factura aún requiere su soporte fiscal legal.</p></div>}
                 {linkedCreditBalance && <div className="rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm text-slate-800 space-y-1"><strong>Auxiliar {linkedSale ? 'Cuentas por Cobrar' : 'Cuentas por Pagar'}</strong><p>Principal original: {formatBs(linkedCreditBalance.originalAmountBs)} · {formatUsd(linkedCreditBalance.originalAmountUsd)}</p><p>Liquidado vigente: {formatBs(linkedCreditBalance.settledAmountBs)} · {formatUsd(linkedCreditBalance.settledAmountUsd)}</p><p>Saldo pendiente actual: <strong>{formatBs(linkedCreditBalance.outstandingBsAtInvoiceRate)} · {formatUsd(linkedCreditBalance.outstandingUsd)}</strong></p><p className="text-xs text-slate-600">La reversión sólo se habilita cuando no existan liquidaciones vigentes; el saldo auxiliar no se considera cancelado por una simple simulación.</p></div>}
                 <div className="rounded-lg bg-sky-50 border border-sky-200 p-3 text-sm text-sky-950 space-y-1">
