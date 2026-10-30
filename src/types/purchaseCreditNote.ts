@@ -81,10 +81,35 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
     throw new Error('La fecha de la nota pertenece a un período contable cerrado.');
   }
-  if (!draft.creditNoteNumber.trim() || !draft.controlNumber.trim() || draft.reason.trim().length < 10) {
+  if (!String(draft.creditNoteNumber || '').trim() || !String(draft.controlNumber || '').trim() || String(draft.reason || '').trim().length < 10) {
     throw new Error('La nota requiere número, control y una justificación de al menos 10 caracteres.');
   }
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('La factura no conserva una tasa BCV válida.');
+  const requiredAmounts = [
+    purchase.taxableBaseBs, purchase.exemptAmountBs, purchase.vatAmountBs,
+    purchase.vatWithheldBs || 0, purchase.islrWithheldBs || 0, purchase.igtfAmountBs || 0,
+    purchase.totalAmountBs, purchase.taxRate
+  ].map(Number);
+  if (requiredAmounts.some(value => !Number.isFinite(value) || value < 0)) {
+    throw new Error('La factura contiene importes fiscales negativos o no numéricos; no se puede calcular una devolución segura.');
+  }
+  if (Number(purchase.vatWithheldBs || 0) > Number(purchase.vatAmountBs) + 0.02 ||
+      Number(purchase.islrWithheldBs || 0) > Number(purchase.taxableBaseBs) + 0.02) {
+    throw new Error('Las retenciones originales superan su base o impuesto de referencia.');
+  }
+  if (!String(purchase.supplierRif || '').trim() || !String(purchase.invoiceNumber || '').trim()) {
+    throw new Error('La factura no identifica de forma suficiente al proveedor y al documento original.');
+  }
+  const invoiceProductIds = new Set<string>();
+  for (const invoiceLine of purchase.inventoryLines) {
+    const quantity = Number(invoiceLine.quantity);
+    const unitCost = Number(invoiceLine.unitCostBs);
+    if (!invoiceLine.productId || invoiceProductIds.has(invoiceLine.productId) ||
+        !Number.isFinite(quantity) || quantity <= 0 || !Number.isFinite(unitCost) || unitCost < 0) {
+      throw new Error('Las líneas de inventario de la factura están duplicadas o contienen cantidades/costos inválidos.');
+    }
+    invoiceProductIds.add(invoiceLine.productId);
+  }
   if (Number(purchase.islrSubtrahendBs || 0) > 0 && Number(purchase.islrWithheldBs || 0) > 0) {
     throw new Error('La retención ISLR original tiene sustraendo; el prorrateo automático no es fiscalmente fiable. Requiere cálculo específico de la base y sustraendo de la nota.');
   }
@@ -103,6 +128,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     const matchingProduct = products.find(candidate => candidate.id === invoiceLine.productId && candidate.companyId === purchase.companyId);
     if (!matchingProduct) throw new Error('No se puede certificar el tratamiento fiscal de todas las líneas de la factura.');
     const value = Number(invoiceLine.quantity) * Number(invoiceLine.unitCostBs);
+    if (!Number.isFinite(value)) throw new Error('Una línea de inventario produce un importe no válido.');
     if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptInvoiceLines += value;
     else {
       taxableInvoiceLines += value;
@@ -118,41 +144,51 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   }
 
   for (const requested of draft.lines) {
-    const product = products.find(item => item.id === requested.product.id && item.companyId === purchase.companyId);
+    const requestedProductId = String(requested.product?.id || '');
+    const product = products.find(item => item.id === requestedProductId && item.companyId === purchase.companyId);
     const movement = requested.originalMovement;
     const quantity = Number(requested.quantity);
-    if (!product || requestedProducts.has(product.id) || requestedMovements.has(movement.id)) {
+    if (!product || !movement || !String(movement.id || '').trim() ||
+        requestedProducts.has(product.id) || requestedMovements.has(movement.id)) {
       throw new Error('La nota contiene artículos o entradas de Kardex duplicados o ajenos a la empresa.');
     }
     requestedProducts.add(product.id);
     requestedMovements.add(movement.id);
     const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+    const movementRif = normalizeRif(movement.counterpartyRif);
+    const supplierRif = normalizeRif(purchase.supplierRif);
     if (movement.companyId !== purchase.companyId || movement.productId !== product.id ||
         movement.type !== 'ENTRADA' || movement.concept !== 'COMPRA' ||
         normalize(movement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber) ||
-        normalizeRif(movement.counterpartyRif) !== normalizeRif(purchase.supplierRif)) {
+        !movementRif || !supplierRif || movementRif !== supplierRif) {
       throw new Error('Una entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
     }
     if (!Number.isFinite(quantity) || quantity <= 0 ||
         !Number.isFinite(requested.previouslyReturnedQuantity) || requested.previouslyReturnedQuantity < 0) {
       throw new Error('La cantidad de devolución no es válida.');
     }
-    const line = purchase.inventoryLines.find(item => item.productId === product.id);
-    if (!line || Math.abs(Number(line.quantity) - Number(movement.quantity)) > 0.000001 ||
-        Math.abs(Number(line.unitCostBs) - Number(movement.unitCostBs)) > 0.02) {
+    const lineMatches = purchase.inventoryLines.filter(item => item.productId === product.id);
+    const line = lineMatches.length === 1 ? lineMatches[0] : undefined;
+    const movementQuantity = Number(movement.quantity);
+    const movementUnitCost = Number(movement.unitCostBs);
+    if (!line || !Number.isFinite(movementQuantity) || movementQuantity <= 0 ||
+        !Number.isFinite(movementUnitCost) || movementUnitCost < 0 ||
+        Math.abs(Number(line.quantity) - movementQuantity) > 0.000001 ||
+        Math.abs(Number(line.unitCostBs) - movementUnitCost) > 0.02) {
       throw new Error('La línea de factura no concilia con la entrada original del Kardex.');
     }
     if (requested.previouslyReturnedQuantity + quantity > Number(line.quantity) + 0.000001) {
       throw new Error('La cantidad acumulada de devoluciones supera la cantidad facturada.');
     }
-    if (quantity > Number(requested.currentStock) + 0.000001) {
+    const currentStock = Number(requested.currentStock);
+    if (!Number.isFinite(currentStock) || currentStock < 0 || quantity > currentStock + 0.000001) {
       throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
     }
     if (product.costingMethod === 'PEPS') {
       throw new Error('PEPS requiere identificación y descarga del lote original; esta devolución no se puede automatizar.');
     }
-    if (!Number.isFinite(requested.currentAverageCostBs) ||
-        Math.abs(requested.currentAverageCostBs - Number(line.unitCostBs)) > 0.01) {
+    if (!Number.isFinite(Number(requested.currentAverageCostBs)) ||
+        Math.abs(Number(requested.currentAverageCostBs) - Number(line.unitCostBs)) > 0.01) {
       throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
     }
     const lineValue = money(quantity * Number(line.unitCostBs));
