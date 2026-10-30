@@ -1024,3 +1024,16 @@ test('SQLite rejects supplier return movements with an invalid final stock balan
   movement.balanceQty = Number.NaN;
   assert.throws(() => validateAccountingSnapshot(prior, next), /la salida física no concilia con la entrada original/);
 });
+
+test('SQLite preserves legacy company history instead of allowing demo-ID deletion bypasses', () => {
+  const prior = emptyState();
+  prior.movements = [{
+    id: 'movement-legacy-1', companyId: 'comp-1', productId: 'product-1',
+    quantity: 1, type: 'ENTRADA', date: '2025-01-01'
+  }];
+  const next = emptyState();
+  assert.throws(
+    () => validateAccountingSnapshot(prior, next),
+    /bloqueó la eliminación del registro histórico en movements/
+  );
+});
