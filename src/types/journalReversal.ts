@@ -1,4 +1,4 @@
-import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem } from './accounting';
+import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord } from './accounting';
 
 /**
  * Builds an immutable contra-entry by swapping debit/credit in both currencies.
@@ -194,6 +194,102 @@ export function validateSaleInventoryReturnReconciliation(input: {
     returnedMovementCount += corrections.length;
   }
   return { ready: true, originalMovementCount: originals.length, returnedMovementCount };
+}
+
+
+export interface PurchaseInventoryReconciliation {
+  ready: boolean;
+  reason?: string;
+  lineCount: number;
+  movementCount: number;
+  lineTotal: number;
+  baseTotal: number;
+  movementTotal: number;
+  journalInventoryDebit: number;
+  journalInventoryDebitUsd: number;
+  linesMatchInvoice: boolean;
+  journalMatchesInvoice: boolean;
+  movementMatchesLines: boolean;
+  ok: boolean;
+}
+
+/**
+ * Certifies the complete purchase -> inventory lines -> Kardex -> purchase
+ * journal chain in both currencies. This is a readiness check only; SQLite
+ * independently enforces the same invariants at persistence time.
+ */
+export function validatePurchaseInventoryReconciliation(input: {
+  companyId: string;
+  purchase: PurchaseRecord;
+  movements: InventoryMovement[];
+  journalEntries: JournalEntry[];
+}): PurchaseInventoryReconciliation {
+  const { companyId, purchase, movements, journalEntries } = input;
+  const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const lines = Array.isArray(purchase.inventoryLines) ? purchase.inventoryLines : [];
+  const baseTotal = money(Number(purchase.taxableBaseBs || 0) + Number(purchase.exemptAmountBs || 0));
+  const lineTotal = money(lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0));
+  const expectedReference = normalize('FAC-' + purchase.invoiceNumber);
+  const linkedMovements = movements.filter(movement =>
+    movement.companyId === companyId && movement.type === 'ENTRADA' && movement.concept === 'COMPRA' &&
+    normalize(movement.documentRef) === expectedReference && !movement.correctionForMovementId
+  );
+  const movementTotal = money(linkedMovements.reduce((sum, movement) => sum + Number(movement.totalCostBs || 0), 0));
+  const purchaseJournal = purchase.journalEntryId
+    ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId)
+    : undefined;
+  const journalInventoryDebit = money(purchaseJournal?.items.reduce((sum, item) =>
+    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) - Number(item.creditBs || 0) : 0), 0) || 0);
+  const journalInventoryDebitUsd = Number(purchaseJournal?.items.reduce((sum, item) =>
+    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) - Number(item.creditUsd || 0) : 0), 0) || 0);
+  const productIds = new Set<string>();
+  const validLines = lines.length > 0 && lines.every(line => {
+    const quantity = Number(line.quantity);
+    const unitCost = Number(line.unitCostBs);
+    if (!line.productId || productIds.has(String(line.productId)) ||
+        !Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(unitCost) || unitCost <= 0) return false;
+    productIds.add(String(line.productId));
+    return true;
+  });
+  const rate = Number(purchase.bcvRate);
+  const validRate = Number.isFinite(rate) && rate > 0;
+  const linesMatchInvoice = validLines && Math.abs(lineTotal - baseTotal) <= 0.02;
+  const movementMatchesLines = validRate && linkedMovements.length === lines.length && lines.every(line => {
+    const matches = linkedMovements.filter(movement => String(movement.productId) === String(line.productId));
+    if (matches.length !== 1) return false;
+    const movement = matches[0];
+    const quantity = Number(line.quantity);
+    const expectedBs = money(quantity * Number(line.unitCostBs));
+    const expectedUsd = expectedBs / rate;
+    return movement.date === purchase.invoiceDate &&
+      normalizeRif(movement.counterpartyRif) === normalizeRif(purchase.supplierRif) &&
+      Number.isFinite(Number(movement.bcvRate)) && Math.abs(Number(movement.bcvRate) - rate) <= 0.000001 &&
+      Math.abs(Number(movement.quantity) - quantity) <= 0.000001 &&
+      Math.abs(Number(movement.unitCostBs) - Number(line.unitCostBs)) <= 0.02 &&
+      Math.abs(money(Number(movement.totalCostBs)) - expectedBs) <= 0.02 &&
+      Number.isFinite(Number(movement.totalCostUsd)) &&
+      Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
+  }) && Math.abs(movementTotal - lineTotal) <= 0.02;
+  const journalMatchesInvoice = Boolean(purchaseJournal && purchaseJournal.type === 'COMPRA' &&
+    purchaseJournal.companyId === companyId && validRate &&
+    Math.abs(journalInventoryDebit - lineTotal) <= 0.02 &&
+    Number.isFinite(journalInventoryDebitUsd) &&
+    Math.abs(journalInventoryDebitUsd - lineTotal / rate) <= 0.0001);
+  const ok = linesMatchInvoice && movementMatchesLines && journalMatchesInvoice;
+  const reason = !validLines ? 'Faltan líneas de inventario válidas o hay productos duplicados.'
+    : !validRate ? 'La factura no conserva una tasa BCV válida.'
+    : !linesMatchInvoice ? 'Las líneas no concilian con la base imponible más el exento.'
+    : !movementMatchesLines ? 'El Kardex no coincide por artículo, fecha, proveedor, cantidad, costo o tasa BCV en ambas monedas.'
+    : !journalMatchesInvoice ? 'El asiento de compra no reconoce el costo de inventario conciliado en Bs. y USD.'
+    : undefined;
+  return {
+    ready: ok, reason, lineCount: lines.length, movementCount: linkedMovements.length,
+    lineTotal, baseTotal, movementTotal, journalInventoryDebit, journalInventoryDebitUsd,
+    linesMatchInvoice, journalMatchesInvoice, movementMatchesLines, ok
+  };
 }
 
 
