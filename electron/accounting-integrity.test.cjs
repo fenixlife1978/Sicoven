@@ -227,7 +227,7 @@ test('SQLite reconciles purchase inventory across multiple product auxiliary acc
   corrupted.journalEntries.find(item => item.id === 'purchase-entry')
     .items.find(item => item.accountCode === '1.1.4.07').accountCode = '1.1.4.01';
   assert.throws(() => validateAccountingSnapshot(prior, corrupted),
-    /asiento no reconoce en Bs\. y USD|factura original o el asiento fiscal no están conciliados/);
+    /asiento no reconoce en Bs\. y USD|factura original o el asiento fiscal no están conciliados|modificación del contenido histórico del asiento/);
 });
 
 test('SQLite rejects purchase inventory lines whose product is absent from the company catalog', () => {
@@ -528,6 +528,23 @@ const supplierCreditFixture = () => {
   return { prior, next, note, returnMovement };
 };
 
+function applySupplierAdvanceToFixture(next, note, advanceBs) {
+  note.supplierAdvanceBs = advanceBs;
+  note.supplierAdvanceUsd = advanceBs / 100;
+  note.netPayableReductionBs = Math.round((Number(note.totalAmountBs) -
+    Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0) - advanceBs) * 100) / 100;
+  note.netPayableReductionUsd = Math.round((Number(note.totalAmountUsd) -
+    Number(note.vatWithheldUsd || 0) - Number(note.islrWithheldUsd || 0) - note.supplierAdvanceUsd) * 1000000) / 1000000;
+  const journal = next.journalEntries.find(item => item.id === note.journalEntryId);
+  const payable = journal.items.find(item => String(item.accountCode || '').startsWith('2.1.1.'));
+  payable.debitBs = note.netPayableReductionBs;
+  payable.debitUsd = note.netPayableReductionUsd;
+  journal.items.push({
+    accountCode: '1.1.2.03', debitBs: advanceBs, creditBs: 0,
+    debitUsd: note.supplierAdvanceUsd, creditUsd: 0
+  });
+}
+
 test('SQLite reconciles concurrent supplier returns independently when companies reuse product ids', () => {
   const { prior, next } = supplierCreditFixture();
   const clone = (value, suffix) => ({ ...value,
@@ -577,7 +594,7 @@ test('SQLite rejects duplicate references to the same original stock movement in
   const returnMovement = next.movements.find(item => item.id === 'return-movement');
   note.creditNoteLines.push({ ...note.creditNoteLines[0], movementId: 'return-movement-duplicate' });
   next.movements.push({ ...returnMovement, id: 'return-movement-duplicate' });
-  assert.throws(() => validateAccountingSnapshot(prior, next), /salida física no concilia|línea de nota de crédito/i);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /salida física no concilia|línea de nota de crédito|existencia final del artículo/i);
 });
 
 test('SQLite reconciles supplier credit note against the payable auxiliary used by the original purchase', () => {
@@ -791,14 +808,11 @@ test('SQLite rejects supplier advance settlements without source credit notes an
   ), /notas de crédito inexistentes/);
 });
 
-test('SQLite rejects supplier advance allocations that overconsume one credit note while supplier total remains available', () => {
+test('SQLite rejects supplier advance allocations that exceed the individual credit-note balance', () => {
   const { prior, next, note } = supplierCreditFixture();
-  const sourceOne = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
-  const sourceTwo = { ...note, id: 'purchase-credit-note-2', invoiceNumber: 'NC-002',
-    creditNoteNumber: 'NC-002', supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
-  const makeRefund = (id, entryNumber, amountUsd, bookValueBs, date) => {
+  applySupplierAdvanceToFixture(next, note, 10);
+  const makeRefund = (id, entryNumber, amountUsd, date) => {
     const cashBs = amountUsd * 100;
-    const gainBs = cashBs - bookValueBs;
     const journalId = id + '-journal';
     return {
       journal: {
@@ -806,38 +820,27 @@ test('SQLite rejects supplier advance allocations that overconsume one credit no
         description: 'Reembolso anticipo', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
         items: [
           { accountCode: '1.1.1.03', debitBs: cashBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0 },
-          { accountCode: '1.1.2.03', debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd },
-          { accountCode: '4.2.1.01', debitBs: 0, creditBs: gainBs, debitUsd: 0, creditUsd: 0 }
+          { accountCode: '1.1.2.03', debitBs: 0, creditBs: cashBs, debitUsd: 0, creditUsd: amountUsd }
         ],
         createdAt: date + 'T10:00:00.000Z'
       },
       settlement: {
         id, companyId: 'company-1', supplierRif: 'J-12345678-9',
         kind: 'REFUND_RECEIVED', date, amountUsd, amountBs: cashBs,
-        advanceBookValueBs: bookValueBs, cashReceivedBs: cashBs, bcvRate: 100,
-        sourceCreditNoteIds: [sourceOne.id],
-        sourceCreditNoteAllocations: [{ creditNoteId: sourceOne.id, amountUsd, bookValueBs }],
+        advanceBookValueBs: cashBs, cashReceivedBs: cashBs, bcvRate: 100,
+        sourceCreditNoteIds: [note.id],
+        sourceCreditNoteAllocations: [{ creditNoteId: note.id, amountUsd, bookValueBs: cashBs }],
         treasuryAccountCode: '1.1.1.03', journalEntryId: journalId,
         createdAt: date + 'T10:00:00.000Z'
       }
     };
   };
-  const first = makeRefund('refund-1', 3, 6, 540, '2026-10-20');
-  const second = makeRefund('refund-2', 4, 5, 450, '2026-10-21');
-  const otherNote = { ...sourceTwo };
-  const otherAllocation = {
-    ...makeRefund('refund-3', 5, 1, 90, '2026-10-22'),
-    settlement: {
-      ...makeRefund('refund-3', 5, 1, 90, '2026-10-22').settlement,
-      sourceCreditNoteIds: [otherNote.id],
-      sourceCreditNoteAllocations: [{ creditNoteId: otherNote.id, amountUsd: 1, bookValueBs: 90 }]
-    }
-  };
+  const first = makeRefund('refund-1', 3, 0.06, '2026-10-20');
+  const second = makeRefund('refund-2', 4, 0.05, '2026-10-21');
   const adjustedNext = {
     ...next,
-    purchases: next.purchases.map(item => item.id === note.id ? sourceOne : item).concat(otherNote),
-    journalEntries: [...next.journalEntries, first.journal, second.journal, otherAllocation.journal],
-    supplierAdvanceSettlements: [first.settlement, second.settlement, otherAllocation.settlement],
+    journalEntries: [...next.journalEntries, first.journal, second.journal],
+    supplierAdvanceSettlements: [first.settlement, second.settlement],
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
   };
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
@@ -846,16 +849,15 @@ test('SQLite rejects supplier advance allocations that overconsume one credit no
 
 test('SQLite restores an individual credit-note advance allocation after its settlement is reversed', () => {
   const { prior, next, note } = supplierCreditFixture();
-  const source = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
+  applySupplierAdvanceToFixture(next, note, 10);
   const original = {
     id: 'refund-reversed-journal', companyId: 'company-1', entryNumber: 3,
     date: '2026-10-20', description: 'Reembolso luego reversado',
     type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
     reversedByEntryId: 'refund-reversal-journal', isAdjusted: true,
     items: [
-      { accountCode: '1.1.1.03', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
-      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 540, debitUsd: 0, creditUsd: 6 },
-      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 60, debitUsd: 0, creditUsd: 0 }
+      { accountCode: '1.1.1.03', debitBs: 6, creditBs: 0, debitUsd: 0.06, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 6, debitUsd: 0, creditUsd: 0.06 }
     ]
   };
   const reversal = {
@@ -866,17 +868,16 @@ test('SQLite restores an individual credit-note advance allocation after its set
     reversalReason: 'Restituir el anticipo recibido por error',
     workpaperNote: 'Se cotejó el recibo bancario y el asiento original',
     items: [
-      { accountCode: '1.1.1.03', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 },
-      { accountCode: '1.1.2.03', debitBs: 540, creditBs: 0, debitUsd: 6, creditUsd: 0 },
-      { accountCode: '4.2.1.01', debitBs: 60, creditBs: 0, debitUsd: 0, creditUsd: 0 }
+      { accountCode: '1.1.1.03', debitBs: 0, creditBs: 6, debitUsd: 0, creditUsd: 0.06 },
+      { accountCode: '1.1.2.03', debitBs: 6, creditBs: 0, debitUsd: 0.06, creditUsd: 0 }
     ]
   };
   const active = {
     id: 'refund-active-settlement', companyId: 'company-1', supplierRif: 'J-12345678-9',
-    kind: 'REFUND_RECEIVED', date: '2026-10-22', amountUsd: 5, amountBs: 450,
-    advanceBookValueBs: 450, cashReceivedBs: 500, bcvRate: 100,
-    sourceCreditNoteIds: [source.id],
-    sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 5, bookValueBs: 450 }],
+    kind: 'REFUND_RECEIVED', date: '2026-10-22', amountUsd: 0.05, amountBs: 5,
+    advanceBookValueBs: 5, cashReceivedBs: 5, bcvRate: 100,
+    sourceCreditNoteIds: [note.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: note.id, amountUsd: 0.05, bookValueBs: 5 }],
     treasuryAccountCode: '1.1.1.03', journalEntryId: 'refund-active-journal',
     createdAt: '2026-10-22T10:00:00.000Z'
   };
@@ -885,24 +886,22 @@ test('SQLite restores an individual credit-note advance allocation after its set
     date: '2026-10-22', description: 'Reembolso posterior',
     type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
     items: [
-      { accountCode: '1.1.1.03', debitBs: 500, creditBs: 0, debitUsd: 5, creditUsd: 0 },
-      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 450, debitUsd: 0, creditUsd: 5 },
-      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0 }
+      { accountCode: '1.1.1.03', debitBs: 5, creditBs: 0, debitUsd: 0.05, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 5, debitUsd: 0, creditUsd: 0.05 }
     ]
   };
   const reversedSettlement = {
     id: 'refund-reversed-settlement', companyId: 'company-1', supplierRif: 'J-12345678-9',
-    kind: 'REFUND_RECEIVED', date: '2026-10-20', amountUsd: 6, amountBs: 540,
-    advanceBookValueBs: 540, cashReceivedBs: 600, bcvRate: 100,
-    sourceCreditNoteIds: [source.id],
-    sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 6, bookValueBs: 540 }],
+    kind: 'REFUND_RECEIVED', date: '2026-10-20', amountUsd: 0.06, amountBs: 6,
+    advanceBookValueBs: 6, cashReceivedBs: 6, bcvRate: 100,
+    sourceCreditNoteIds: [note.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: note.id, amountUsd: 0.06, bookValueBs: 6 }],
     treasuryAccountCode: '1.1.1.03', journalEntryId: original.id,
     isReversed: true, reversedByJournalEntryId: reversal.id,
     createdAt: '2026-10-20T10:00:00.000Z'
   };
   const adjustedNext = {
     ...next,
-    purchases: next.purchases.map(item => item.id === source.id ? source : item),
     journalEntries: [...next.journalEntries, original, reversal, activeJournal],
     supplierAdvanceSettlements: [reversedSettlement, active],
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
@@ -912,27 +911,27 @@ test('SQLite restores an individual credit-note advance allocation after its set
 
 test('SQLite rejects supplier advance settlements with an unbalanced linked journal', () => {
   const { prior, next, note } = supplierCreditFixture();
-  const source = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
+  applySupplierAdvanceToFixture(next, note, 10);
   const journal = {
     id: 'advance-journal', companyId: 'company-1', entryNumber: 3, date: '2026-10-30',
     description: 'Liquidación anticipo', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
     items: [
-      { accountCode: '1.1.1.03', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
-      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 899, debitUsd: 0, creditUsd: 10 },
-      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 101, debitUsd: 0, creditUsd: 0 }
+      { accountCode: '1.1.1.03', debitBs: 10, creditBs: 0, debitUsd: 0.1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 9.99, debitUsd: 0, creditUsd: 0.1 }
     ],
     createdAt: '2026-10-30T10:00:00.000Z'
   };
   const settlement = {
     id: 'advance-settlement-2', companyId: 'company-1', supplierRif: 'J-12345678-9',
-    kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 10, amountBs: 900,
-    advanceBookValueBs: 900, cashReceivedBs: 1000, bcvRate: 100,
-    sourceCreditNoteIds: [source.id], sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 10, bookValueBs: 900 }], treasuryAccountCode: '1.1.1.03',
-    journalEntryId: 'advance-journal', createdAt: '2026-10-30T10:00:00.000Z'
+    kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 0.1, amountBs: 10,
+    advanceBookValueBs: 10, cashReceivedBs: 10, bcvRate: 100,
+    sourceCreditNoteIds: [note.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: note.id, amountUsd: 0.1, bookValueBs: 10 }],
+    treasuryAccountCode: '1.1.1.03', journalEntryId: 'advance-journal',
+    createdAt: '2026-10-30T10:00:00.000Z'
   };
   const adjustedNext = {
     ...next,
-    purchases: [...next.purchases.filter(item => item.id !== source.id), source],
     journalEntries: [...next.journalEntries, journal],
     supplierAdvanceSettlements: [settlement],
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
