@@ -110,6 +110,23 @@ function persistAccountingSnapshot(db, state) {
         }));
       }
     }
+    const oldAdvanceSettlements = new Map((Array.isArray(priorState.supplierAdvanceSettlements) ? priorState.supplierAdvanceSettlements : []).map(item => [String(item.id), item]));
+    for (const settlement of (Array.isArray(state.supplierAdvanceSettlements) ? state.supplierAdvanceSettlements : [])) {
+      const oldSettlement = oldAdvanceSettlements.get(String(settlement.id));
+      if (!oldSettlement) {
+        auditInsert.run('supplier_advance_settlement_posted', JSON.stringify({
+          settlementId: settlement.id, companyId: settlement.companyId, supplierRif: settlement.supplierRif,
+          kind: settlement.kind, amountBs: settlement.amountBs, amountUsd: settlement.amountUsd,
+          journalEntryId: settlement.journalEntryId, targetPurchaseId: settlement.targetPurchaseId || null,
+          sourceCreditNoteIds: settlement.sourceCreditNoteIds || []
+        }));
+      } else if (!oldSettlement.isReversed && settlement.isReversed) {
+        auditInsert.run('supplier_advance_settlement_reversed', JSON.stringify({
+          settlementId: settlement.id, companyId: settlement.companyId,
+          journalEntryId: settlement.journalEntryId, reversedByJournalEntryId: settlement.reversedByJournalEntryId || null
+        }));
+      }
+    }
     const oldCompanies = new Map((Array.isArray(priorState.companies) ? priorState.companies : []).map(company => [String(company.id), company]));
     for (const company of (Array.isArray(state.companies) ? state.companies : [])) {
       const oldCompany = oldCompanies.get(String(company.id));
