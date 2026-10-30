@@ -470,6 +470,22 @@ app.whenReady().then(async () => {
           }
         }
       }
+      const oldBankRows = new Map((Array.isArray(priorState.bankStatementMovements) ? priorState.bankStatementMovements : [])
+        .map(item => [String(item.id), item]));
+      for (const row of (Array.isArray(state.bankStatementMovements) ? state.bankStatementMovements : [])) {
+        const oldRow = oldBankRows.get(String(row.id));
+        if (!oldRow) continue;
+        const oldLinks = Array.isArray(oldRow.reconciledJournalEntryIds) ? oldRow.reconciledJournalEntryIds : [];
+        const nextLinks = Array.isArray(row.reconciledJournalEntryIds) ? row.reconciledJournalEntryIds : [];
+        for (const journalEntryId of nextLinks) {
+          if (oldLinks.includes(journalEntryId)) continue;
+          auditInsert.run('bank_statement_reconciled', JSON.stringify({
+            statementMovementId: row.id, companyId: row.companyId, bankAccountId: row.bankAccountId,
+            journalEntryId, reference: row.reference, date: row.date, amountBs: row.amountBs,
+            amountUsd: row.amountUsd, matchedBy: row.matchedBy || null
+          }));
+        }
+      }
       const oldSettlements = new Map((Array.isArray(priorState.creditSettlements) ? priorState.creditSettlements : [])
         .map(item => [String(item.id), item]));
       for (const settlement of (Array.isArray(state.creditSettlements) ? state.creditSettlements : [])) {
