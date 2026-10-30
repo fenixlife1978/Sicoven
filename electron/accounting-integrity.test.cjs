@@ -729,7 +729,7 @@ test('SQLite rejects supplier advance settlements with an unbalanced linked jour
   const journal = {
     id: 'advance-journal', companyId: 'company-1', entryNumber: 1, date: '2026-10-30',
     description: 'Liquidación anticipo', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
-    items: [line(1000, 0, 10, 0), line(0, 900, 0, 10)],
+    items: [line(1000, 0, 10, 0), line(0, 1000, 0, 10)],
     createdAt: '2026-10-30T10:00:00.000Z'
   };
   const settlement = {
