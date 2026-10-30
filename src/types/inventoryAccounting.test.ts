@@ -71,7 +71,7 @@ describe('motor de inventario contable', () => {
     ], 3), /no coinciden con la existencia actual/);
     assert.throws(() => reconstructFifoLayers([
       { type: 'SALIDA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 0 }
-    ], 0), /no contiene capas suficientes/);
+    ], 0), /no contiene cantidad suficiente en la capa FIFO/);
   });
 
   it('bloquea PEPS cuando los saldos históricos no concilian', () => {
