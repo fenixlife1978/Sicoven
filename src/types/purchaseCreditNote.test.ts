@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
+import { calculatePurchaseCreditNote } from './purchaseCreditNote';
+
+const purchase: PurchaseRecord = {
+  id: 'pur-1', companyId: 'co-1', opNumber: 1, invoiceDate: '2026-10-01',
+  supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: '100',
+  controlNumber: '00-100', documentType: '01', totalAmountBs: 238.96,
+  exemptAmountBs: 0, taxableBaseBs: 200, taxRate: 16, vatAmountBs: 32,
+  retentionRate: 75, vatWithheldBs: 24, islrWithheldBs: 2,
+  bcvRate: 100, totalAmountUsd: 2.3896, taxableBaseUsd: 2,
+  vatAmountUsd: 0.32, vatWithheldUsd: 0.24, paymentTerm: 'CREDITO',
+  inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+};
+const product: InventoryProduct = {
+  id: 'p-1', companyId: 'co-1', code: 'P-1', name: 'Producto',
+  category: 'Mercancía', unit: 'UND', minStock: 0, currentStock: 2,
+  avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
+  vatTreatment: 'GENERAL_16', costingMethod: 'PROMEDIO_PONDERADO'
+};
+const originalMovement: InventoryMovement = {
+  id: 'mov-1', companyId: 'co-1', productId: 'p-1', productName: 'Producto',
+  productCode: 'P-1', date: '2026-10-01', type: 'ENTRADA', concept: 'COMPRA',
+  documentRef: 'FAC-100', quantity: 2, unitCostBs: 100, unitCostUsd: 1,
+  totalCostBs: 200, totalCostUsd: 2, balanceQty: 2, balanceTotalBs: 200,
+  balanceTotalUsd: 2, bcvRate: 100, counterpartyRif: 'J-12345678-9'
+};
+const draft = (overrides: Record<string, unknown> = {}) => ({
+  purchase, product, products: [product], originalMovement, quantity: 1,
+  previouslyReturnedQuantity: 0, returnDate: '2026-10-10',
+  creditNoteNumber: 'NC-001', controlNumber: '00-NC-001',
+  reason: 'Mercancía defectuosa devuelta', currentStock: 2,
+  currentAverageCostBs: 100, ...overrides
+});
+
+test('calcula nota de crédito parcial y revierte proporcionalmente IVA, retenciones e IGTF', () => {
+  const result = calculatePurchaseCreditNote(draft());
+  assert.equal(result.inventoryCostBs, 100);
+  assert.equal(result.taxableBaseBs, 100);
+  assert.equal(result.vatAmountBs, 16);
+  assert.equal(result.vatWithheldBs, 12);
+  assert.equal(result.islrWithheldBs, 1);
+  assert.equal(result.igtfAmountBs, 3.48);
+  assert.equal(result.totalAmountBs, 119.48);
+  assert.equal(result.netPayableReductionBs, 106.48);
+  assert.equal(result.netPayableReductionUsd, 1.0648);
+});
+
+test('bloquea devolución superior a existencia o cantidad original disponible', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({ currentStock: 0.5 })), /existencia actual/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({ previouslyReturnedQuantity: 1.5 })), /supera la cantidad facturada/);
+});
+
+test('bloquea PEPS, costo promedio divergente y fecha en período cerrado', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    product: { ...product, costingMethod: 'PEPS' }
+  })), /PEPS requiere/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({ currentAverageCostBs: 95 })), /costo promedio actual difiere/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({ closedThroughDate: '2026-10-10' })), /período contable cerrado/);
+});
+
+test('bloquea si el tratamiento fiscal de las líneas no concilia con la factura', () => {
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, exemptAmountBs: 20, taxableBaseBs: 180 }
+  })), /clasificación fiscal/);
+});
