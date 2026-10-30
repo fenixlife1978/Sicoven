@@ -5,6 +5,7 @@ import {
   calculateFifoIssue,
   validateInventoryMovement,
   normalizeProductionRecipe,
+  getDefaultInventoryAccountCode,
   calculateVnrWriteDown,
   calculatePeriodicCostOfSales
 } from './inventoryAccounting';
@@ -68,6 +69,15 @@ describe('motor de inventario contable', () => {
       date: '2026-02-30', quantity: 1, bcvRate: 100, unitCostBs: 20,
       availableQuantity: 2, type: 'ENTRADA'
     }) || '', /fecha.*no es válida/i);
+  });
+
+  it('asigna la cuenta de inventario por defecto según el tipo de artículo', () => {
+    assert.equal(getDefaultInventoryAccountCode('MERCANCIA'), '1.1.4.01');
+    assert.equal(getDefaultInventoryAccountCode('MATERIA_PRIMA'), '1.1.4.02');
+    assert.equal(getDefaultInventoryAccountCode('PRODUCTO_EN_PROCESO'), '1.1.4.04');
+    assert.equal(getDefaultInventoryAccountCode('PRODUCTO_TERMINADO'), '1.1.4.01');
+    assert.equal(getDefaultInventoryAccountCode('SUBPRODUCTO'), '1.1.4.01');
+    assert.equal(getDefaultInventoryAccountCode(undefined), '1.1.4.01');
   });
 
   it('consolida componentes repetidos de una matriz de producción', () => {
