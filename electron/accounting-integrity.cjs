@@ -173,6 +173,16 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
 
   for (const collectionName of ['purchases', 'sales']) {
+    const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
+    for (const document of asArray(nextState[collectionName])) {
+      if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
+      const linkedEntry = nextById.get(String(document.journalEntryId));
+      if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
+          linkedEntry.type !== expectedEntryType ||
+          linkedEntry.referenceDoc !== 'FAC-' + document.invoiceNumber) {
+        throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
+      }
+    }
     const oldDocuments = asArray(priorState[collectionName]);
     const newDocuments = asArray(nextState[collectionName]);
     const oldById = new Map(oldDocuments.map(document => [String(document.id), document]));
