@@ -530,23 +530,33 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
 
   const purchaseById = new Map(asArray(nextState.purchases).map(item => [String(item.id), item]));
+  const hasValidFiscalCorrection = (purchase, correction) => {
+    if (!purchase || !correction) return false;
+    const source = purchase.journalEntryId ? priorById.get(String(purchase.journalEntryId)) : undefined;
+    const fullReversal = Boolean(purchase.isCancelled && source && correction.reversalOfEntryId === source.id);
+    const supplierCreditNote = asArray(nextState.purchases).find(note =>
+      note.companyId === purchase.companyId && note.documentType === '03' &&
+      note.originalPurchaseId === purchase.id && note.journalEntryId === correction.id &&
+      normalizeDocument(correction.referenceDoc) === normalizeDocument('NC-PROV-' + note.creditNoteNumber) &&
+      correction.type === 'AJUSTE' && Array.isArray(note.creditNoteLines) && note.creditNoteLines.length > 0);
+    return fullReversal || Boolean(supplierCreditNote);
+  };
   for (const voucher of asArray(nextState.vatVouchers)) {
     if (!voucher.requiresFiscalCorrection) continue;
     const purchase = purchaseById.get(String(voucher.purchaseRecordId));
     const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
-    const source = purchase?.journalEntryId ? priorById.get(String(purchase.journalEntryId)) : undefined;
-    if (!purchase?.isCancelled || !correction || !source || correction.reversalOfEntryId !== source.id) {
-      throw new Error('SQLite rechazó una marca de corrección de retención IVA sin factura y contra-asiento conciliados.');
+    if (!hasValidFiscalCorrection(purchase, correction)) {
+      throw new Error('SQLite rechazó una marca de corrección de retención IVA sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
   for (const voucher of asArray(nextState.islrVouchers)) {
     if (!voucher.requiresFiscalCorrection) continue;
     const purchase = asArray(nextState.purchases).find(item =>
-      item.companyId === voucher.companyId && item.invoiceNumber === voucher.invoiceNumber);
+      item.companyId === voucher.companyId && item.invoiceNumber === voucher.invoiceNumber &&
+      item.supplierRif === voucher.supplierRif && item.documentType === '01');
     const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
-    const source = purchase?.journalEntryId ? priorById.get(String(purchase.journalEntryId)) : undefined;
-    if (!purchase?.isCancelled || !correction || !source || correction.reversalOfEntryId !== source.id) {
-      throw new Error('SQLite rechazó una marca de corrección de retención ISLR sin factura y contra-asiento conciliados.');
+    if (!hasValidFiscalCorrection(purchase, correction)) {
+      throw new Error('SQLite rechazó una marca de corrección de retención ISLR sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
   return { priorEntries, nextEntries, priorById, nextById };
