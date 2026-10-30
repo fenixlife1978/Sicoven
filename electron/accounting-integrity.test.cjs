@@ -851,6 +851,7 @@ test('SQLite restores an individual credit-note advance allocation after its set
     id: 'refund-reversed-journal', companyId: 'company-1', entryNumber: 3,
     date: '2026-10-20', description: 'Reembolso luego reversado',
     type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
+    reversedByEntryId: 'refund-reversal-journal', isAdjusted: true,
     items: [
       { accountCode: '1.1.1.03', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
       { accountCode: '1.1.2.03', debitBs: 0, creditBs: 540, debitUsd: 0, creditUsd: 6 },
@@ -861,6 +862,9 @@ test('SQLite restores an individual credit-note advance allocation after its set
     id: 'refund-reversal-journal', companyId: 'company-1', entryNumber: 4,
     date: '2026-10-21', description: 'REVERSIÓN / reembolso',
     type: 'AJUSTE', bcvRate: 100, reversalOfEntryId: original.id,
+    referenceDoc: 'REV-3',
+    reversalReason: 'Restituir el anticipo recibido por error',
+    workpaperNote: 'Se cotejó el recibo bancario y el asiento original',
     items: [
       { accountCode: '1.1.1.03', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 },
       { accountCode: '1.1.2.03', debitBs: 540, creditBs: 0, debitUsd: 6, creditUsd: 0 },
