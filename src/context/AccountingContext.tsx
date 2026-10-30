@@ -3099,7 +3099,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         return !source || source.companyId !== s.companyId;
       })) throw new Error('El respaldo contiene liquidaciones duplicadas, inválidas o sin factura/asiento contable válido.');
       setCompanies(data.companies);
-      setAccounts(data.accounts);
+      // Migración aditiva del plan contable: incorpora cuentas nuevas sin alterar códigos ni saldos existentes.
+      const loadedAccountCodes = new Set(data.accounts.map((account: Account) => account.code));
+      setAccounts([...data.accounts, ...DEFAULT_CHART_OF_ACCOUNTS.filter(account => !loadedAccountCodes.has(account.code))]);
       setJournalEntries(data.journalEntries);
       setPurchases(data.purchases);
       setSales(data.sales);
