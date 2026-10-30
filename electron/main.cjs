@@ -71,10 +71,15 @@ function openDatabase() {
   const userCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
   if (userCount === 0) {
     const credential = hashPassword('Admin123');
-    db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)')
-      .run('admin', credential.hash, credential.salt, 'admin');
-    db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-      .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '24-hour-trial' }));
+    const createSeed = db.transaction(() => {
+      const currentCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
+      if (currentCount !== 0) return;
+      db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)')
+        .run('admin', credential.hash, credential.salt, 'admin');
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '24-hour-trial' }));
+    });
+    createSeed();
   }
 }
 
