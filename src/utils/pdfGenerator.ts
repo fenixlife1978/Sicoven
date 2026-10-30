@@ -775,31 +775,35 @@ export async function exportComprasPdf(
   let totalBase = 0;
   let totalIva = 0;
   let totalRetenido = 0;
+  let totalIslrRetenido = 0;
   let totalIgtf = 0;
 
   const tableBody: any[] = purchases.map(p => {
-    totalMonto += p.totalAmountBs || 0;
-    totalExento += p.exemptAmountBs || 0;
-    totalBase += p.taxableBaseBs || 0;
-    totalIva += p.vatAmountBs || 0;
-    totalRetenido += p.vatWithheldBs || 0;
-    totalIgtf += Number(p.igtfAmountBs || 0);
+    const sign = p.documentType === '03' ? -1 : 1;
+    totalMonto += sign * (p.totalAmountBs || 0);
+    totalExento += sign * (p.exemptAmountBs || 0);
+    totalBase += sign * (p.taxableBaseBs || 0);
+    totalIva += sign * (p.vatAmountBs || 0);
+    totalRetenido += sign * (p.vatWithheldBs || 0);
+    totalIslrRetenido += sign * (p.islrWithheldBs || 0);
+    totalIgtf += sign * Number(p.igtfAmountBs || 0);
 
     return [
       p.opNumber,
       formatDate(p.invoiceDate),
       p.supplierRif,
       p.supplierName.slice(0, 32),
-      p.invoiceNumber,
+      (p.documentType === '03' ? 'NC ' : p.documentType === '02' ? 'ND ' : '') + p.invoiceNumber,
       p.controlNumber,
-      formatNumberVe(p.totalAmountBs),
-      Number(p.igtfAmountBs || 0) > 0 ? formatNumberVe(Number(p.igtfAmountBs)) : '-',
-      p.exemptAmountBs > 0 ? formatNumberVe(p.exemptAmountBs) : '-',
-      formatNumberVe(p.taxableBaseBs),
+      formatNumberVe(sign * (p.totalAmountBs || 0)),
+      Number(p.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * Number(p.igtfAmountBs)) : '-',
+      p.exemptAmountBs > 0 ? formatNumberVe(sign * p.exemptAmountBs) : '-',
+      formatNumberVe(sign * p.taxableBaseBs),
       `${p.taxRate}%`,
-      formatNumberVe(p.vatAmountBs),
+      formatNumberVe(sign * p.vatAmountBs),
       p.retentionRate > 0 ? `${p.retentionRate}%` : '0%',
-      p.vatWithheldBs > 0 ? formatNumberVe(p.vatWithheldBs) : '-'
+      p.vatWithheldBs > 0 ? formatNumberVe(sign * p.vatWithheldBs) : '-',
+      p.islrWithheldBs > 0 ? formatNumberVe(sign * p.islrWithheldBs) : '-'
     ];
   });
 
@@ -813,7 +817,8 @@ export async function exportComprasPdf(
     { content: '', styles: { fillColor: [15, 23, 42] } },
     { content: formatNumberVe(totalIva), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [52, 211, 153] } },
     { content: '', styles: { fillColor: [15, 23, 42] } },
-    { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } }
+    { content: formatNumberVe(totalRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [192, 132, 252] } },
+    { content: formatNumberVe(totalIslrRetenido), styles: { halign: 'right', fontStyle: 'bold', fillColor: [15, 23, 42], textColor: [129, 140, 248] } }
   ]);
 
   autoTable(doc, {
@@ -832,7 +837,8 @@ export async function exportComprasPdf(
       '% Alíc.',
       'IVA Débito (Bs.)',
       '% Ret.',
-      'IVA Retenido (Bs.)'
+      'IVA Retenido (Bs.)',
+      'ISLR Retenido (Bs.)'
     ]],
     body: tableBody,
     theme: 'grid',
@@ -852,7 +858,8 @@ export async function exportComprasPdf(
       10: { cellWidth: 12, halign: 'center' },
       11: { cellWidth: 22, halign: 'right', font: 'courier' },
       12: { cellWidth: 12, halign: 'center' },
-      13: { cellWidth: 22, halign: 'right', font: 'courier' }
+      13: { cellWidth: 20, halign: 'right', font: 'courier' },
+      14: { cellWidth: 20, halign: 'right', font: 'courier' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
