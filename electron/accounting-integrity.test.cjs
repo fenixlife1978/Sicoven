@@ -157,7 +157,7 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
     supplierRif: 'J-12345678-9', invoiceNumber: '100', documentType: '01',
-    taxableBaseBs: 200, exemptAmountBs: 0, journalEntryId: 'purchase-entry',
+    taxableBaseBs: 200, exemptAmountBs: 0, bcvRate: 100, journalEntryId: 'purchase-entry',
     inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
   };
   const entry = {
