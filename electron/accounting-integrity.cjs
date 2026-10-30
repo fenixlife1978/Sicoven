@@ -679,6 +679,91 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó una marca de corrección de retención ISLR sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
+
+  // Supplier advance settlements are operational financial records, not free-form metadata.
+  const advanceSettlements = asArray(nextState.supplierAdvanceSettlements);
+  const advanceIds = new Set();
+  const advanceTotals = new Map();
+  const nextBankAccounts = asArray(nextState.bankAccounts);
+  for (const settlement of advanceSettlements) {
+    const id = String(settlement.id || '');
+    if (!id || advanceIds.has(id)) throw new Error('SQLite rechazó identificadores vacíos o duplicados en liquidaciones de anticipos.');
+    advanceIds.add(id);
+    const companyId = String(settlement.companyId || '');
+    const rif = String(settlement.supplierRif || '').trim().toUpperCase();
+    const amountUsd = Number(settlement.amountUsd);
+    const bookBs = Number(settlement.advanceBookValueBs ?? settlement.amountBs);
+    const rate = Number(settlement.bcvRate);
+    if (!companyId || !rif || !['REFUND_RECEIVED', 'APPLIED_TO_PURCHASE'].includes(settlement.kind) ||
+        !Number.isFinite(amountUsd) || amountUsd <= 0 || !Number.isFinite(bookBs) || bookBs <= 0 ||
+        !Number.isFinite(rate) || rate <= 0 || !/^\\d{4}-\\d{2}-\\d{2}$/.test(String(settlement.date || ''))) {
+      throw new Error('SQLite rechazó una liquidación de anticipo con proveedor, fecha, moneda o tasa inválidos.');
+    }
+    const sources = Array.isArray(settlement.sourceCreditNoteIds) ? settlement.sourceCreditNoteIds : [];
+    if (!sources.length || new Set(sources).size !== sources.length) {
+      throw new Error('SQLite rechazó una liquidación sin notas de crédito fuente únicas.');
+    }
+    const sourceNotes = sources.map(sourceId => purchaseById.get(String(sourceId)));
+    if (sourceNotes.some(note => !note || note.companyId !== companyId || note.documentType !== '03' ||
+        note.isCancelled || String(note.supplierRif || '').trim().toUpperCase() !== rif ||
+        Number(note.supplierAdvanceUsd || 0) <= 0)) {
+      throw new Error('SQLite rechazó una liquidación vinculada a notas de crédito inexistentes, reversadas o de otro proveedor.');
+    }
+    const journal = nextById.get(String(settlement.journalEntryId || ''));
+    if (!journal || journal.companyId !== companyId || journal.type !== 'ANTICIPO_PROVEEDOR' ||
+        journal.date !== settlement.date || !Array.isArray(journal.items) || journal.items.length < 2) {
+      throw new Error('SQLite rechazó una liquidación sin asiento ANTICIPO_PROVEEDOR válido y enlazado.');
+    }
+    const totals = journal.items.reduce((acc, item) => ({
+      debitBs: acc.debitBs + Number(item.debitBs || 0), creditBs: acc.creditBs + Number(item.creditBs || 0),
+      debitUsd: acc.debitUsd + Number(item.debitUsd || 0), creditUsd: acc.creditUsd + Number(item.creditUsd || 0)
+    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+    if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
+        Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
+        Math.abs(totals.debitUsd - amountUsd) >= 0.01 ||
+        Math.abs(totals.creditUsd - amountUsd) >= 0.01) {
+      throw new Error('SQLite rechazó un asiento de anticipo descuadrado o por un importe distinto a la liquidación.');
+    }
+    if (settlement.kind === 'REFUND_RECEIVED') {
+      const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode);
+      if (!bank || Number(settlement.cashReceivedBs ?? 0) <= 0) {
+        throw new Error('SQLite rechazó un reembolso de anticipo sin cuenta bancaria/caja y efectivo recibido verificables.');
+      }
+    } else {
+      const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
+      if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
+          String(target.supplierRif || '').trim().toUpperCase() !== rif) {
+        throw new Error('SQLite rechazó una aplicación de anticipo a una factura de otro proveedor o no vigente.');
+      }
+    }
+    if (settlement.isReversed) {
+      const reversal = settlement.reversedByJournalEntryId
+        ? nextById.get(String(settlement.reversedByJournalEntryId))
+        : undefined;
+      if (!reversal || reversal.companyId !== companyId || reversal.reversalOfEntryId !== journal.id) {
+        throw new Error('SQLite rechazó la reversión de anticipo sin contra-asiento vinculado.');
+      }
+    }
+    if (!settlement.isReversed) {
+      const key = companyId + '|' + rif;
+      const current = advanceTotals.get(key) || { usd: 0, bs: 0 };
+      current.usd += amountUsd;
+      current.bs += bookBs;
+      advanceTotals.set(key, current);
+    }
+  }
+  for (const [key, used] of advanceTotals) {
+    const [companyId, rif] = key.split('|');
+    const credits = asArray(nextState.purchases).filter(item =>
+      item.companyId === companyId && item.documentType === '03' && !item.isCancelled &&
+      String(item.supplierRif || '').trim().toUpperCase() === rif);
+    const availableUsd = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0);
+    const availableBs = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0);
+    if (used.usd > availableUsd + 0.005 || used.bs > availableBs + 0.02) {
+      throw new Error('SQLite rechazó liquidaciones de anticipos que exceden el saldo acreditado por notas de crédito.');
+    }
+  }
+
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
