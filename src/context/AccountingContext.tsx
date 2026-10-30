@@ -3338,6 +3338,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       })) throw new Error('El respaldo contiene liquidaciones de anticipos duplicadas, inválidas o sin documento/asiento/tesorería verificable.');
       const advanceConsumedByNote = new Map<string, { usd: number; bs: number }>();
       for (const settlement of advanceSettlements as SupplierAdvanceSettlement[]) {
+        // Liquidaciones históricas ya reversadas no consumen saldo; se tolera
+        // que las anteriores al control FIFO no conserven desglose por nota.
+        if (settlement.isReversed && !Array.isArray(settlement.sourceCreditNoteAllocations)) continue;
         const sourceNotes = (data.purchases as PurchaseRecord[]).filter(note =>
           note.companyId === settlement.companyId && note.documentType === '03' && !note.isCancelled &&
           String(note.supplierRif || '').trim().toUpperCase() === String(settlement.supplierRif || '').trim().toUpperCase() &&
