@@ -16,7 +16,7 @@ const purchase: PurchaseRecord = {
 const product: InventoryProduct = {
   id: 'p-1', companyId: 'co-1', code: 'P-1', name: 'Producto',
   category: 'Mercancía', unit: 'UND', minStock: 0, currentStock: 2,
-  avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
+  salesPriceBs: 150, salesPriceUsd: 1.5, avgCostBs: 100, avgCostUsd: 1, lastCostBs: 100, lastCostUsd: 1,
   vatTreatment: 'GENERAL_16', costingMethod: 'PROMEDIO_PONDERADO'
 };
 const originalMovement: InventoryMovement = {
