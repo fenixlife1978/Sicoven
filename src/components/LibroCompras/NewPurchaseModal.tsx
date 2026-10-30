@@ -53,7 +53,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
-  const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf);
+  const igtfCalculation = calculatePurchaseIgtf(invoiceSubtotalBs, paymentMethod, applyIgtf, 3, paymentTerm);
   const igtfApplicable = igtfCalculation.applicable;
   const igtfAmountBs = igtfCalculation.amountBs;
   const totalAmountBs = Math.round((invoiceSubtotalBs + igtfAmountBs) * 100) / 100;
@@ -394,9 +394,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   <option value="BS">Bolívares / medios nacionales</option><option value="FOREIGN_CASH">Divisas en efectivo</option><option value="ZELLE">Zelle</option><option value="INTERNATIONAL_TRANSFER">Transferencia internacional</option><option value="CRYPTO">Criptoactivos</option>
                 </select>
               </div>
-              <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
+              <label className="flex items-center gap-2 text-slate-700 font-semibold"><input type="checkbox" checked={applyIgtf} onChange={e => setApplyIgtf(e.target.checked)} disabled={paymentMethod === 'BS' || paymentTerm === 'CREDITO'} className="rounded text-amber-600"/> Aplicar IGTF 3% (confirmación fiscal)</label>
             </div>
-            <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>
+            <div className="flex justify-between items-center text-sm"><span>IGTF calculado sobre subtotal</span><strong className="font-mono">{formatBs(igtfAmountBs)}</strong></div>\n            {paymentTerm === 'CREDITO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El IGTF no se anticipa en una factura a crédito. La obligación se evalúa cuando se realice el débito o se cancele la deuda; registre el impuesto en el flujo de pago cuando esté habilitado y conciliado.</p>}
             <p className="text-[11px] text-amber-900">Antes de activar el cálculo del IGTF, el contador debe validar que la operación esté sujeta al impuesto, la base imponible aplicable y el tratamiento contable y tributario vigente. El método de pago por sí solo no determina la obligación fiscal; active esta opción únicamente después de esa revisión.</p>
           </div>
 
