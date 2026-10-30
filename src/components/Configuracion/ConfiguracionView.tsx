@@ -132,6 +132,13 @@ export const ConfiguracionView: React.FC = () => {
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    const confirmed = window.confirm(
+      'RESTAURAR COPIA DE SEGURIDAD SICOVEN\\n\\nEsta operación reemplazará todas las empresas y sus datos contables actuales (asientos, compras, ventas, inventario, movimientos, retenciones, bancos y liquidaciones) por el contenido del archivo. No se puede deshacer.\\n\\n¿Deseas continuar?'
+    );
+    if (!confirmed) {
+      e.target.value = '';
+      return;
+    }
     const reader = new FileReader();
     reader.onload = async event => {
       const content = event.target?.result as string;
