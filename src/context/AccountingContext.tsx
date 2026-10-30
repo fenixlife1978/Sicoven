@@ -29,7 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 
@@ -385,15 +385,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           ' No se registró ningún contra-asiento.');
       }
     }
-    const linkedBankMovements = bankStatementMovements.filter(movement =>
-      movement.companyId === currentCompany.id &&
-      (movement.reconciledWithJournalEntryId === source.id ||
-        movement.reconciledJournalEntryIds?.includes(source.id))
-    );
-    if (linkedBankMovements.length > 0) {
-      throw new Error('Reversión bloqueada: el asiento está conciliado con ' + linkedBankMovements.length +
-        ' movimiento(s) bancario(s). Deshaga primero la conciliación mediante el flujo autorizado y luego ejecute la reversión integral.');
-    }
     if (linkedSale || linkedPurchase) {
       const documentId = linkedSale?.id || linkedPurchase?.id;
       const kind = linkedSale ? 'SALE_COLLECTION' : 'PURCHASE_PAYMENT';
@@ -419,6 +410,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const totalCreditUsd = reversedItems.reduce((sum, item) => sum + item.creditUsd, 0);
     if (Math.abs(totalDebitBs - totalCreditBs) >= 0.01 || Math.abs(totalDebitUsd - totalCreditUsd) >= 0.01) {
       throw new Error('La vista previa de reversión no cuadra en Bs. y USD; no se registró ningún cambio.');
+    }
+    const bankReadiness = validateBankStatementReversal({
+      companyId: currentCompany.id,
+      source,
+      reversalItems: reversedItems,
+      bankAccounts,
+      statementMovements: bankStatementMovements
+    });
+    if (!bankReadiness.ready) {
+      throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
+        ' No se registró ningún contra-asiento.');
     }
     const reversal = addJournalEntry({
       entryNumber: 0, // addJournalEntry asigna el siguiente correlativo inmutable.
@@ -453,6 +455,28 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setCreditSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
       ? { ...settlement, isReversed: true, reversedByJournalEntryId: reversal.id }
       : settlement));
+    if (bankReadiness.pairs.length > 0) {
+      const reconciledAt = new Date().toISOString();
+      const pairByOriginal = new Map(bankReadiness.pairs.map(pair => [pair.originalStatementId, pair]));
+      const pairByReversal = new Map(bankReadiness.pairs.map(pair => [pair.reversalStatementId, pair]));
+      setBankStatementMovements(prev => prev.map(statement => {
+        if (pairByOriginal.has(statement.id)) {
+          return {
+            ...statement, isReconciled: true, reconciledWithJournalEntryId: source.id,
+            reconciledJournalEntryIds: [...new Set([...(statement.reconciledJournalEntryIds || []), source.id])],
+            matchedBy: statement.matchedBy || 'MANUAL', reconciledAt: statement.reconciledAt || reconciledAt
+          };
+        }
+        if (pairByReversal.has(statement.id)) {
+          return {
+            ...statement, isReconciled: true, reconciledWithJournalEntryId: reversal.id,
+            reconciledJournalEntryIds: [...new Set([...(statement.reconciledJournalEntryIds || []), reversal.id])],
+            matchedBy: 'MANUAL', reconciledAt
+          };
+        }
+        return statement;
+      }));
+    }
     return reversal;
   };
 
