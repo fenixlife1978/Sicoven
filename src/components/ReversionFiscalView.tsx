@@ -3,7 +3,6 @@ import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lu
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
 import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
-import { calculatePurchaseCreditNote } from '../types/purchaseCreditNote';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
@@ -21,8 +20,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [correctionQuantity, setCorrectionQuantity] = useState('1');
   const [correctionDate, setCorrectionDate] = useState(today);
   const [correctionDocumentRef, setCorrectionDocumentRef] = useState('');
-  const [supplierReturnMovementId, setSupplierReturnMovementId] = useState('');
-  const [supplierReturnQuantity, setSupplierReturnQuantity] = useState('1');
+  const [supplierReturnLines, setSupplierReturnLines] = useState<Array<{productId:string;quantity:string}>>([{productId:'',quantity:'1'}]);
   const [supplierReturnDate, setSupplierReturnDate] = useState(today);
   const [supplierCreditNoteNumber, setSupplierCreditNoteNumber] = useState('');
   const [supplierCreditControlNumber, setSupplierCreditControlNumber] = useState('');
@@ -172,37 +170,25 @@ export const ReversionFiscalView: React.FC = () => {
       setFeedback({ kind: 'error', message: 'La factura, sus líneas, el Kardex y el asiento deben estar conciliados antes de registrar una nota de crédito.' });
       return;
     }
-    const movement = movements.find(item => item.id === supplierReturnMovementId && item.companyId === currentCompany.id);
-    if (!movement) {
-      setFeedback({ kind: 'error', message: 'Seleccione la entrada original de Kardex que se devolverá al proveedor.' });
-      return;
-    }
     try {
-      const priorReturned = movements.filter(item => item.companyId === currentCompany.id &&
-        item.correctionForMovementId === movement.id && item.type === 'SALIDA' &&
-        item.concept === 'DEVOLUCION_COMPRA').reduce((sum, item) => sum + Number(item.quantity || 0), 0);
-      const product = products.find(item => item.id === movement.productId && item.companyId === currentCompany.id);
-      if (!product) throw new Error('El artículo de la entrada original no existe.');
-      const preview = calculatePurchaseCreditNote({
-        purchase: linkedPurchase, product, products,
-        originalMovement: movement, quantity: Number(supplierReturnQuantity),
-        previouslyReturnedQuantity: priorReturned, returnDate: supplierReturnDate,
-        creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
-        reason: supplierCreditReason, currentStock: product.currentStock,
-        currentAverageCostBs: product.avgCostBs, closedThroughDate: currentCompany.closedThroughDate
+      const lines = supplierReturnLines.map(row => {
+        const movement = linkedInventoryMovements.find(item => item.productId === row.productId &&
+          item.type === 'ENTRADA' && item.concept === 'COMPRA' && !item.correctionForMovementId);
+        if (!movement) throw new Error('Seleccione un artículo con entrada original de Kardex.');
+        const quantity = Number(row.quantity);
+        if (!Number.isFinite(quantity) || quantity <= 0) throw new Error('Cada cantidad devuelta debe ser mayor que cero.');
+        return { productId: row.productId, originalMovementId: movement.id, quantity };
       });
       const note = addPurchaseCreditNote({
-        purchaseId: linkedPurchase.id, productId: product.id,
-        originalMovementId: movement.id, quantity: Number(supplierReturnQuantity),
-        returnDate: supplierReturnDate, creditNoteNumber: supplierCreditNoteNumber,
-        controlNumber: supplierCreditControlNumber, reason: supplierCreditReason
+        purchaseId: linkedPurchase.id, lines, returnDate: supplierReturnDate,
+        creditNoteNumber: supplierCreditNoteNumber, controlNumber: supplierCreditControlNumber,
+        reason: supplierCreditReason
       });
       setFeedback({ kind: 'success', message: 'Nota de crédito ' + note.creditNoteNumber +
-        ' registrada. Se descargaron ' + supplierReturnQuantity + ' unidades; CxP disminuyó ' +
-        formatBs(preview.netPayableReductionBs) + ' (' + formatUsd(preview.netPayableReductionUsd) +
-        '), con asiento enlazado y reversión fiscal proporcional.' });
-      setSupplierReturnMovementId('');
-      setSupplierReturnQuantity('1');
+        ' registrada con ' + note.creditNoteLines?.length + ' línea(s). CxP disminuyó ' +
+        formatBs(note.netPayableReductionBs || 0) + ' (' + formatUsd(note.netPayableReductionUsd || 0) +
+        '), con salidas de Kardex y contra-asiento vinculados.' });
+      setSupplierReturnLines([{productId:'',quantity:'1'}]);
       setSupplierCreditNoteNumber('');
       setSupplierCreditControlNumber('');
       setSupplierCreditReason('');
@@ -338,23 +324,27 @@ export const ReversionFiscalView: React.FC = () => {
                     {purchaseLineReconciliation?.ok ? <div className="mt-3 space-y-3 border-t border-amber-200 pt-3">
                       <strong className="text-slate-900">Registrar nota de crédito y devolución física</strong>
                       <p className="text-xs text-slate-700">Este proceso crea en una sola operación lógica la nota fiscal 03, la salida enlazada al movimiento original, el contra-asiento de inventario/CxP/IVA/retenciones/IGTF y la reducción del auxiliar de CxP. Solo admite facturas a crédito con saldo pendiente, costo promedio conciliado y productos con método promedio ponderado.</p>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                        <div className="sm:col-span-2"><label className="block text-xs font-semibold mb-1">Artículo / entrada original</label>
-                          <select value={supplierReturnMovementId} onChange={event=>setSupplierReturnMovementId(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white">
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between"><label className="text-xs font-semibold">Artículos / entradas originales de Kardex</label><button type="button" onClick={()=>setSupplierReturnLines(prev=>[...prev,{productId:'',quantity:'1'}])} className="rounded-lg border px-2 py-1 text-xs font-semibold">+ Agregar artículo</button></div>
+                        {supplierReturnLines.map((row,index)=><div key={index} className="grid grid-cols-1 sm:grid-cols-[1fr_140px_auto] gap-2 rounded-lg border bg-white p-2">
+                          <select value={row.productId} onChange={event=>setSupplierReturnLines(prev=>prev.map((item,i)=>i===index?{...item,productId:event.target.value}:item))} className="w-full rounded-lg border border-slate-300 p-2 text-sm bg-white">
                             <option value="">Seleccione artículo de la factura…</option>
                             {linkedInventoryMovements.filter(item=>item.type==='ENTRADA' && item.concept==='COMPRA' && !item.correctionForMovementId).map(item=>{
                               const returned=movements.filter(m=>m.correctionForMovementId===item.id && m.type==='SALIDA' && m.concept==='DEVOLUCION_COMPRA').reduce((sum,m)=>sum+Number(m.quantity||0),0);
-                              return <option key={item.id} value={item.id}>{item.productCode} · {item.productName} · disponible para devolver {Math.max(0,item.quantity-returned)}</option>;
+                              return <option key={item.id} value={item.productId}>{item.productCode} · {item.productName} · disponible {Math.max(0,item.quantity-returned)}</option>;
                             })}
                           </select>
-                        </div>
-                        <div><label className="block text-xs font-semibold mb-1">Cantidad a devolver</label><input type="number" min="0.000001" step="0.000001" value={supplierReturnQuantity} onChange={event=>setSupplierReturnQuantity(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm"/></div>
+                          <input aria-label={'Cantidad artículo '+(index+1)} type="number" min="0.000001" step="0.000001" value={row.quantity} onChange={event=>setSupplierReturnLines(prev=>prev.map((item,i)=>i===index?{...item,quantity:event.target.value}:item))} className="w-full rounded-lg border border-slate-300 p-2 text-sm" />
+                          <button type="button" disabled={supplierReturnLines.length===1} onClick={()=>setSupplierReturnLines(prev=>prev.filter((_,i)=>i!==index))} className="rounded-lg border px-2 py-1 text-xs disabled:opacity-30">Quitar</button>
+                        </div>)}
+                      </div>
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div><label className="block text-xs font-semibold mb-1">Fecha de la nota</label><input type="date" min={linkedPurchase.invoiceDate} value={supplierReturnDate} onChange={event=>setSupplierReturnDate(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de nota de crédito</label><input value={supplierCreditNoteNumber} onChange={event=>setSupplierCreditNoteNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="NC-000123"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Número de control</label><input value={supplierCreditControlNumber} onChange={event=>setSupplierCreditControlNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="00-000123"/></div>
-                        <div className="sm:col-span-2"><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 10 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
+                        <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 10 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
                       </div>
-                      <button type="button" onClick={submitSupplierCreditNote} disabled={!supplierReturnMovementId || !supplierCreditNoteNumber.trim() || !supplierCreditControlNumber.trim() || supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Registrar nota de crédito y devolución</button>
+                      <button type="button" onClick={submitSupplierCreditNote} disabled={supplierReturnLines.some(row=>!row.productId||Number(row.quantity)<=0)||!supplierCreditNoteNumber.trim()||!supplierCreditControlNumber.trim()||supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Registrar nota de crédito y devolución</button>
                     </div> : <p>La devolución permanece bloqueada hasta conciliar factura, líneas, Kardex y asiento. Corrija primero las diferencias indicadas arriba.</p>}</div> : correctableMovements.length > 0 ? <>
                     <label className="block font-semibold">Movimiento original</label>
                     <select value={correctionMovementId} onChange={event=>setCorrectionMovementId(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
