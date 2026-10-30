@@ -48,7 +48,7 @@ export const ReversionFiscalView: React.FC = () => {
   }, [getAuditEvents, currentCompany.id]);
   useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
 
-  const source = journalEntries.find(entry => entry.id === selectedId);
+  const source = journalEntries.find(entry => entry.id === selectedId && entry.companyId === currentCompany.id);
   const reversalAssessment = useMemo(() => {
     if (!source) return null;
     try {
@@ -320,7 +320,7 @@ export const ReversionFiscalView: React.FC = () => {
               <label className="block text-sm font-semibold text-slate-700">1. Seleccione el asiento original</label>
               <select value={selectedId} onChange={event=>{setSelectedId(event.target.value);setFeedback(null);}} className="w-full rounded-lg border border-slate-300 p-2.5 text-sm bg-white">
                 <option value="">Seleccionar asiento contabilizado…</option>
-                {journalEntries.filter(entry=>!entry.reversalOfEntryId && !hasReversal(entry.id)).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.entryNumber-a.entryNumber).map(entry=>(
+                {journalEntries.filter(entry=>entry.companyId===currentCompany.id && !entry.reversalOfEntryId && !hasReversal(entry.id)).slice().sort((a,b)=>b.date.localeCompare(a.date)||b.entryNumber-a.entryNumber).map(entry=>(
                   <option key={entry.id} value={entry.id}>#{entry.entryNumber} · {entry.date} · {entry.description.slice(0,90)}</option>
                 ))}
               </select>
