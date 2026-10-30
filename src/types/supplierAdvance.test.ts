@@ -11,7 +11,7 @@ const note = (overrides: Partial<PurchaseRecord> = {}): PurchaseRecord => ({
   islrRate: 0, islrWithheldBs: 0, bcvRate: 100, totalAmountUsd: 0,
   taxableBaseUsd: 0, vatAmountUsd: 0, vatWithheldUsd: 0, islrWithheldUsd: 0,
   igtfApplicable: false, igtfRate: 0, igtfAmountBs: 0, igtfAmountUsd: 0,
-  paymentTerm: 'CREDITO', paymentMethod: 'TRANSFERENCIA', journalEntryId: 'entry-1',
+  paymentTerm: 'CREDITO', paymentMethod: 'BS', journalEntryId: 'entry-1',
   originalPurchaseId: 'purchase-1', supplierAdvanceBs: 3000, supplierAdvanceUsd: 30,
   ...overrides
 });
