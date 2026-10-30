@@ -715,7 +715,25 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('6.1.1.11', 'credit', 'Usd') - Number(note.igtfAmountUsd || 0)) > 0.0001 ||
         accountSum('6.1.1.11', 'debit', 'Bs') > 0.02 || accountSum('6.1.1.11', 'debit', 'Usd') > 0.0001 ||
+        !Number.isFinite(Number(note.totalAmountUsd)) ||
+        !Number.isFinite(Number(note.taxableBaseUsd || 0)) ||
+        !Number.isFinite(Number(note.exemptAmountUsd || 0)) ||
+        !Number.isFinite(Number(note.vatAmountUsd || 0)) ||
+        !Number.isFinite(Number(note.vatWithheldUsd || 0)) ||
+        !Number.isFinite(Number(note.islrWithheldUsd || 0)) ||
+        !Number.isFinite(Number(note.igtfAmountUsd || 0)) ||
+        !Number.isFinite(Number(note.supplierAdvanceUsd || 0)) ||
+        !Number.isFinite(Number(note.netPayableReductionUsd)) ||
         Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.igtfAmountBs || 0)) > 0.02 ||
+        Math.abs(Number(note.totalAmountUsd) - Number(note.totalAmountBs) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.taxableBaseUsd || 0) - Number(note.taxableBaseBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.exemptAmountUsd || 0) - Number(note.exemptAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.vatAmountUsd || 0) - Number(note.vatAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.vatWithheldUsd || 0) - Number(note.vatWithheldBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.islrWithheldUsd || 0) - Number(note.islrWithheldBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.igtfAmountUsd || 0) - Number(note.igtfAmountBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.supplierAdvanceUsd || 0) - Number(note.supplierAdvanceBs || 0) / Number(note.bcvRate)) > 0.0001 ||
+        Math.abs(Number(note.netPayableReductionUsd) - Number(note.netPayableReductionBs) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(Number(note.netPayableReductionBs) + Number(note.supplierAdvanceBs || 0) -
            (Number(note.totalAmountBs) - Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0))) > 0.02 ||
          Math.abs(Number(note.netPayableReductionUsd) + Number(note.supplierAdvanceUsd || 0) -
