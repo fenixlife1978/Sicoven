@@ -147,6 +147,8 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'movements');
   assertAppendOnlyCollection(priorState, nextState, 'creditSettlements',
     ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
+  assertAppendOnlyCollection(priorState, nextState, 'supplierAdvanceSettlements',
+    ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
   assertAppendOnlyCollection(priorState, nextState, 'bankStatementMovements',
     ['isReconciled', 'reconciledWithJournalEntryId', 'reconciledJournalEntryIds', 'matchedBy', 'reconciledAt']);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
