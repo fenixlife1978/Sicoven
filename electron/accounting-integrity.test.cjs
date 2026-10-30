@@ -844,6 +844,68 @@ test('SQLite rejects supplier advance allocations that overconsume one credit no
     /saldo individual de una nota de crédito/);
 });
 
+test('SQLite restores an individual credit-note advance allocation after its settlement is reversed', () => {
+  const { prior, next, note } = supplierCreditFixture();
+  const source = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
+  const original = {
+    id: 'refund-reversed-journal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-20', description: 'Reembolso luego reversado',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 600, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 540, debitUsd: 0, creditUsd: 6 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 60, debitUsd: 0, creditUsd: 0 }
+    ]
+  };
+  const reversal = {
+    id: 'refund-reversal-journal', companyId: 'company-1', entryNumber: 4,
+    date: '2026-10-21', description: 'REVERSIÓN / reembolso',
+    type: 'AJUSTE', bcvRate: 100, reversalOfEntryId: original.id,
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 0, creditBs: 600, debitUsd: 0, creditUsd: 6 },
+      { accountCode: '1.1.2.03', debitBs: 540, creditBs: 0, debitUsd: 6, creditUsd: 0 },
+      { accountCode: '4.2.1.01', debitBs: 60, creditBs: 0, debitUsd: 0, creditUsd: 0 }
+    ]
+  };
+  const active = {
+    id: 'refund-active-settlement', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    kind: 'REFUND_RECEIVED', date: '2026-10-22', amountUsd: 5, amountBs: 450,
+    advanceBookValueBs: 450, cashReceivedBs: 500, bcvRate: 100,
+    sourceCreditNoteIds: [source.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 5, bookValueBs: 450 }],
+    treasuryAccountCode: '1.1.1.03', journalEntryId: 'refund-active-journal',
+    createdAt: '2026-10-22T10:00:00.000Z'
+  };
+  const activeJournal = {
+    id: 'refund-active-journal', companyId: 'company-1', entryNumber: 5,
+    date: '2026-10-22', description: 'Reembolso posterior',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 500, creditBs: 0, debitUsd: 5, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 450, debitUsd: 0, creditUsd: 5 },
+      { accountCode: '4.2.1.01', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 0 }
+    ]
+  };
+  const reversedSettlement = {
+    id: 'refund-reversed-settlement', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    kind: 'REFUND_RECEIVED', date: '2026-10-20', amountUsd: 6, amountBs: 540,
+    advanceBookValueBs: 540, cashReceivedBs: 600, bcvRate: 100,
+    sourceCreditNoteIds: [source.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 6, bookValueBs: 540 }],
+    treasuryAccountCode: '1.1.1.03', journalEntryId: original.id,
+    isReversed: true, reversedByJournalEntryId: reversal.id,
+    createdAt: '2026-10-20T10:00:00.000Z'
+  };
+  const adjustedNext = {
+    ...next,
+    purchases: next.purchases.map(item => item.id === source.id ? source : item),
+    journalEntries: [...next.journalEntries, original, reversal, activeJournal],
+    supplierAdvanceSettlements: [reversedSettlement, active],
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, adjustedNext));
+});
+
 test('SQLite rejects supplier advance settlements with an unbalanced linked journal', () => {
   const { prior, next, note } = supplierCreditFixture();
   const source = { ...note, supplierAdvanceUsd: 10, supplierAdvanceBs: 900 };
