@@ -380,6 +380,7 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'fiscal_document_reversal_marked' ? 'Documento fiscal marcado como reversado contablemente'
               : event.eventType === 'credit_settlement_reversed' ? 'Liquidación de crédito reversada'
               : event.eventType === 'bank_statement_reconciled' ? 'Movimiento bancario conciliado'
+              : event.eventType === 'bank_statement_unreconciled' ? 'Movimiento bancario desconciliado'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
