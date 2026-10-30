@@ -279,10 +279,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const result = operation();
       if (result && typeof (result as any).then === 'function') {
-        // Async persistence operations publish no React state before commit.
-        // Do not restore whole snapshots or sequence maps on rejection: another
-        // invoice operation may have legitimately committed while SQLite was pending.
-        // A failed async operation may leave a harmless sequence gap, never a duplicate.
+        // Async operations may publish functional React updates while the shared
+        // SQLite snapshot queue is pending. If persistence rejects, the provider
+        // fails closed and requires a restart to reload the last committed database.
+        // Never restore whole snapshots or sequence maps here: concurrent operations
+        // may have been applied while SQLite was pending. A harmless sequence gap is
+        // preferable to erasing another operation or reusing a document number.
         return result;
       }
       return result;
