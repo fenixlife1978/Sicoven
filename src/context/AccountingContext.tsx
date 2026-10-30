@@ -3285,12 +3285,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (!data || typeof data !== 'object' || requiredCollections.some(key => !Array.isArray(data[key]))) {
         throw new Error('El respaldo está incompleto o no contiene todas las colecciones requeridas.');
       }
-      if (data.companies.length === 0 || data.companies.some((c: any) =>
-        !c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string'
-      )) throw new Error('El respaldo contiene empresas inválidas.');
-      const companyIds = new Set(data.companies.map((c: Company) => c.id));
-      if (data.journalEntries.some((entry: any) => !entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items))) {
-        throw new Error('Hay asientos asociados a empresas inexistentes o con líneas inválidas.');
+      const companyIds = new Set<string>();
+      if (data.companies.length === 0 || data.companies.some((c: any) => {
+        if (!c || typeof c.id !== 'string' || !c.id.trim() || typeof c.rif !== 'string' || typeof c.name !== 'string' ||
+            companyIds.has(c.id)) return true;
+        companyIds.add(c.id);
+        return false;
+      })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
+      const journalIds = new Set<string>();
+      const journalNumbers = new Set<string>();
+      if (data.journalEntries.some((entry: any) => {
+        if (!entry || typeof entry.id !== 'string' || !entry.id.trim() || journalIds.has(entry.id) ||
+            !companyIds.has(entry.companyId) || !Number.isInteger(entry.entryNumber) || entry.entryNumber <= 0 ||
+            !Array.isArray(entry.items)) return true;
+        const sequenceKey = entry.companyId + '|' + entry.entryNumber;
+        if (journalNumbers.has(sequenceKey)) return true;
+        journalIds.add(entry.id);
+        journalNumbers.add(sequenceKey);
+        return false;
+      })) {
+        throw new Error('Hay asientos con IDs/correlativos duplicados, empresas inexistentes o líneas inválidas.');
       }
       const accountByCode = new Map<string, Account>();
       for (const account of data.accounts as Account[]) {
