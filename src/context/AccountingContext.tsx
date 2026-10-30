@@ -2384,6 +2384,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               ...m,
               isReconciled: false,
               matchedBy: undefined,
+              reconciledJournalEntryIds: m.reconciledWithJournalEntryId
+                ? [...new Set([...(m.reconciledJournalEntryIds || []), m.reconciledWithJournalEntryId])]
+                : m.reconciledJournalEntryIds,
               reconciledWithJournalEntryId: undefined,
               reconciledAt: undefined
             }
@@ -2400,6 +2403,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               ...m,
               isReconciled: false,
               matchedBy: undefined,
+              reconciledJournalEntryIds: m.reconciledWithJournalEntryId
+                ? [...new Set([...(m.reconciledJournalEntryIds || []), m.reconciledWithJournalEntryId])]
+                : m.reconciledJournalEntryIds,
               reconciledWithJournalEntryId: undefined,
               reconciledAt: undefined
             }
