@@ -221,17 +221,97 @@ function validateAccountingSnapshot(previousState, nextState) {
   // No permitir que una importación de respaldo o una escritura directa del
   // snapshot salte las guardias del formulario/contexto para notas de crédito.
   const priorMovementIdSet = new Set(asArray(priorState.movements).map(item => String(item.id)));
-  for (const movement of asArray(nextState.movements)) {
-    if (!priorMovementIdSet.has(String(movement.id)) &&
-        movement.type === 'SALIDA' && movement.concept === 'DEVOLUCION_COMPRA') {
-      throw new Error('SQLite bloqueó la devolución a proveedor: falta una nota de crédito conciliada y contabilizada mediante el flujo integral autorizado.');
+  const priorPurchaseIdSet = new Set(asArray(priorState.purchases).map(item => String(item.id)));
+  const newSupplierReturns = asArray(nextState.movements).filter(movement =>
+    !priorMovementIdSet.has(String(movement.id)) &&
+    movement.type === 'SALIDA' && movement.concept === 'DEVOLUCION_COMPRA');
+  const newCreditNotes = asArray(nextState.purchases).filter(purchase =>
+    !priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType === '03');
+  for (const purchase of asArray(nextState.purchases)) {
+    if (!priorPurchaseIdSet.has(String(purchase.id)) && !['01', '03'].includes(purchase.documentType)) {
+      throw new Error('SQLite bloqueó una nota de débito/crédito sin flujo contable autorizado.');
     }
   }
-  const priorPurchaseIdSet = new Set(asArray(priorState.purchases).map(item => String(item.id)));
-  for (const purchase of asArray(nextState.purchases)) {
-    if (!priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType !== '01') {
-      throw new Error('SQLite bloqueó una nota de débito/crédito de proveedor: el flujo fiscal integral aún no está habilitado.');
+  if (newSupplierReturns.length !== newCreditNotes.length) {
+    throw new Error('SQLite bloqueó la operación: cada nota de crédito debe tener exactamente su salida de Kardex asociada y viceversa.');
+  }
+  for (const note of newCreditNotes) {
+    const original = asArray(nextState.purchases).find(item =>
+      item.id === note.originalPurchaseId && item.companyId === note.companyId && item.documentType === '01');
+    const lines = Array.isArray(note.creditNoteLines) ? note.creditNoteLines : [];
+    if (!original || original.isCancelled || normalizeRif(note.supplierRif) !== normalizeRif(original.supplierRif) ||
+        note.affectedInvoiceNumber !== original.invoiceNumber ||
+        !note.creditNoteNumber || !note.controlNumber || String(note.notes || '').trim().length < 10 ||
+        lines.length !== 1 || !note.journalEntryId ||
+        !Number.isFinite(Number(note.netPayableReductionBs)) || Number(note.netPayableReductionBs) <= 0 ||
+        !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) <= 0) {
+      throw new Error('SQLite rechazó la nota de crédito: falta factura original, proveedor, soporte, línea de Kardex o reducción de CxP válida.');
     }
+    const line = lines[0];
+    const originalMovement = asArray(nextState.movements).find(item =>
+      item.id === line.originalMovementId && item.companyId === note.companyId &&
+      item.type === 'ENTRADA' && item.concept === 'COMPRA' &&
+      normalizeDocument(item.documentRef) === normalizeDocument('FAC-' + original.invoiceNumber));
+    const returnMovement = asArray(nextState.movements).find(item =>
+      item.id === line.movementId && item.companyId === note.companyId);
+    const journal = nextById.get(String(note.journalEntryId));
+    if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
+        returnMovement.type !== 'SALIDA' || returnMovement.concept !== 'DEVOLUCION_COMPRA' ||
+        returnMovement.correctionForMovementId !== originalMovement.id ||
+        normalizeDocument(returnMovement.documentRef) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber) ||
+        Math.abs(Number(returnMovement.quantity) - Number(line.quantity)) > 0.000001 ||
+        Math.abs(Number(returnMovement.totalCostBs) - Number(line.inventoryCostBs)) > 0.02 ||
+        returnMovement.journalEntryId !== journal?.id ||
+        !journal || journal.companyId !== note.companyId || journal.type !== 'AJUSTE' ||
+        journal.date !== note.invoiceDate || normalizeDocument(journal.referenceDoc) !== normalizeDocument(returnMovement.documentRef)) {
+      throw new Error('SQLite rechazó la nota de crédito: la salida física no concilia con la entrada original y el asiento enlazado.');
+    }
+    const originalLine = (original.inventoryLines || []).find(item => item.productId === line.productId);
+    if (!originalLine || Number(line.quantity) <= 0 ||
+        Math.abs(Number(line.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
+        Math.abs(Number(line.inventoryCostBs) - Number(line.quantity) * Number(line.unitCostBs)) > 0.02) {
+      throw new Error('SQLite rechazó la nota de crédito: la cantidad/costo de devolución no concilia con la línea original de factura.');
+    }
+    const allReturned = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
+      .flatMap(item => Array.isArray(item.creditNoteLines) ? item.creditNoteLines : [])
+      .filter(item => item.productId === line.productId)
+      .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    if (allReturned > Number(originalLine.quantity) + 0.000001) {
+      throw new Error('SQLite rechazó la nota de crédito: las devoluciones acumuladas superan la cantidad facturada.');
+    }
+    const debitsBs = journal.items.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+    const creditsBs = journal.items.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+    const debitsUsd = journal.items.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+    const creditsUsd = journal.items.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+    const accountSum = (code, side, currency) => journal.items
+      .filter(item => item.accountCode === code)
+      .reduce((sum, item) => sum + Number(item[side + currency] || 0), 0);
+    const inventoryCode = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId)?.inventoryAccountCode || '1.1.4.01';
+    if (Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
+        Math.abs(accountSum('2.1.1.01', 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
+        Math.abs(accountSum(inventoryCode, 'credit', 'Bs') - Number(line.inventoryCostBs)) > 0.02 ||
+        Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
+        Math.abs(accountSum('2.1.2.03', 'debit', 'Bs') - Number(note.vatWithheldBs || 0)) > 0.02 ||
+        Math.abs(accountSum('2.1.2.04', 'debit', 'Bs') - Number(note.islrWithheldBs || 0)) > 0.02 ||
+        Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02) {
+      throw new Error('SQLite rechazó la nota de crédito: el asiento no está balanceado o no revierte CxP, inventario, IVA, retenciones e IGTF.');
+    }
+    const paid = asArray(nextState.creditSettlements).filter(item =>
+      item.companyId === original.companyId && item.documentId === original.id &&
+      item.kind === 'PURCHASE_PAYMENT' && !item.isReversed)
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const credited = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
+      .reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
+    const originalNetUsd = Number(original.totalAmountUsd) -
+      Number(original.vatWithheldUsd || 0) - Number(original.islrWithheldUsd || 0);
+    if (paid + credited > originalNetUsd + 0.005) {
+      throw new Error('SQLite rechazó la nota de crédito: pagos más notas superan el principal neto de CxP original.');
+    }
+  }
+  for (const movement of newSupplierReturns) {
+    const linked = newCreditNotes.some(note =>
+      (note.creditNoteLines || []).some(line => line.movementId === movement.id));
+    if (!linked) throw new Error('SQLite bloqueó una salida por devolución a proveedor sin nota de crédito fiscal enlazada.');
   }
 
   const priorPurchaseIds = new Set(asArray(priorState.purchases).map(item => String(item.id)));
