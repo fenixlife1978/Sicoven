@@ -598,6 +598,10 @@ function validateAccountingSnapshot(previousState, nextState) {
           journalMovementIds.has(String(returnMovement.id)) || sourceMovementIds.has(String(line.originalMovementId)) ||
           originalMovement.productId !== line.productId || returnMovement.productId !== line.productId ||
           !originalLine ||
+          !Number.isFinite(Number(originalMovement.quantity)) ||
+          !Number.isFinite(Number(originalMovement.unitCostBs)) ||
+          !Number.isFinite(Number(originalMovement.totalCostBs)) ||
+          !Number.isFinite(Number(originalMovement.bcvRate)) ||
           Math.abs(Number(originalMovement.quantity) - Number(originalLine.quantity)) > 0.000001 ||
           Math.abs(Number(originalMovement.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
           Math.abs(Number(originalMovement.totalCostBs) - Number(originalLine.quantity) * Number(originalLine.unitCostBs)) > 0.02 ||
