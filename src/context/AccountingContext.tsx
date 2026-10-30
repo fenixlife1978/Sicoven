@@ -30,7 +30,7 @@ import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters'
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, normalizeProductionRecipe, type CostLayer } from '../types/inventoryAccounting';
+import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 
@@ -1746,7 +1746,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       avgCostUsd: initialCostBs / rate,
       lastCostBs: initialCostBs,
       lastCostUsd: initialCostBs / rate,
-      inventoryAccountCode: prodData.inventoryAccountCode || '1.1.4.01',
+      inventoryAccountCode: prodData.inventoryAccountCode || getDefaultInventoryAccountCode(prodData.itemType),
       costOfSalesAccountCode: prodData.costOfSalesAccountCode || '5.1.1.01',
       adjustmentAccountCode: prodData.adjustmentAccountCode || '5.1.2.01',
       openingBalanceAccountCode: prodData.openingBalanceAccountCode || '3.3.1.01',
@@ -1828,7 +1828,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ...row, id: 'prod-import-' + Date.now() + '-' + prepared.length + '-' + Math.floor(Math.random() * 100000),
         companyId: currentCompany.id, code, name, currentStock: quantity, avgCostBs: unitCostBs,
         avgCostUsd: unitCostBs / rate, lastCostBs: unitCostBs, lastCostUsd: unitCostBs / rate,
-        inventoryAccountCode: row.inventoryAccountCode || '1.1.4.01',
+        inventoryAccountCode: row.inventoryAccountCode || getDefaultInventoryAccountCode(row.itemType),
         costOfSalesAccountCode: row.costOfSalesAccountCode || '5.1.1.01',
         adjustmentAccountCode: row.adjustmentAccountCode || '5.1.2.01',
         openingBalanceAccountCode: row.openingBalanceAccountCode || '3.3.1.01',
@@ -1972,7 +1972,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         balanceTotalUsd: Math.round(newStock * newAverageUsd * 1000000) / 1000000,
         bcvRate: rate, costingMethod: product.costingMethod || 'PROMEDIO_PONDERADO'
       };
-      const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+      const inventoryCode = product.inventoryAccountCode || getDefaultInventoryAccountCode(product.itemType);
       const costCode = product.costOfSalesAccountCode || '5.1.1.01';
       const adjustmentCode = product.adjustmentAccountCode || '5.1.2.01';
       const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
@@ -2262,7 +2262,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
 
     const generatedEntries: JournalEntry[] = [];
-    const inventoryAccountCode = prod.inventoryAccountCode || '1.1.4.01';
+    const inventoryAccountCode = prod.inventoryAccountCode || getDefaultInventoryAccountCode(prod.itemType);
     const costAccountCode = prod.costOfSalesAccountCode || '5.1.1.01';
     const adjustmentAccountCode = prod.adjustmentAccountCode || '5.1.2.01';
     const inventoryAccount = accounts.find(a => a.code === inventoryAccountCode);
@@ -2406,7 +2406,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const unitCostBs = totalBs / requiredQuantity;
       totalProductionCostBs += totalBs;
-      const inventoryCode = component.inventoryAccountCode || '1.1.4.01';
+      const inventoryCode = component.inventoryAccountCode || getDefaultInventoryAccountCode(component.itemType);
       const inventoryAccount = accounts.find(a => a.code === inventoryCode && a.isMovement);
       if (!inventoryAccount) throw new Error('La cuenta de inventario del componente ' + component.code + ' no es válida.');
       const movementId = 'mov-prod-consume-' + Date.now() + '-' + Math.floor(Math.random() * 100000);
@@ -2429,7 +2429,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     totalProductionCostBs = Math.round(totalProductionCostBs * 100) / 100;
     const productionUnitCostBs = totalProductionCostBs / outputQuantity;
     const weightedFinished = calculateWeightedAverageCost(finished.currentStock, finished.avgCostBs, outputQuantity, productionUnitCostBs, rate);
-    const finishedInventoryCode = finished.inventoryAccountCode || '1.1.4.01';
+    const finishedInventoryCode = finished.inventoryAccountCode || getDefaultInventoryAccountCode(finished.itemType);
     const finishedInventoryAccount = accounts.find(a => a.code === finishedInventoryCode && a.isMovement);
     if (!finishedInventoryAccount) throw new Error('La cuenta de inventario del producto terminado no es válida.');
     if (finished.itemType === 'PRODUCTO_EN_PROCESO' && finishedInventoryCode !== '1.1.4.04') throw new Error('El producto en proceso debe estar asociado a la cuenta 1.1.4.04.');
