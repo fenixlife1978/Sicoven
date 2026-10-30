@@ -128,10 +128,18 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
 
   const priorNumberKeys = new Set(priorEntries.map(entry => String(entry.companyId) + ':' + String(entry.entryNumber)));
+  const maxPriorNumberByCompany = new Map();
+  for (const prior of priorEntries) {
+    const key = String(prior.companyId);
+    maxPriorNumberByCompany.set(key, Math.max(maxPriorNumberByCompany.get(key) || 0, Number(prior.entryNumber) || 0));
+  }
   const seenNewNumbers = new Set();
   for (const entry of nextEntries) {
     const numberKey = String(entry.companyId) + ':' + String(entry.entryNumber);
     if (priorById.has(String(entry.id))) continue;
+    if (!Number.isInteger(Number(entry.entryNumber)) || Number(entry.entryNumber) <= (maxPriorNumberByCompany.get(String(entry.companyId)) || 0)) {
+      throw new Error('SQLite bloqueó un correlativo de asiento no creciente en la empresa ' + entry.companyId + '.');
+    }
     if (priorNumberKeys.has(numberKey) || seenNewNumbers.has(numberKey)) {
       throw new Error('SQLite bloqueó un número de asiento duplicado en la empresa ' + entry.companyId + '.');
     }
