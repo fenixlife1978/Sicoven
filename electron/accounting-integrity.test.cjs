@@ -25,6 +25,18 @@ const emptyState = (journalEntries = []) => ({
   bankStatementMovements: [], vatVouchers: [], islrVouchers: []
 });
 
+test('SQLite rejects reuse of a lower unused journal sequence number', () => {
+  const prior = { ...sourceEntry(), entryNumber: 5 };
+  const lower = { ...sourceEntry(), id: 'entry-lower', entryNumber: 4 };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState([prior]), emptyState([prior, lower])
+  ), /correlativo de asiento no creciente/);
+  const next = { ...sourceEntry(), id: 'entry-next', entryNumber: 6 };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState([prior]), emptyState([prior, next])
+  ));
+});
+
 test('SQLite rejects physical deletion of a posted journal entry', () => {
   assert.throws(
     () => validateAccountingSnapshot(emptyState([sourceEntry()]), emptyState([])),
