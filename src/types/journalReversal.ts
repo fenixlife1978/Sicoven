@@ -202,7 +202,8 @@ export function validateBankStatementReversal(input: {
   const usedOppositeIds = new Set<string>();
   const usedAccountCodes = new Set<string>();
   for (const original of originalRows) {
-    if (original.isReconciled && original.reconciledWithJournalEntryId !== source.id) {
+    if ((original.isReconciled && original.reconciledWithJournalEntryId !== source.id) ||
+        (original.reconciledWithJournalEntryId && original.reconciledWithJournalEntryId !== source.id)) {
       return { ready: false, reason: 'El movimiento bancario ' + original.reference + ' fue vinculado posteriormente a otro asiento; requiere resolver esa conciliación antes de reversar.', pairs: [] };
     }
     const bank = bankAccounts.find(item => item.id === original.bankAccountId && item.companyId === companyId);
