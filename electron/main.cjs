@@ -379,7 +379,7 @@ app.whenReady().then(async () => {
       return { ok: false, message: 'Sesión no válida o licencia no autorizada.', events: [] };
     }
     const limit = Math.min(500, Math.max(1, Math.floor(Number(requestedLimit) || 100)));
-    const rows = db.prepare('SELECT id,event_type,details_json,created_at FROM audit_events ORDER BY id DESC LIMIT ?').all(limit);
+    const rows = db.prepare("SELECT id,event_type,details_json,created_at FROM audit_events WHERE event_type <> 'state_saved' ORDER BY id DESC LIMIT ?").all(limit);
     return {
       ok: true,
       events: rows.map(row => {
