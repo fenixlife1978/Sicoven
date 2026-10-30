@@ -14,6 +14,7 @@ export const DEFAULT_CHART_OF_ACCOUNTS: Account[] = [
   { code: '1.1.2', name: 'Cuentas y Documentos por Cobrar', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.2.01', name: 'Cuentas por Cobrar Clientes Comerciales', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.2' },
   { code: '1.1.2.02', name: 'Cuentas por Cobrar Empleados y Accionistas', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.2' },
+  { code: '1.1.2.03', name: 'Anticipos y Saldos a Favor en Proveedores', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.2' },
 
   { code: '1.1.3', name: 'Créditos Fiscales y Tributos a Favor (SENIAT)', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' },
   { code: '1.1.3.01', name: 'Crédito Fiscal IVA Compras (Alícuota General 16%)', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.3' },
