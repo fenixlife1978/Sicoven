@@ -28,6 +28,16 @@ test('incluye IGTF en el total sin sumarlo a la base ni al IVA', () => {
   assert.equal(hasConsistentFiscalDocumentAmounts(document), true);
 });
 
+test('mantiene compatibilidad con respaldos históricos que no guardaban IGTF en USD', () => {
+  const legacyDocument = {
+    ...baseDocument,
+    totalAmountBs: 119.48,
+    totalAmountUsd: 119.48 / 58,
+    igtfAmountBs: 3.48
+  };
+  assert.equal(hasConsistentFiscalDocumentAmounts(legacyDocument), true);
+});
+
 test('rechaza importes USD que no correspondan a la tasa BCV registrada', () => {
   assert.equal(hasConsistentFiscalDocumentAmounts({
     ...baseDocument,
