@@ -490,6 +490,7 @@ test('SQLite reconciles concurrent supplier returns independently when companies
   const clone = (value, suffix) => ({ ...value,
     id: value.id + suffix, companyId: 'company-2',
     ...(value.journalEntryId ? { journalEntryId: value.journalEntryId + suffix } : {}),
+    ...(value.correctionEntryId ? { correctionEntryId: value.correctionEntryId + suffix } : {}),
     ...(value.purchaseRecordId ? { purchaseRecordId: value.purchaseRecordId + suffix } : {}),
     ...(value.originalPurchaseId ? { originalPurchaseId: value.originalPurchaseId + suffix } : {}),
     ...(value.originalMovementId ? { originalMovementId: value.originalMovementId + suffix } : {}),
