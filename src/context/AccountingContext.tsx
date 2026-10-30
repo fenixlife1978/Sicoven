@@ -129,6 +129,7 @@ interface AccountingContextType {
   resetFactoryData: () => Promise<void>;
   exportBackupJson: () => string;
   importBackupJson: (jsonData: string) => boolean;
+  restoreBackupJson: (jsonData: string) => Promise<boolean>;
 }
 
 const AccountingContext = createContext<AccountingContextType | undefined>(undefined);
@@ -3281,6 +3282,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return JSON.stringify(backup, null, 2);
   };
 
+  const restoreBackupJson = async (jsonData: string): Promise<boolean> => {
+    // Captura el estado completo antes de aplicar un respaldo. Si SQLite rechaza
+    // la escritura, restaura también la memoria de React y vuelve a intentar
+    // persistir el estado previo; nunca deja activa una importación no confirmada.
+    const previousBackup = exportBackupJson();
+    const previousCompanyId = currentCompanyId;
+    if (!importBackupJson(jsonData)) return false;
+    try {
+      await waitForPersistence();
+      return true;
+    } catch (persistenceError) {
+      const rolledBack = importBackupJson(previousBackup);
+      if (rolledBack) {
+        if (companies.some(company => company.id === previousCompanyId)) {
+          setCurrentCompanyId(previousCompanyId);
+        }
+        try {
+          await waitForPersistence();
+        } catch {
+          throw new Error('SQLite rechazó el respaldo y tampoco pudo confirmar la restauración del estado anterior. La memoria de SICOVEN volvió al estado previo; cierre la aplicación y revise la base local antes de continuar.');
+        }
+      }
+      throw persistenceError;
+    }
+  };
+
   const importBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
@@ -3507,7 +3534,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         resetToSampleData,
         resetFactoryData,
         exportBackupJson,
-        importBackupJson
+        importBackupJson,
+        restoreBackupJson
       }}
     >
       {children}
