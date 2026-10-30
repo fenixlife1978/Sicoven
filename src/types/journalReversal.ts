@@ -485,6 +485,7 @@ export interface JournalReversalAssessment {
   linkedInventoryMovementCount: number;
   linkedBankMovementCount: number;
   activeSettlementCount: number;
+  activeSupplierAdvanceSettlementCount: number;
   inventoryReadiness?: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation;
   bankReadiness: BankStatementReversalReadiness;
   debitBs: number;
