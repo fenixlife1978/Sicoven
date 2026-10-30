@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
@@ -26,18 +26,21 @@ export const ReversionFiscalView: React.FC = () => {
   const [auditEvents, setAuditEvents] = useState<AccountingAuditEvent[]>([]);
   const [auditLoading, setAuditLoading] = useState(false);
   const [auditError, setAuditError] = useState<string | null>(null);
-  const refreshAuditEvents = async () => {
+  const refreshAuditEvents = useCallback(async () => {
     setAuditLoading(true);
     try {
-      setAuditEvents(await getAuditEvents(200));
+      const events = await getAuditEvents(200);
+      setAuditEvents(events.filter(event =>
+        !event.details.companyId || event.details.companyId === currentCompany.id
+      ));
       setAuditError(null);
     } catch (error) {
       setAuditError(error instanceof Error ? error.message : 'No se pudo leer el historial de auditoría.');
     } finally {
       setAuditLoading(false);
     }
-  };
-  useEffect(() => { void refreshAuditEvents(); }, []);
+  }, [getAuditEvents, currentCompany.id]);
+  useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
 
   const source = journalEntries.find(entry => entry.id === selectedId);
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
