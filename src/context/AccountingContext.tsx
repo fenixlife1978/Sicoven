@@ -738,6 +738,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el asiento contable.');
+    }
     if (!isValidIsoDate(entry.date)) throw new Error('El asiento requiere una fecha válida.');
     if (currentCompany.closedThroughDate && entry.date <= currentCompany.closedThroughDate) {
       throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
