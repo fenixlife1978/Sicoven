@@ -59,6 +59,39 @@ jobs:
       - name: Package full Windows installer
         if: startsWith(github.ref, 'refs/tags/v')
         run: npm run dist
+      - name: Install and launch smoke test
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
+          if (-not $installer) { throw 'No se encontró el instalador completo para la prueba de instalación.' }
+          $installDir = Join-Path $env:RUNNER_TEMP 'SICOVEN-Release-Smoke'
+          if (Test-Path $installDir) { Remove-Item -Path $installDir -Recurse -Force }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @('/S', "/D=$installDir") -PassThru
+          if (-not $install.WaitForExit(120000)) {
+            $autoApplication = Get-Process -Name 'SICOVEN' -ErrorAction SilentlyContinue
+            if ($autoApplication) { & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null }
+            if (-not $install.WaitForExit(30000)) { throw 'El instalador NSIS no terminó dentro del tiempo permitido.' }
+          }
+          $install.Refresh()
+          if ($install.ExitCode -ne 0) { throw "El instalador NSIS terminó con código $($install.ExitCode)." }
+          $app = Join-Path $installDir 'SICOVEN.exe'
+          $asar = Join-Path $installDir 'resources\app.asar'
+          $sqliteNative = Join-Path $installDir 'resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node'
+          foreach ($required in @($app, $asar, $sqliteNative)) {
+            if (-not (Test-Path $required -PathType Leaf)) { throw "Falta un archivo esencial después de instalar: $required" }
+          }
+          $autoApplication = Get-Process -Name 'SICOVEN' -ErrorAction SilentlyContinue
+          if ($autoApplication) {
+            & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null
+            Start-Sleep -Seconds 2
+          }
+          $application = Start-Process -FilePath $app -ArgumentList @('--disable-gpu') -PassThru
+          Start-Sleep -Seconds 12
+          $application.Refresh()
+          if ($application.HasExited) { throw "SICOVEN se cerró durante el arranque de prueba. Código: $($application.ExitCode)" }
+          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          Write-Host 'Instalación, recursos Electron, SQLite nativo y arranque de SICOVEN verificados.'
       - name: Verify full installer
         if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
