@@ -1291,6 +1291,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const purchaseCreditNoteInFlightRef = useRef(false);
   const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('La persistencia SQLite no está disponible o falló. Reinicie SICOVEN antes de registrar una devolución.');
+    }
     if (purchaseCreditNoteInFlightRef.current) throw new Error('Ya hay una devolución a proveedor en proceso. Espere a que termine antes de intentar otra.');
     purchaseCreditNoteInFlightRef.current = true;
     try {
