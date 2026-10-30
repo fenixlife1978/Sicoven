@@ -1206,20 +1206,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const deletePurchase = (id: string) => {
     const purchase = purchases.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!purchase) return;
-    const hasSettlement = creditSettlements.some(item =>
-      item.companyId === currentCompany.id && item.documentId === id && item.kind === 'PURCHASE_PAYMENT'
-    );
-    const hasJournal = Boolean(purchase.journalEntryId) || journalEntries.some(entry =>
-      entry.companyId === currentCompany.id && entry.type === 'COMPRA' &&
-      entry.referenceDoc === `FAC-${purchase.invoiceNumber}`
-    );
-    if (hasJournal || hasSettlement) {
-      if (typeof window !== 'undefined') window.alert('Esta factura tiene contabilización o pagos vinculados y no puede eliminarse físicamente. Registre una reversión contable para corregirla.');
-      return;
+    if (typeof window !== 'undefined') {
+      window.alert('Las facturas de compra registradas son documentos históricos inmutables. No se eliminan físicamente; cualquier corrección requiere nota fiscal válida y reversión contable coordinada.');
     }
-    setPurchases(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
-    setVatVouchers(prev => prev.filter(voucher => voucher.purchaseRecordId !== id));
-    setIslrVouchers(prev => prev.filter(voucher => voucher.id !== `vouch-islr-${id}`));
   };
 
   // Registrar venta y generar asiento contable
@@ -1419,18 +1408,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const deleteSale = (id: string) => {
     const sale = sales.find(item => item.id === id && item.companyId === currentCompany.id);
     if (!sale) return;
-    const hasSettlement = creditSettlements.some(item =>
-      item.companyId === currentCompany.id && item.documentId === id && item.kind === 'SALE_COLLECTION'
-    );
-    const hasJournal = Boolean(sale.journalEntryId) || journalEntries.some(entry =>
-      entry.companyId === currentCompany.id && entry.type === 'VENTA' &&
-      entry.referenceDoc === `FAC-${sale.invoiceNumber}`
-    );
-    if (hasJournal || hasSettlement) {
-      if (typeof window !== 'undefined') window.alert('Esta factura tiene contabilización o cobros vinculados y no puede eliminarse físicamente. Registre una reversión contable para corregirla.');
-      return;
+    if (typeof window !== 'undefined') {
+      window.alert('Las facturas de venta registradas son documentos históricos inmutables. No se eliminan físicamente; cualquier corrección requiere soporte fiscal válido y reversión contable coordinada.');
     }
-    setSales(prev => prev.filter(item => item.id !== id || item.companyId !== currentCompany.id));
   };
 
   // Inventario contable: cada movimiento valida existencias y conserva la tasa histórica.
