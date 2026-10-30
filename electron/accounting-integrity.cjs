@@ -438,7 +438,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
       journalMovementIds.add(String(returnMovement.id));
       totalInventoryCost += Number(line.inventoryCostBs);
-      const allReturned = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
+      const allReturned = asArray(nextState.purchases).filter(item => item.companyId === original.companyId && item.originalPurchaseId === original.id)
         .flatMap(item => Array.isArray(item.creditNoteLines) ? item.creditNoteLines : [])
         .filter(item => item.productId === line.productId)
         .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
@@ -447,7 +447,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
       const priorProduct = asArray(priorState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
       const nextProduct = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId);
-      const allNewReturnsForProduct = newSupplierReturns.filter(item => item.productId === line.productId)
+      const allNewReturnsForProduct = newSupplierReturns.filter(item => item.companyId === note.companyId && item.productId === line.productId)
         .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       if (!priorProduct || !nextProduct ||
           Math.abs(Number(priorProduct.currentStock) - allNewReturnsForProduct - Number(nextProduct.currentStock)) > 0.000001 ||
@@ -492,7 +492,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       item.companyId === original.companyId && item.documentId === original.id &&
       item.kind === 'PURCHASE_PAYMENT' && !item.isReversed)
       .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
-    const credited = asArray(nextState.purchases).filter(item => item.originalPurchaseId === original.id)
+    const credited = asArray(nextState.purchases).filter(item => item.companyId === original.companyId && item.originalPurchaseId === original.id)
       .reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
     const originalNetUsd = Number(original.totalAmountUsd) -
       Number(original.vatWithheldUsd || 0) - Number(original.islrWithheldUsd || 0);
