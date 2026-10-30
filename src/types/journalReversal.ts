@@ -274,6 +274,7 @@ export function validatePurchaseInventoryReconciliation(input: {
     const quantity = Number(line.quantity);
     const unitCost = Number(line.unitCostBs);
     if (!line.productId || productIds.has(String(line.productId)) ||
+        (products !== undefined && !inventoryAccountByProduct.has(String(line.productId))) ||
         !Number.isFinite(quantity) || quantity <= 0 ||
         !Number.isFinite(unitCost) || unitCost <= 0) return false;
     productIds.add(String(line.productId));
