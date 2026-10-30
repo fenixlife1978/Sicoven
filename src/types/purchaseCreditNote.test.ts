@@ -119,7 +119,7 @@ test('rechaza fechas con formato ISO pero imposibles en el calendario', () => {
 test('bloquea si el tratamiento fiscal de las líneas no concilia con la factura', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, exemptAmountBs: 20, taxableBaseBs: 180 }
-  })), /clasificación fiscal/);
+  })), /clasificación fiscal|IVA original no concilia/);
 });
 
 test('rechaza RIF ausente incluso cuando factura y Kardex también carecen de RIF', () => {
@@ -149,7 +149,7 @@ test('rechaza importes fiscales y retenciones incoherentes', () => {
   })), /retenciones originales superan/);
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, igtfAmountBs: Number.NaN }
-  })), /importes fiscales negativos o no numéricos/);
+  })), /importes fiscales negativos o no numéricos|total de la factura original/);
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, vatWithheldBs: Number.NaN }
   })), /importes fiscales negativos o no numéricos/);

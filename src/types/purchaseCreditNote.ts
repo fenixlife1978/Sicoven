@@ -91,19 +91,19 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     purchase.islrSubtrahendBs ?? 0, purchase.totalAmountBs, purchase.taxRate
   ].map(Number);
   if (requiredAmounts.some(value => !Number.isFinite(value) || value < 0) || Number(purchase.taxRate) > 100) {
-    throw new Error('La factura contiene importes fiscales negativos, excesivos o no numéricos; no se puede calcular una devolución segura.');
+    throw new Error('La factura contiene importes fiscales negativos o no numéricos, o una alícuota superior al 100%; no se puede calcular una devolución segura.');
   }
   if (Number(purchase.vatWithheldBs ?? 0) > Number(purchase.vatAmountBs) + 0.02 ||
       Number(purchase.islrWithheldBs ?? 0) > Number(purchase.taxableBaseBs) + 0.02) {
     throw new Error('Las retenciones originales superan su base o impuesto de referencia.');
   }
   const expectedOriginalVat = money(Number(purchase.taxableBaseBs) * Number(purchase.taxRate) / 100);
-  if (Math.abs(expectedOriginalVat - Number(purchase.vatAmountBs)) > 0.02) {
+  if (!Number.isFinite(expectedOriginalVat) || Math.abs(expectedOriginalVat - Number(purchase.vatAmountBs)) > 0.02) {
     throw new Error('El IVA original no concilia con la base imponible y la alícuota registrada.');
   }
   const expectedOriginalTotal = money(Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) +
     Number(purchase.vatAmountBs) + Number(purchase.igtfAmountBs ?? 0));
-  if (Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
+  if (!Number.isFinite(expectedOriginalTotal) || Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
     throw new Error('El total de la factura original no concilia con sus bases, IVA e IGTF.');
   }
   if (!String(purchase.supplierRif || '').trim() || !String(purchase.invoiceNumber || '').trim()) {
