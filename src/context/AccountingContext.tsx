@@ -775,12 +775,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!document) throw new Error('No se encontró la factura en la empresa activa.');
     if (document.isCancelled) throw new Error('La factura fue reversada y ya no tiene saldo exigible en este auxiliar.');
     const principal = getCreditPrincipal(document, kind);
-    return calculateCreditBalance(
+    const balance = calculateCreditBalance(
       documentId,
       principal.originalAmountUsd,
       principal.originalAmountBs,
       creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind && !item.isReversed)
     );
+    const creditNotes = kind === 'PURCHASE_PAYMENT'
+      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03')
+      : [];
+    const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
+    const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionBs || 0), 0);
+    const outstandingUsd = Math.max(0, Math.round((balance.outstandingUsd - creditedByNotesUsd) * 1000000) / 1000000);
+    return {
+      ...balance,
+      creditedByNotesUsd,
+      creditedByNotesBs,
+      outstandingUsd,
+      outstandingBsAtInvoiceRate: Math.round(outstandingUsd * (principal.originalAmountUsd > 0
+        ? principal.originalAmountBs / principal.originalAmountUsd : 0) * 100) / 100
+    };
   };
 
   const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
@@ -791,9 +805,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!document) throw new Error('La factura no existe en la empresa activa.');
     if (document.isCancelled) throw new Error('No se puede liquidar una factura reversada.');
     if (document.paymentTerm !== 'CREDITO') throw new Error('Solo se pueden liquidar facturas identificadas como crédito.');
-    const prior = creditSettlements.filter(item => item.companyId === currentCompany.id && item.documentId === draft.documentId && item.kind === kind && !item.isReversed);
-    const principal = getCreditPrincipal(document, kind);
-    const balance = calculateCreditBalance(draft.documentId, principal.originalAmountUsd, principal.originalAmountBs, prior);
+    const balance = getCreditBalance(draft.documentId, kind);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
