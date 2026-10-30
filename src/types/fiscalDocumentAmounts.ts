@@ -25,7 +25,9 @@ export const hasConsistentFiscalDocumentAmounts = (document: FiscalDocumentAmoun
   const vatUsd = Number(document.vatAmountUsd);
   const rate = Number(document.bcvRate);
   const igtfBs = Number(document.igtfAmountBs ?? 0);
-  const igtfUsd = Number(document.igtfAmountUsd ?? 0);
+  // Respaldos históricos previos al campo USD: derivar el equivalente con la tasa archivada.
+  // Si el campo existe (incluso en cero), validar su valor explícito y no ocultar inconsistencias.
+  const igtfUsd = document.igtfAmountUsd == null ? igtfBs / rate : Number(document.igtfAmountUsd);
   const amounts = [totalBs, baseBs, exemptBs, vatBs, totalUsd, baseUsd, vatUsd, igtfBs, igtfUsd];
 
   if (!Number.isFinite(rate) || rate <= 0 || amounts.some(value => !Number.isFinite(value) || value < 0)) {
