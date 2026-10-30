@@ -21,4 +21,5 @@ test('separa el excedente de la nota como anticipo a favor del comprador', () =>
 test('rechaza importes o tasas inválidos', () => {
   assert.throws(() => allocateSupplierCredit(-1, 100, 50, 100), /importes, saldo o tasa inválidos/);
   assert.throws(() => allocateSupplierCredit(10, 1000, 5, 0), /importes, saldo o tasa inválidos/);
+  assert.throws(() => allocateSupplierCredit(10, 900, 5, 100), /no concilia entre Bs. y USD/);
 });
