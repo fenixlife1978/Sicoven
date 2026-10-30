@@ -2364,6 +2364,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               isReconciled: true,
               matchedBy: 'MANUAL',
               reconciledWithJournalEntryId: journalEntryId || m.reconciledWithJournalEntryId,
+              reconciledJournalEntryIds: journalEntryId
+                ? [...new Set([...(m.reconciledJournalEntryIds || []), journalEntryId])]
+                : m.reconciledJournalEntryIds,
               reconciledAt: new Date().toISOString()
             }
           : m
@@ -2465,6 +2468,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         isReconciled: true,
         matchedBy,
         reconciledWithJournalEntryId: matchedEntry.id,
+        reconciledJournalEntryIds: [...new Set([...(stmt.reconciledJournalEntryIds || []), matchedEntry.id])],
         reconciledAt: now
       });
     }
