@@ -3364,9 +3364,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
       }
       for (const key of requiredCollections) {
+        if (key === 'accounts' || key === 'journalEntries') continue;
         const rows = data[key] as any[];
-        if (rows.some(row => !row || typeof row !== 'object' || (row.companyId && !companyIds.has(row.companyId)))) {
-          throw new Error(`La colección ${key} contiene registros inválidos o vinculados a empresas inexistentes.`);
+        const rowIds = new Set<string>();
+        if (rows.some(row => {
+          if (!row || typeof row !== 'object' || typeof row.id !== 'string' || !row.id.trim() ||
+              typeof row.companyId !== 'string' || !companyIds.has(row.companyId) || rowIds.has(row.id)) return true;
+          rowIds.add(row.id);
+          return false;
+        })) {
+          throw new Error(`La colección ${key} contiene IDs ausentes/duplicados, registros sin empresa o vinculados a empresas inexistentes.`);
         }
       }
       for (const [collectionName, documents] of [['ventas', data.sales], ['compras', data.purchases]] as const) {
