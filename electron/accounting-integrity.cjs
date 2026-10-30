@@ -229,7 +229,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   }
   const priorPurchaseIdSet = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   for (const purchase of asArray(nextState.purchases)) {
-    if (!priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType && purchase.documentType !== '01') {
+    if (!priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType !== '01') {
       throw new Error('SQLite bloqueó una nota de débito/crédito de proveedor: el flujo fiscal integral aún no está habilitado.');
     }
   }
