@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
@@ -89,7 +89,7 @@ export const ReversionFiscalView: React.FC = () => {
         (movement.reconciledWithJournalEntryId === source.id ||
           movement.reconciledJournalEntryIds?.includes(source.id)))
     : [];
-  const bankReversalReadiness = source
+  const bankReversalReadiness: BankStatementReversalReadiness = source
     ? validateBankStatementReversal({
         companyId: currentCompany.id, source, reversalItems: preview,
         bankAccounts, statementMovements: bankStatementMovements
