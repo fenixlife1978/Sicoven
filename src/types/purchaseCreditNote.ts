@@ -25,6 +25,7 @@ export interface PurchaseCreditNoteAmounts {
 export interface PurchaseCreditNoteDraft {
   purchase: PurchaseRecord;
   product: InventoryProduct;
+  products: InventoryProduct[];
   originalMovement: InventoryMovement;
   quantity: number;
   previouslyReturnedQuantity: number;
@@ -41,7 +42,7 @@ const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 10
 const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
 
 export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): PurchaseCreditNoteAmounts {
-  const { purchase, product, originalMovement } = draft;
+  const { purchase, product, products, originalMovement } = draft;
   const quantity = Number(draft.quantity);
   const rate = Number(purchase.bcvRate);
   if (purchase.documentType !== '01' || purchase.isCancelled) throw new Error('La factura original no está vigente o no es una factura ordinaria.');
@@ -85,7 +86,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   let taxableLines = 0;
   let exemptLines = 0;
   for (const item of lines) {
-    const matchingProduct = item.productId === product.id ? product : undefined;
+    const matchingProduct = products.find(candidate => candidate.id === item.productId && candidate.companyId === purchase.companyId);
     if (!matchingProduct) throw new Error('No se puede certificar el tratamiento fiscal de todas las líneas de la factura.');
     const value = Number(item.quantity) * Number(item.unitCostBs);
     if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptLines += value;
