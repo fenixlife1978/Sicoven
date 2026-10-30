@@ -34,6 +34,7 @@ import { calculateFifoIssue, calculateWeightedAverageCostDual, validateInventory
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
+import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -1402,11 +1403,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reason: request.reason, closedThroughDate: currentCompany.closedThroughDate
     });
     const balance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
-    if (valuation.netPayableReductionUsd > balance.outstandingUsd + 0.005) {
-      throw new Error('La nota de crédito supera el saldo pendiente de CxP. El excedente debe registrarse como saldo a favor del proveedor mediante un circuito separado.');
-    }
+    const supplierCredit = allocateSupplierCredit(
+      valuation.netPayableReductionUsd, valuation.netPayableReductionBs,
+      balance.outstandingUsd, valuation.bcvRate
+    );
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = ['2.1.1.01', ...inventoryAccountCodes];
+    if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
     if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
     if (valuation.islrWithheldBs > 0) requiredAccounts.push('2.1.2.04');
@@ -1423,7 +1426,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       accountCode: code, accountName: accounts.find(account => account.code === code)?.name || code,
       debitBs, creditBs, debitUsd: toUsd(debitBs), creditUsd: toUsd(creditBs), description
     });
-    items.push(line('2.1.1.01', valuation.netPayableReductionBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
+    if (supplierCredit.appliedToPayableBs > 0.02) {
+      items.push(line('2.1.1.01', supplierCredit.appliedToPayableBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
+    }
+    if (supplierCredit.supplierAdvanceBs > 0.02) {
+      items.push(line('1.1.2.03', supplierCredit.supplierAdvanceBs, 0, 'Excedente de nota de crédito · anticipo a favor en proveedor ' + purchase.supplierName));
+    }
     if (valuation.vatWithheldBs > 0) items.push(line('2.1.2.03', valuation.vatWithheldBs, 0, 'Reversión proporcional de retención IVA'));
     if (valuation.islrWithheldBs > 0) items.push(line('2.1.2.04', valuation.islrWithheldBs, 0, 'Reversión proporcional de retención ISLR'));
     for (const returnedLine of valuation.lines) {
@@ -1496,8 +1504,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       igtfAmountBs: valuation.igtfAmountBs, igtfAmountUsd: valuation.igtfAmountUsd,
       paymentTerm: 'CREDITO', paymentMethod: purchase.paymentMethod,
       journalEntryId: journalId, originalPurchaseId: purchase.id,
-      netPayableReductionBs: valuation.netPayableReductionBs,
-      netPayableReductionUsd: valuation.netPayableReductionUsd,
+      // Solo la porción aplicada reduce la CxP; el excedente permanece como activo recuperable.
+      netPayableReductionBs: supplierCredit.appliedToPayableBs,
+      netPayableReductionUsd: supplierCredit.appliedToPayableUsd,
+      supplierAdvanceBs: supplierCredit.supplierAdvanceBs,
+      supplierAdvanceUsd: supplierCredit.supplierAdvanceUsd,
       creditNoteLines: valuation.lines.map((returnedLine, index) => ({
         productId: returnedLine.productId,
         originalMovementId: returnedLine.originalMovementId,
