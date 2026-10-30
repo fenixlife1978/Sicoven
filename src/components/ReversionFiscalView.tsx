@@ -334,7 +334,8 @@ export const ReversionFiscalView: React.FC = () => {
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Documento</span><strong>{reversalAssessment.documentKind==='SALE'?'Venta':reversalAssessment.documentKind==='PURCHASE'?'Compra':'Asiento general'}</strong></div>
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Kardex vinculado</span><strong>{reversalAssessment.linkedInventoryMovementCount} movimiento(s)</strong></div>
-                    <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Notas de crédito proveedor</span><strong>{reversalAssessment.linkedCreditNoteCount}</strong></div>\n                    <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Extracto bancario</span><strong>{reversalAssessment.linkedBankMovementCount} línea(s)</strong></div>
+                    <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Notas de crédito proveedor</span><strong>{reversalAssessment.linkedCreditNoteCount}</strong></div>
+                    <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Extracto bancario</span><strong>{reversalAssessment.linkedBankMovementCount} línea(s)</strong></div>
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Cobros / pagos activos</span><strong>{reversalAssessment.activeSettlementCount}</strong></div>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
