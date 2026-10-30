@@ -195,14 +195,23 @@ export function validateBankStatementReversal(input: {
       row.reconciledJournalEntryIds?.includes(source.id))
   );
   if (!originalRows.length) return { ready: true, pairs: [] };
+  const originalBankAccountIds = originalRows.map(row => row.bankAccountId);
+  if (new Set(originalBankAccountIds).size !== originalBankAccountIds.length) {
+    return { ready: false, reason: 'El mismo asiento aparece conciliado históricamente con varias filas de una misma cuenta bancaria; requiere conciliación manual antes de reversar.', pairs: [] };
+  }
   const pairs: BankStatementReversalPair[] = [];
   const usedOppositeIds = new Set<string>();
+  const usedAccountCodes = new Set<string>();
   for (const original of originalRows) {
     if (original.isReconciled && original.reconciledWithJournalEntryId !== source.id) {
       return { ready: false, reason: 'El movimiento bancario ' + original.reference + ' fue vinculado posteriormente a otro asiento; requiere resolver esa conciliación antes de reversar.', pairs: [] };
     }
     const bank = bankAccounts.find(item => item.id === original.bankAccountId && item.companyId === companyId);
     if (!bank) return { ready: false, reason: 'No se encuentra la cuenta bancaria del movimiento histórico ' + original.id + '.', pairs: [] };
+    if (usedAccountCodes.has(bank.accountCode)) {
+      return { ready: false, reason: 'Varias cuentas bancarias comparten el mismo código contable; no es posible certificar una reversión automática.', pairs: [] };
+    }
+    usedAccountCodes.add(bank.accountCode);
     const isUsd = bank.currency === 'USD';
     const originalAmount = isUsd ? Number(original.amountUsd) : Number(original.amountBs);
     const tolerance = isUsd ? 0.000001 : 0.05;
