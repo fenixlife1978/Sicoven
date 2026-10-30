@@ -31,6 +31,8 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
       item.companyId === purchase.companyId && item.productId === line.productId &&
       item.type === 'ENTRADA' && item.concept === 'COMPRA' &&
       item.documentRef.trim().toUpperCase() === ('FAC-' + purchase.invoiceNumber).trim().toUpperCase() &&
+      String(item.counterpartyRif || '').toUpperCase().replace(/[^A-Z0-9]/g, '') ===
+        String(purchase.supplierRif || '').toUpperCase().replace(/[^A-Z0-9]/g, '') &&
       !item.correctionForMovementId &&
       Math.abs(Number(item.quantity) - Number(line.quantity)) <= 1e-8 &&
       Math.abs(Number(item.unitCostBs) - Number(line.unitCostBs)) <= 0.02
