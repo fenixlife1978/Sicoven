@@ -95,6 +95,8 @@ export function validateCreditSettlement(
   if (!['SALE_COLLECTION', 'PURCHASE_PAYMENT'].includes(draft.kind)) return 'El tipo de liquidación no es válido.';
   if (typeof draft.settlementDate !== 'string') return 'La fecha de liquidación no es válida.';
   if (!['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD', 'OTHER'].includes(draft.method)) return 'Seleccione un medio de pago válido.';
+  if (draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD') return 'Transferencias temporalmente bloqueadas: primero debe seleccionar y conciliar la cuenta bancaria receptora o emisora.';
+  if (draft.method === 'OTHER') return 'El medio «Otro» no está habilitado porque no identifica una cuenta de tesorería verificable.';
   if (draft.reference != null && (typeof draft.reference !== 'string' || draft.reference.length > 200)) return 'La referencia no puede superar 200 caracteres.';
   if (!draft.documentId.trim()) return 'Debe seleccionar la factura de crédito.';
   if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.settlementDate)) return 'La fecha de liquidación no es válida.';
