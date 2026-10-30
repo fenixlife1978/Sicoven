@@ -65,8 +65,22 @@ function openDatabase() {
     db.prepare('UPDATE license_state SET trial_started_at=? WHERE id=1 AND trial_started_at IS NULL').run(new Date().toISOString());
   }
 
-  // First-run security: never create a publicly known default administrator.
-  // The first administrator is initialized once through the guarded setup IPC.
+  // La instalación nueva inicia con el administrador semilla histórico.
+  // Solo habilita la prueba local; al activar una licencia se sustituye
+  // obligatoriamente por las credenciales definitivas del cliente.
+  const userCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
+  if (userCount === 0) {
+    const credential = hashPassword('Admin123');
+    const createSeed = db.transaction(() => {
+      const currentCount = Number(db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count);
+      if (currentCount !== 0) return;
+      db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,1)')
+        .run('admin', credential.hash, credential.salt, 'admin');
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('seed_admin_created', JSON.stringify({ username: 'admin', purpose: '24-hour-trial' }));
+    });
+    createSeed();
+  }
 }
 
 function readLicenseRow() {
@@ -272,12 +286,19 @@ app.whenReady().then(async () => {
     return status;
   });
 
-  ipcMain.handle('sicoven:auth-setup-status', () => ({
-    required: db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count === 0
-  }));
+  ipcMain.handle('sicoven:auth-setup-status', () => {
+    const licensing = licenseView();
+    const users = db.prepare('SELECT id,is_seed FROM auth_users ORDER BY id').all();
+    const onlySeed = users.length === 1 && Number(users[0].is_seed) === 1;
+    return {
+      required: users.length === 0 || (onlySeed && licensing.authorized && licensing.status !== 'trial'),
+      replacingSeed: onlySeed && licensing.authorized && licensing.status !== 'trial'
+    };
+  });
 
   ipcMain.handle('sicoven:auth-initialize', (_event, input) => {
-    if (!licenseView().authorized) return { ok: false, message: 'Debe activar SICOVEN antes de crear el administrador inicial.' };
+    const licensing = licenseView();
+    if (!licensing.authorized) return { ok: false, message: 'La prueba o licencia debe estar autorizada para configurar el administrador.' };
     const username = normalizeUsername(input?.username);
     const password = String(input?.password || '');
     if (!/^[a-z0-9._-]{3,32}$/.test(username)) {
@@ -287,17 +308,38 @@ app.whenReady().then(async () => {
       return { ok: false, message: 'La contraseña inicial debe tener al menos 10 caracteres.' };
     }
     try {
+      const credential = hashPassword(password);
+      let removedSeedId = null;
       const initialize = db.transaction(() => {
-        const count = db.prepare('SELECT COUNT(*) AS count FROM auth_users').get().count;
-        if (count !== 0) throw new Error('INITIAL_SETUP_ALREADY_COMPLETED');
-        const credential = hashPassword(password);
+        const users = db.prepare('SELECT id,is_seed FROM auth_users ORDER BY id').all();
+        const replacingSeed = users.length === 1 && Number(users[0].is_seed) === 1;
+        if (users.length !== 0 && !(replacingSeed && licensing.status !== 'trial')) {
+          throw new Error('INITIAL_SETUP_ALREADY_COMPLETED');
+        }
         const result = db.prepare('INSERT INTO auth_users(username,password_hash,password_salt,role,is_seed) VALUES(?,?,?,?,0)')
           .run(username, credential.hash, credential.salt, 'admin');
+        if (replacingSeed) {
+          removedSeedId = Number(users[0].id);
+          db.prepare('DELETE FROM auth_sessions WHERE user_id=?').run(removedSeedId);
+          const deleted = db.prepare('DELETE FROM auth_users WHERE id=? AND is_seed=1').run(removedSeedId);
+          if (Number(deleted.changes) !== 1) throw new Error('SEED_REPLACEMENT_FAILED');
+        }
         db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-          .run('initial_admin_created', JSON.stringify({ username, userId: Number(result.lastInsertRowid) }));
+          .run(replacingSeed ? 'seed_admin_replaced' : 'initial_admin_created',
+            JSON.stringify({ username, userId: Number(result.lastInsertRowid), seedUserId: removedSeedId }));
+        const persisted = db.prepare('SELECT username,is_seed FROM auth_users WHERE id=?').get(Number(result.lastInsertRowid));
+        if (!persisted || Number(persisted.is_seed) !== 0) throw new Error('ADMIN_PERSISTENCE_VERIFICATION_FAILED');
+        if (replacingSeed && db.prepare('SELECT id FROM auth_users WHERE id=?').get(removedSeedId)) {
+          throw new Error('SEED_REPLACEMENT_VERIFICATION_FAILED');
+        }
       });
       initialize();
-      return { ok: true };
+      if (removedSeedId !== null) {
+        for (const [token, session] of sessions.entries()) {
+          if (Number(session.id) === removedSeedId) sessions.delete(token);
+        }
+      }
+      return { ok: true, seedReplaced: removedSeedId !== null };
     } catch (error) {
       if (String(error?.message || '').includes('INITIAL_SETUP_ALREADY_COMPLETED')) {
         return { ok: false, message: 'La configuración inicial ya fue completada. Inicie sesión con el administrador registrado.' };
