@@ -1,4 +1,5 @@
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
+import { isValidIsoDate } from './migrationParsing';
 
 export interface PurchaseCreditNoteLineRequest {
   productId: string;
