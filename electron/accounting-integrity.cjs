@@ -214,6 +214,72 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
   }
 
+  // Una factura nueva que declara líneas de inventario debe ingresar exactamente
+  // esas cantidades y costos al Kardex dentro del mismo snapshot SQLite.
+  // El guardado completo ocurre dentro de una única transacción SQLite; no basta
+  // con que el formulario haya intentado agregar los movimientos.
+  const priorPurchaseIds = new Set(asArray(priorState.purchases).map(item => String(item.id)));
+  const priorMovementIds = new Set(asArray(priorState.movements).map(item => String(item.id)));
+  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
+  for (const purchase of asArray(nextState.purchases)) {
+    if (priorPurchaseIds.has(String(purchase.id)) ||
+        !Array.isArray(purchase.inventoryLines) || purchase.inventoryLines.length === 0) continue;
+    const lines = purchase.inventoryLines;
+    const productIds = new Set();
+    let lineTotal = 0;
+    for (const line of lines) {
+      const quantity = Number(line.quantity);
+      const unitCost = Number(line.unitCostBs);
+      if (!line.productId || productIds.has(String(line.productId)) ||
+          !Number.isFinite(quantity) || quantity <= 0 ||
+          !Number.isFinite(unitCost) || unitCost <= 0) {
+        throw new Error('SQLite rechazó líneas de inventario de compra duplicadas o con cantidad/costo inválido.');
+      }
+      productIds.add(String(line.productId));
+      lineTotal += quantity * unitCost;
+    }
+    lineTotal = money(lineTotal);
+    const invoiceInventoryTotal = money(Number(purchase.taxableBaseBs || 0) + Number(purchase.exemptAmountBs || 0));
+    if (Math.abs(lineTotal - invoiceInventoryTotal) > 0.02) {
+      throw new Error('SQLite rechazó la compra: las líneas de inventario no concilian con base imponible más exento.');
+    }
+    const expectedReference = normalizeDocument('FAC-' + purchase.invoiceNumber);
+    const linkedMovements = asArray(nextState.movements).filter(movement =>
+      movement.companyId === purchase.companyId &&
+      movement.type === 'ENTRADA' && movement.concept === 'COMPRA' &&
+      normalizeDocument(movement.documentRef) === expectedReference
+    );
+    if (linkedMovements.length !== lines.length) {
+      throw new Error('SQLite rechazó la compra: el número de entradas de Kardex no coincide con las líneas de inventario declaradas.');
+    }
+    for (const line of lines) {
+      const matches = linkedMovements.filter(movement => String(movement.productId) === String(line.productId));
+      if (matches.length !== 1) {
+        throw new Error('SQLite rechazó la compra: falta una entrada de Kardex única para el artículo ' + line.productId + '.');
+      }
+      const movement = matches[0];
+      const expectedCost = money(Number(line.quantity) * Number(line.unitCostBs));
+      if (priorMovementIds.has(String(movement.id)) ||
+          movement.date !== purchase.invoiceDate ||
+          Math.abs(Number(movement.quantity) - Number(line.quantity)) > 0.000001 ||
+          Math.abs(money(movement.totalCostBs) - expectedCost) > 0.02 ||
+          normalizeRif(movement.counterpartyRif) !== normalizeRif(purchase.supplierRif)) {
+        throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, cantidad o costo con su línea de factura.');
+      }
+    }
+    const purchaseEntry = purchase.journalEntryId
+      ? nextById.get(String(purchase.journalEntryId))
+      : undefined;
+    const inventoryDebit = purchaseEntry?.items?.reduce((sum, item) =>
+      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0), 0);
+    if (!purchaseEntry || purchaseEntry.companyId !== purchase.companyId ||
+        purchaseEntry.type !== 'COMPRA' || Math.abs(money(inventoryDebit) - lineTotal) > 0.02) {
+      throw new Error('SQLite rechazó la compra: el asiento no reconoce en inventario el costo total conciliado de las líneas de Kardex.');
+    }
+  }
+
   const oldSettlements = new Map(asArray(priorState.creditSettlements).map(item => [String(item.id), item]));
   for (const settlement of asArray(nextState.creditSettlements)) {
     const oldSettlement = oldSettlements.get(String(settlement.id));
