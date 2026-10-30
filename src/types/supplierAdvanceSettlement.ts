@@ -109,6 +109,20 @@ export function allocateSupplierAdvanceCreditNotes(
   if (!Number.isFinite(requestedUsd) || requestedUsd <= 0) {
     throw new Error('El importe a distribuir entre notas de crédito debe ser mayor que cero.');
   }
+  if (!Array.isArray(sources) || !Array.isArray(settlements)) {
+    throw new Error('No se pudo reconstruir el historial de notas de crédito y liquidaciones.');
+  }
+  const sourceIds = new Set<string>();
+  for (const source of sources) {
+    if (!source || typeof source.id !== 'string' || !source.id.trim() || sourceIds.has(source.id)) {
+      throw new Error('El conjunto de notas de crédito contiene identificadores vacíos o duplicados.');
+    }
+    if (!Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
+        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
+      throw new Error('Una nota de crédito fuente tiene importes inválidos.');
+    }
+    sourceIds.add(source.id);
+  }
   const rif = String(supplierRif || '').trim().toUpperCase();
   const usedByNote = new Map<string, { usd: number; bs: number }>();
   for (const settlement of settlements) {
@@ -118,11 +132,18 @@ export function allocateSupplierAdvanceCreditNotes(
     if (!Array.isArray(allocations) || allocations.length === 0) {
       throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
     }
+    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+      allocations,
+      settlement.sourceCreditNoteIds,
+      settlement.amountUsd,
+      settlement.advanceBookValueBs ?? allocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0)
+    );
+    if (allocationError) {
+      throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no es conciliable: ' + allocationError);
+    }
     for (const allocation of allocations) {
-      if (!allocation || typeof allocation.creditNoteId !== 'string' ||
-          !Number.isFinite(allocation.amountUsd) || allocation.amountUsd <= 0 ||
-          !Number.isFinite(allocation.bookValueBs) || allocation.bookValueBs < 0) {
-        throw new Error('La distribución histórica de anticipos contiene datos inválidos.');
+      if (!sourceIds.has(allocation.creditNoteId)) {
+        throw new Error('Una liquidación histórica referencia una nota de crédito que no está en el conjunto fuente.');
       }
       const current = usedByNote.get(allocation.creditNoteId) || { usd: 0, bs: 0 };
       current.usd = roundMoney(current.usd + allocation.amountUsd);
@@ -134,13 +155,13 @@ export function allocateSupplierAdvanceCreditNotes(
   const result: SupplierAdvanceCreditNoteAllocation[] = [];
   for (const source of sources) {
     if (remaining <= 0.005) break;
-    if (!source || !source.id || !Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
-        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
-      throw new Error('Una nota de crédito fuente tiene importes inválidos.');
-    }
     const used = usedByNote.get(source.id) || { usd: 0, bs: 0 };
     const availableUsd = roundMoney(source.amountUsd - used.usd);
-    const availableBs = Math.max(0, roundMoney(source.bookValueBs - used.bs));
+    const availableBsRaw = roundMoney(source.bookValueBs - used.bs);
+    if (availableUsd < -0.005 || availableBsRaw < -0.02) {
+      throw new Error('Las liquidaciones históricas exceden el saldo de la nota de crédito ' + source.id + '.');
+    }
+    const availableBs = Math.max(0, availableBsRaw);
     if (availableUsd <= 0.005) continue;
     const takeUsd = Math.min(remaining, availableUsd);
     const takeBs = takeUsd >= availableUsd - 0.005
