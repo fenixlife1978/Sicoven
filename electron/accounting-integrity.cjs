@@ -254,8 +254,39 @@ function validateAccountingSnapshot(previousState, nextState) {
       normalizeDocument(item.documentRef) === normalizeDocument('FAC-' + original.invoiceNumber));
     const returnMovement = asArray(nextState.movements).find(item =>
       item.id === line.movementId && item.companyId === note.companyId);
+    const sourceLines = Array.isArray(original.inventoryLines) ? original.inventoryLines : [];
+    const sourceMovements = asArray(nextState.movements).filter(item =>
+      item.companyId === original.companyId && item.type === 'ENTRADA' &&
+      item.concept === 'COMPRA' && !item.correctionForMovementId &&
+      normalizeDocument(item.documentRef) === normalizeDocument('FAC-' + original.invoiceNumber));
+    const sourceLineTotal = money(sourceLines.reduce((sum, item) =>
+      sum + Number(item.quantity || 0) * Number(item.unitCostBs || 0), 0));
+    const sourceEntry = original.journalEntryId ? nextById.get(String(original.journalEntryId)) : undefined;
+    const sourceInventoryDebit = sourceEntry?.items?.reduce((sum, item) =>
+      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0), 0) || 0;
+    const sourceInventoryDebitUsd = sourceEntry?.items?.reduce((sum, item) =>
+      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) : 0), 0) || 0;
+    const sourceRate = Number(original.bcvRate);
+    const sourceReconciles = sourceLines.length > 0 &&
+      Math.abs(sourceLineTotal - Number(original.taxableBaseBs || 0) - Number(original.exemptAmountBs || 0)) <= 0.02 &&
+      sourceMovements.length === sourceLines.length &&
+      sourceLines.every(sourceLine => {
+        const matches = sourceMovements.filter(item => String(item.productId) === String(sourceLine.productId));
+        if (matches.length !== 1) return false;
+        const sourceMovement = matches[0];
+        const expectedBs = money(Number(sourceLine.quantity) * Number(sourceLine.unitCostBs));
+        return sourceMovement.date === original.invoiceDate &&
+          normalizeRif(sourceMovement.counterpartyRif) === normalizeRif(original.supplierRif) &&
+          Math.abs(Number(sourceMovement.quantity) - Number(sourceLine.quantity)) <= 0.000001 &&
+          Math.abs(money(Number(sourceMovement.totalCostBs)) - expectedBs) <= 0.02 &&
+          Math.abs(Number(sourceMovement.bcvRate) - sourceRate) <= 0.000001 &&
+          Math.abs(Number(sourceMovement.totalCostUsd) - expectedBs / sourceRate) <= 0.0001;
+      }) &&
+      sourceEntry?.type === 'COMPRA' && sourceEntry.companyId === original.companyId &&
+      Math.abs(sourceInventoryDebit - sourceLineTotal) <= 0.02 &&
+      Math.abs(sourceInventoryDebitUsd - sourceLineTotal / sourceRate) <= 0.0001;
     const journal = nextById.get(String(note.journalEntryId));
-    if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
+    if (!sourceReconciles || !originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
         returnMovement.type !== 'SALIDA' || returnMovement.concept !== 'DEVOLUCION_COMPRA' ||
         returnMovement.correctionForMovementId !== originalMovement.id ||
         normalizeDocument(returnMovement.documentRef) !== normalizeDocument('NC-PROV-' + note.creditNoteNumber) ||
@@ -289,11 +320,19 @@ function validateAccountingSnapshot(previousState, nextState) {
     const inventoryCode = asArray(nextState.products).find(item => item.id === line.productId && item.companyId === note.companyId)?.inventoryAccountCode || '1.1.4.01';
     if (Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
         Math.abs(accountSum('2.1.1.01', 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
+        Math.abs(accountSum('2.1.1.01', 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
         Math.abs(accountSum(inventoryCode, 'credit', 'Bs') - Number(line.inventoryCostBs)) > 0.02 ||
+        Math.abs(accountSum(inventoryCode, 'credit', 'Usd') - Number(line.inventoryCostBs) / Number(note.bcvRate)) > 0.0001 ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
+        Math.abs(accountSum('1.1.3.01', 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
         Math.abs(accountSum('2.1.2.03', 'debit', 'Bs') - Number(note.vatWithheldBs || 0)) > 0.02 ||
+        Math.abs(accountSum('2.1.2.03', 'debit', 'Usd') - Number(note.vatWithheldUsd || 0)) > 0.0001 ||
         Math.abs(accountSum('2.1.2.04', 'debit', 'Bs') - Number(note.islrWithheldBs || 0)) > 0.02 ||
-        Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02) {
+        Math.abs(accountSum('2.1.2.04', 'debit', 'Usd') - Number(note.islrWithheldUsd || 0)) > 0.0001 ||
+        Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02 ||
+        Math.abs(accountSum('6.1.1.11', 'credit', 'Usd') - Number(note.igtfAmountUsd || 0)) > 0.0001 ||
+        Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.igtfAmountBs || 0)) > 0.02 ||
+        Math.abs(Number(note.netPayableReductionBs) - (Number(note.totalAmountBs) - Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0))) > 0.02) {
       throw new Error('SQLite rechazó la nota de crédito: el asiento no está balanceado o no revierte CxP, inventario, IVA, retenciones e IGTF.');
     }
     const paid = asArray(nextState.creditSettlements).filter(item =>
