@@ -57,6 +57,7 @@ describe('credit settlement balances and validation', () => {
   it('requires a specific bank auxiliary for bank transfers', () => {
     assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS' }, 100) || '', /Seleccione la cuenta bancaria auxiliar/i);
     assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD' }, 100) || '', /Seleccione la cuenta bancaria auxiliar/i);
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-bs-1' }, 100) || '', /referencia o comprobante/i);
   });
 
   it('accepts a transfer draft only when a bank auxiliary is selected', () => {
