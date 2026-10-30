@@ -39,6 +39,7 @@ export const RetencionesIvaView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
+  const hasPendingFiscalCorrection = filteredVouchers.some(voucher => voucher.requiresFiscalCorrection);
   const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.vatWithheldBs, 0);
   const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.vatWithheldUsd, 0);
   const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.taxableBaseBs, 0);
@@ -46,6 +47,10 @@ export const RetencionesIvaView: React.FC = () => {
   const generatedTxt = generateSeniatIvaTxt(currentCompany, filteredVouchers);
 
   const handleDownloadTxt = () => {
+    if (hasPendingFiscalCorrection) {
+      alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
+      return;
+    }
     if (filteredVouchers.length === 0) {
       alert('No hay comprobantes de retención para exportar.');
       return;
@@ -81,6 +86,8 @@ export const RetencionesIvaView: React.FC = () => {
           <div className="flex items-center gap-2.5">
             <button
               onClick={() => setShowTxtPreview(!showTxtPreview)}
+              disabled={hasPendingFiscalCorrection}
+              title={hasPendingFiscalCorrection ? 'Previsualización bloqueada hasta rectificar los comprobantes afectados' : 'Previsualizar archivo SENIAT'}
               className="flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-xl transition cursor-pointer border border-slate-300"
             >
               <Code className="w-3.5 h-3.5" />
@@ -88,7 +95,7 @@ export const RetencionesIvaView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadTxt}
-              disabled={filteredVouchers.length === 0}
+              disabled={filteredVouchers.length === 0 || hasPendingFiscalCorrection}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-purple-600 hover:bg-purple-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
@@ -138,12 +145,12 @@ export const RetencionesIvaView: React.FC = () => {
 
         {filteredVouchers.some(voucher => voucher.requiresFiscalCorrection) && (
           <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-            Hay comprobantes vinculados a notas de crédito o reversiones que requieren revisión fiscal. Se conservan como documentos históricos; el archivo SENIAT todavía incluye sus datos originales. Verifique la rectificación aplicable antes de declarar.
+            Hay comprobantes vinculados a notas de crédito o reversiones que requieren rectificación fiscal. Se conservan como documentos históricos y la exportación SENIAT queda bloqueada hasta registrar la corrección aplicable.
           </div>
         )}
 
         {/* TXT Preview Card */}
-        {showTxtPreview && (
+        {showTxtPreview && !hasPendingFiscalCorrection && (
           <div className="mt-6 p-4 bg-slate-900 text-white rounded-xl border border-slate-800 space-y-2 animate-in fade-in duration-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
@@ -154,6 +161,7 @@ export const RetencionesIvaView: React.FC = () => {
               </div>
               <button
                 onClick={handleDownloadTxt}
+                disabled={hasPendingFiscalCorrection}
                 className="text-xs text-emerald-400 hover:underline flex items-center gap-1 font-semibold cursor-pointer"
               >
                 <Download className="w-3.5 h-3.5" /> Descargar
