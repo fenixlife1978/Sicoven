@@ -25,6 +25,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [supplierCreditNoteNumber, setSupplierCreditNoteNumber] = useState('');
   const [supplierCreditControlNumber, setSupplierCreditControlNumber] = useState('');
   const [supplierCreditReason, setSupplierCreditReason] = useState('');
+  const [supplierCreditNoteSubmitting, setSupplierCreditNoteSubmitting] = useState(false);
 
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
@@ -180,10 +181,11 @@ export const ReversionFiscalView: React.FC = () => {
   }, 0);
 
   const submitSupplierCreditNote = async () => {
-    if (!linkedPurchase || !purchaseLineReconciliation?.ok) {
+    if (!linkedPurchase || !purchaseLineReconciliation?.ok || supplierCreditNoteSubmitting) {
       setFeedback({ kind: 'error', message: 'La factura, sus líneas, el Kardex y el asiento deben estar conciliados antes de registrar una nota de crédito.' });
       return;
     }
+    setSupplierCreditNoteSubmitting(true);
     try {
       const lines = supplierReturnLines.map(row => {
         const movement = linkedInventoryMovements.find(item => item.productId === row.productId &&
@@ -209,6 +211,8 @@ export const ReversionFiscalView: React.FC = () => {
       void refreshAuditEvents();
     } catch (error) {
       setFeedback({ kind: 'error', message: error instanceof Error ? error.message : 'No se pudo registrar la nota de crédito.' });
+    } finally {
+      setSupplierCreditNoteSubmitting(false);
     }
   };
 
@@ -373,7 +377,7 @@ export const ReversionFiscalView: React.FC = () => {
                         <div><label className="block text-xs font-semibold mb-1">Número de control</label><input value={supplierCreditControlNumber} onChange={event=>setSupplierCreditControlNumber(event.target.value)} maxLength={80} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="00-000123"/></div>
                         <div><label className="block text-xs font-semibold mb-1">Motivo y soporte (mínimo 10 caracteres)</label><textarea value={supplierCreditReason} onChange={event=>setSupplierCreditReason(event.target.value)} rows={2} maxLength={1000} className="w-full rounded-lg border border-slate-300 p-2 text-sm" placeholder="Motivo de devolución, referencia al soporte y condición de la mercancía…"/></div>
                       </div>
-                      <button type="button" onClick={submitSupplierCreditNote} disabled={supplierReturnLines.some(row=>!row.productId||Number(row.quantity)<=0)||!supplierCreditNoteNumber.trim()||!supplierCreditControlNumber.trim()||supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">Registrar nota de crédito y devolución</button>
+                      <button type="button" onClick={submitSupplierCreditNote} disabled={supplierCreditNoteSubmitting||supplierReturnLines.some(row=>!row.productId||Number(row.quantity)<=0)||!supplierCreditNoteNumber.trim()||!supplierCreditControlNumber.trim()||supplierCreditReason.trim().length<10} className="rounded-lg bg-emerald-700 px-4 py-2 text-sm font-semibold text-white disabled:opacity-40">{supplierCreditNoteSubmitting?'Guardando y confirmando en SQLite…':'Registrar nota de crédito y devolución'}</button>
                     </div> : <p>La devolución permanece bloqueada hasta conciliar factura, líneas, Kardex y asiento. Corrija primero las diferencias indicadas arriba.</p>}</div> : correctableMovements.length > 0 ? <>
                     <label className="block font-semibold">Movimiento original</label>
                     <select value={correctionMovementId} onChange={event=>setCorrectionMovementId(event.target.value)} className="w-full rounded-lg border border-slate-300 p-2 text-sm">
