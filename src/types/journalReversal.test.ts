@@ -124,7 +124,7 @@ test('no exige reversión de inventario si la factura no tiene movimientos de Ka
 test('bloquea la reversión total de venta cuando la mercancía no ha sido devuelta', () => {
   const result = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
-    movements: [originalSaleMovement], products: [inventoryProduct], journalEntries: [saleInvoice]
+    movements: [originalSaleMovement], products: [inventoryProduct], journalEntries: [saleInvoice, originalSaleCostEntry]
   });
   assert.equal(result.ready, false);
   assert.match(result.reason || '', /no está devuelta en su totalidad/);
@@ -146,7 +146,7 @@ test('bloquea devoluciones parciales y asientos de costo no balanceados', () => 
   const partialResult = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
     movements: [originalSaleMovement, partial], products: [inventoryProduct],
-    journalEntries: [saleInvoice, customerReturnEntry]
+    journalEntries: [saleInvoice, originalSaleCostEntry, customerReturnEntry]
   });
   assert.equal(partialResult.ready, false);
   const unbalancedEntry = {
@@ -156,7 +156,7 @@ test('bloquea devoluciones parciales y asientos de costo no balanceados', () => 
   const unbalancedResult = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
     movements: [originalSaleMovement, customerReturnMovement], products: [inventoryProduct],
-    journalEntries: [saleInvoice, unbalancedEntry]
+    journalEntries: [saleInvoice, originalSaleCostEntry, unbalancedEntry]
   });
   assert.equal(unbalancedResult.ready, false);
   assert.match(unbalancedResult.reason || '', /no concilia Debe\/Haber/);
