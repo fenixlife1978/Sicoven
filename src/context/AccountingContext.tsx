@@ -1448,25 +1448,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       notes: request.reason.trim()
     };
     purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
-    const nextMovements = [...movements, ...stampMovements.map(item => item.movement)];
-    const nextProducts = products.map(item => {
-      const returned = stampMovements.find(entry => entry.product.id === item.id);
-      return returned ? { ...item, currentStock: returned.newStock,
-        avgCostBs: returned.newStock > 0 ? item.avgCostBs : 0,
-        avgCostUsd: returned.newStock > 0 ? item.avgCostUsd : 0 } : item;
-    });
     const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
-    const nextVatVouchers = valuation.vatWithheldBs > 0 ? vatVouchers.map(voucher =>
-      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id && !voucher.requiresFiscalCorrection
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
-        : voucher
-    ) : vatVouchers;
-    const nextIslrVouchers = valuation.islrWithheldBs > 0 ? islrVouchers.map(voucher =>
-      voucher.companyId === currentCompany.id && voucher.invoiceNumber === purchase.invoiceNumber &&
-      voucher.supplierRif === purchase.supplierRif && !voucher.requiresFiscalCorrection
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
-        : voucher
-    ) : islrVouchers;
     if (!window.sicovenStore?.save) {
       throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
     }
