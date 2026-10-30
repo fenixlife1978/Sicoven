@@ -262,9 +262,6 @@ function validateAccountingSnapshot(previousState, nextState) {
   const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   const priorPurchaseIdsForIntegrity = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   const priorMovementIdsForIntegrity = new Set(asArray(priorState.movements).map(item => String(item.id)));
-  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
-  const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   for (const purchase of asArray(nextState.purchases)) {
     if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) ||
         !Array.isArray(purchase.inventoryLines) || purchase.inventoryLines.length === 0) continue;
