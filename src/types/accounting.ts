@@ -353,6 +353,8 @@ export interface BankStatementMovement {
   amountUsd: number;
   isReconciled: boolean;
   reconciledWithJournalEntryId?: string;
+  /** IDs de asientos que alguna vez se vincularon a esta línea; historial no removible. */
+  reconciledJournalEntryIds?: string[];
   matchedBy?: 'AUTO_REF' | 'AUTO_AMOUNT' | 'MANUAL';
   reconciledAt?: string;
   notes?: string;
