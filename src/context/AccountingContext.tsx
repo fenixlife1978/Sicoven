@@ -260,9 +260,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatSequence: { ...vatVoucherSequenceRef.current },
       islrSequence: { ...islrVoucherSequenceRef.current }
     };
-    try {
-      return operation();
-    } catch (error) {
+    const rollback = (error: unknown): never => {
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
@@ -276,6 +274,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       vatVoucherSequenceRef.current = before.vatSequence;
       islrVoucherSequenceRef.current = before.islrSequence;
       throw error;
+    };
+    try {
+      const result = operation();
+      if (result && typeof (result as any).then === 'function') {
+        return (result as Promise<T>).catch(rollback) as T;
+      }
+      return result;
+    } catch (error) {
+      return rollback(error);
     }
   };
 
@@ -1241,7 +1248,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return finalPurchase;
   };
 
-  const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => runAtomicInvoiceImport(async () => {
+  const purchaseCreditNoteInFlightRef = useRef(false);
+  const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => {
+    if (purchaseCreditNoteInFlightRef.current) throw new Error('Ya hay una devolución a proveedor en proceso. Espere a que termine antes de intentar otra.');
+    purchaseCreditNoteInFlightRef.current = true;
+    try {
+      return await runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
     const purchase = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
     if (!purchase || purchase.documentType !== '01' || purchase.isCancelled) {
@@ -1417,7 +1429,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setPurchases(nextSnapshot.purchases);
     setStorageError(null);
     return note;
-  });
+      });
+    } finally {
+      purchaseCreditNoteInFlightRef.current = false;
+    }
+  };
 
   const deletePurchase = (id: string) => {
     const purchase = purchases.find(item => item.id === id && item.companyId === currentCompany.id);
