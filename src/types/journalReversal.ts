@@ -561,7 +561,7 @@ export function assessJournalReversal(input: {
   let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
   if (purchase?.inventoryLines?.length) {
     inventoryReadiness = validatePurchaseInventoryReconciliation({
-      companyId, purchase, movements, journalEntries
+      companyId, purchase, movements, journalEntries, products
     });
     blockers.push(inventoryReadiness.ready
       ? 'La compra tiene inventario vinculado: debe tramitarse mediante documento fiscal de nota de crédito y devolución coordinada, no con un contra-asiento aislado.'
