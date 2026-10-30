@@ -512,6 +512,14 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
+test('SQLite rejects impossible calendar dates on supplier credit notes', () => {
+  const { prior, next } = supplierCreditFixture();
+  next.purchases[1].invoiceDate = '2026-02-30';
+  next.journalEntries[1].date = '2026-02-30';
+  next.movements[1].date = '2026-02-30';
+  assert.throws(() => validateAccountingSnapshot(prior, next), /falta factura original, proveedor, soporte/);
+});
+
 test('SQLite rejects supplier credit note without the linked physical return', () => {
   const { prior, next } = supplierCreditFixture();
   next.movements = next.movements.filter(item => item.id !== 'return-movement');
