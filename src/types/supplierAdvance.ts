@@ -1,3 +1,4 @@
+import type { SupplierAdvanceSettlement } from './supplierAdvanceSettlement';
 import type { PurchaseRecord } from './accounting';
 
 export interface SupplierAdvanceBalance {
@@ -35,6 +36,30 @@ export function calculateSupplierAdvanceBalance(
     outstandingUsd: totalCreditUsd,
     creditNoteCount: notes.length
   };
+}
+
+/** Computes remaining advances after active refunds/applications; reversed settlements restore the balance. */
+export function calculateOutstandingSupplierAdvance(
+  supplierRif: string,
+  purchases: PurchaseRecord[],
+  settlements: SupplierAdvanceSettlement[],
+  companyId: string
+): SupplierAdvanceBalance {
+  const balance = calculateSupplierAdvanceBalance(supplierRif, purchases.filter(item => item.companyId === companyId));
+  const rif = String(supplierRif || '').trim().toUpperCase();
+  const active = settlements.filter(item =>
+    item.companyId === companyId &&
+    !item.isReversed &&
+    String(item.supplierRif || '').trim().toUpperCase() === rif
+  );
+  const usedUsd = active.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+  const usedBs = active.reduce((sum, item) => sum + Number(item.amountBs || 0), 0);
+  const outstandingUsd = money(balance.totalCreditUsd - usedUsd);
+  const outstandingBs = money(balance.totalCreditBs - usedBs);
+  if (outstandingUsd < -0.005 || outstandingBs < -0.02) {
+    throw new Error('Las liquidaciones históricas exceden los anticipos registrados. Se requiere conciliación antes de continuar.');
+  }
+  return { ...balance, outstandingUsd: Math.max(0, outstandingUsd), outstandingBs: Math.max(0, outstandingBs) };
 }
 
 /** A refund or a future-invoice application may never exceed the available supplier advance. */
