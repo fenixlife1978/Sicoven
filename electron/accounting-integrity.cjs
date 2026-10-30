@@ -650,6 +650,8 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(totalInventoryCost - Number(note.taxableBaseBs) - Number(note.exemptAmountBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
+        Math.abs(accountSum('1.1.2.03', 'debit', 'Bs') - Number(note.supplierAdvanceBs || 0)) > 0.02 ||
+        Math.abs(accountSum('1.1.2.03', 'debit', 'Usd') - Number(note.supplierAdvanceUsd || 0)) > 0.0001 ||
         !inventoryAccountsMatch ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
