@@ -206,7 +206,7 @@ export const ReversionFiscalView: React.FC = () => {
       setFeedback({ kind: 'success', message: 'Nota de crédito ' + note.creditNoteNumber +
         ' registrada con ' + note.creditNoteLines?.length + ' línea(s). CxP disminuyó ' +
         formatBs(note.netPayableReductionBs || 0) + ' (' + formatUsd(note.netPayableReductionUsd || 0) +
-        '), con salidas de Kardex y contra-asiento vinculados.' });
+        '), con salidas de Kardex y contra-asiento vinculados. Los comprobantes de retención afectados quedaron marcados para revisión fiscal antes de declarar.' });
       setSupplierReturnLines([{productId:'',quantity:'1'}]);
       setSupplierCreditNoteNumber('');
       setSupplierCreditControlNumber('');
