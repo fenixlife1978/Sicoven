@@ -1362,12 +1362,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           .map(item => ({
             type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
             unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
-            balanceQty: item.balanceQty
+            balanceQty: item.balanceQty, id: item.id, concept: item.concept,
+            correctionForMovementId: item.correctionForMovementId
           }));
         const fifoLayers = reconstructFifoLayers(productHistory, product.currentStock);
         const normalizeRef = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
         const originalLayer = fifoLayers.find(layer =>
-          layer.date === originalMovement.date &&
+          layer.sourceMovementId === originalMovement.id && layer.date === originalMovement.date &&
           normalizeRef(layer.documentRef) === normalizeRef(originalMovement.documentRef) &&
           Math.abs(Number(layer.unitCostBs) - Number(originalMovement.unitCostBs)) <= 0.01 &&
           Math.abs(Number(layer.unitCostUsd) - Number(originalMovement.unitCostUsd)) <= 0.0001
@@ -1378,7 +1379,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         const remainingLayers = fifoLayers.map(layer => ({ ...layer }));
         const targetLayer = remainingLayers.find(layer =>
-          layer.date === originalLayer.date && layer.documentRef === originalLayer.documentRef &&
+          layer.sourceMovementId === originalMovement.id && layer.date === originalLayer.date && layer.documentRef === originalLayer.documentRef &&
           Math.abs(layer.unitCostBs - originalLayer.unitCostBs) <= 0.000001
         )!;
         targetLayer.quantity -= requestedQuantity;
