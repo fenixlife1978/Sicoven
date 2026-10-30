@@ -60,7 +60,7 @@ interface AccountingContextType {
   journalEntries: JournalEntry[];
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
-  reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => JournalEntry;
+  reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => void;
 
   // Liquidaciones de crédito
@@ -345,14 +345,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : company));
   };
 
-  const reverseJournalEntry = (
+  const reverseJournalEntry = async (
     id: string,
     effectiveDate: string,
     reason: string,
     workpaperNote: string,
     priorPeriodAdjustment = false,
     retainedEarningsAccountCode?: string
-  ): JournalEntry => {
+  ): Promise<JournalEntry> => {
+    if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
     if (source.reversalOfEntryId) throw new Error('No se permite reversar un asiento que ya es un contra-asiento.');
@@ -403,7 +404,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw new Error('Reversión bancaria bloqueada: ' + (bankReadiness.reason || 'no existe una contrapartida bancaria verificable.') +
         ' No se registró ningún contra-asiento.');
     }
-    const reversal = addJournalEntry({
+    let resolvePersistence!: () => void;
+    let rejectPersistence!: (error: Error) => void;
+    const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+      resolvePersistence = resolve;
+      rejectPersistence = reject;
+    });
+    const persistenceWaiter = { resolve: resolvePersistence, reject: rejectPersistence };
+    persistenceWaitersRef.current.push(persistenceWaiter);
+    let reversal: JournalEntry;
+    try {
+      reversal = addJournalEntry({
       entryNumber: 0, // addJournalEntry asigna el siguiente correlativo inmutable.
       date: effectiveDate,
       description: (priorPeriodAdjustment ? 'AIA / ' : 'REVERSIÓN / ') + source.description + ' · ' + reason.trim(),
@@ -415,7 +426,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       reversalReason: reason.trim(),
       workpaperNote: workpaperNote.trim(),
       priorPeriodAdjustment
-    });
+      });
+    } catch (error) {
+      persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
+      throw error;
+    }
     setJournalEntries(prev => prev.map(entry => entry.id === source.id
       ? { ...entry, reversedByEntryId: reversal.id, isAdjusted: true }
       : entry));
@@ -458,6 +473,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         return statement;
       }));
     }
+    await persistenceConfirmation;
     return reversal;
   };
 
@@ -467,6 +483,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Serializa las escrituras completas de app_state: varias actualizaciones rápidas
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
     vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency
@@ -592,19 +609,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   useEffect(() => {
     if (!storageReady) return;
+    const waitersForSnapshot = persistenceWaitersRef.current.splice(0);
     if (window.sicovenStore) {
       const snapshotToSave = stateSnapshot;
-      saveQueueRef.current = saveQueueRef.current
-        .then(async () => {
-          const result = await window.sicovenStore!.save(token, snapshotToSave);
-          if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
-          setStorageError(null);
-        })
-        .catch(error => {
-          const message = error instanceof Error ? error.message : 'Error desconocido al guardar en SQLite.';
-          console.error('Error guardando los datos contables en SQLite:', error);
-          setStorageError(message);
-        });
+      const saveTask = saveQueueRef.current.then(async () => {
+        const result = await window.sicovenStore!.save(token, snapshotToSave);
+        if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
+        setStorageError(null);
+      });
+      saveQueueRef.current = saveTask.then(() => undefined, () => undefined);
+      saveTask.then(
+        () => waitersForSnapshot.forEach(waiter => waiter.resolve()),
+        error => {
+          const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
+          console.error('Error guardando los datos contables en SQLite:', normalized);
+          setStorageError(normalized.message);
+          waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
+        }
+      );
       return;
     }
     // Solo para vista de desarrollo web; el ejecutable de escritorio usa SQLite.
@@ -621,8 +643,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       localStorage.setItem(`${STORAGE_KEY}_islrVouchers`, JSON.stringify(islrVouchers));
       localStorage.setItem(`${STORAGE_KEY}_bankAccounts`, JSON.stringify(bankAccounts));
       localStorage.setItem(`${STORAGE_KEY}_statementMovements`, JSON.stringify(bankStatementMovements));
+      waitersForSnapshot.forEach(waiter => waiter.resolve());
     } catch (error) {
-      console.error('Error guardando datos locales de desarrollo:', error);
+      const normalized = error instanceof Error ? error : new Error('Error guardando datos locales de desarrollo.');
+      console.error('Error guardando datos locales de desarrollo:', normalized);
+      waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
   }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, displayCurrency]);
 
