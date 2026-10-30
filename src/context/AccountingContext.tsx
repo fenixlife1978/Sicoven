@@ -3042,20 +3042,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
       if (stmt.reference && stmt.reference !== '0') {
         const cleanRef = stmt.reference.trim().toLowerCase();
-        matchedEntry = companyEntries.find(entry => {
+        const referenceCandidates = companyEntries.filter(entry => {
           if (usedEntryIds.has(entry.id) || !matchesAmountAndNature(stmt, entry)) return false;
           const entryRef = (entry.referenceDoc || '').trim().toLowerCase();
           const entryDesc = (entry.description || '').trim().toLowerCase();
           return Boolean((entryRef && (entryRef.includes(cleanRef) || cleanRef.includes(entryRef))) ||
             (entryDesc && entryDesc.includes(cleanRef)));
         });
-        if (matchedEntry) matchedBy = 'AUTO_REF';
+        // Nunca decidir automáticamente entre dos asientos posibles.
+        if (referenceCandidates.length === 1) {
+          matchedEntry = referenceCandidates[0];
+          matchedBy = 'AUTO_REF';
+        } else if (referenceCandidates.length > 1) {
+          continue;
+        }
       }
 
       if (!matchedEntry) {
-        matchedEntry = companyEntries.find(entry =>
+        const amountCandidates = companyEntries.filter(entry =>
           !usedEntryIds.has(entry.id) && matchesAmountAndNature(stmt, entry)
         );
+        // Importe/fecha/naturaleza no bastan si hay más de un asiento candidato.
+        if (amountCandidates.length !== 1) continue;
+        matchedEntry = amountCandidates[0];
         matchedBy = 'AUTO_AMOUNT';
       }
 
