@@ -11,7 +11,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, products, movements, addPurchase, addMovement } = useAccounting();
+  const { currentCompany, products, movements, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
@@ -132,6 +132,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     }
 
     try {
+      runAtomicInvoiceImport(() => {
       addPurchase({
       invoiceDate,
       supplierRif: formatRif(supplierRif),
@@ -190,6 +191,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
           });
         }
       }
+      });
       onClose();
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'No se pudo registrar la compra. Verifica los datos e inténtalo nuevamente.');
