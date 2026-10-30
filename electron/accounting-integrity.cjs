@@ -495,6 +495,13 @@ function validateAccountingSnapshot(previousState, nextState) {
         duplicateNoteNumber ||
         !note.creditNoteNumber || !note.controlNumber || String(note.notes || '').trim().length < 10 ||
         lines.length === 0 || !note.journalEntryId ||
+        !Number.isFinite(Number(note.bcvRate)) || Number(note.bcvRate) <= 0 ||
+        !Number.isFinite(Number(note.totalAmountBs)) || Number(note.totalAmountBs) <= 0 ||
+        !Number.isFinite(Number(note.totalAmountUsd)) || Number(note.totalAmountUsd) <= 0 ||
+        !Number.isFinite(Number(note.taxableBaseBs || 0)) || Number(note.taxableBaseBs || 0) < 0 ||
+        !Number.isFinite(Number(note.exemptAmountBs || 0)) || Number(note.exemptAmountBs || 0) < 0 ||
+        !Number.isFinite(Number(note.vatAmountBs || 0)) || Number(note.vatAmountBs || 0) < 0 ||
+        !Number.isFinite(Number(note.igtfAmountBs || 0)) || Number(note.igtfAmountBs || 0) < 0 ||
         !Number.isFinite(Number(note.netPayableReductionBs)) || Number(note.netPayableReductionBs) < 0 ||
         !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) < 0 ||
         !Number.isFinite(Number(note.supplierAdvanceBs || 0)) || Number(note.supplierAdvanceBs || 0) < 0 ||
@@ -624,7 +631,15 @@ function validateAccountingSnapshot(previousState, nextState) {
           Math.abs(Number(returnMovement.totalCostBs) - Number(line.inventoryCostBs)) > 0.02 ||
           Math.abs(Number(returnMovement.totalCostUsd) - Number(line.inventoryCostBs) / Number(note.bcvRate)) > 0.0001 ||
           normalizeRif(returnMovement.counterpartyRif) !== normalizeRif(original.supplierRif) ||
-          !originalLine || !product || Number(line.quantity) <= 0 ||
+          !originalLine || !product ||
+          !Number.isFinite(Number(line.quantity)) || Number(line.quantity) <= 0 ||
+          !Number.isFinite(Number(line.unitCostBs)) || Number(line.unitCostBs) <= 0 ||
+          !Number.isFinite(Number(line.inventoryCostBs)) || Number(line.inventoryCostBs) <= 0 ||
+          !Number.isFinite(Number(returnMovement.quantity)) ||
+          !Number.isFinite(Number(returnMovement.unitCostBs)) ||
+          !Number.isFinite(Number(returnMovement.totalCostBs)) ||
+          !Number.isFinite(Number(returnMovement.totalCostUsd)) ||
+          !Number.isFinite(Number(returnMovement.bcvRate)) ||
           Math.abs(Number(line.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
           Math.abs(Number(line.inventoryCostBs) - Number(line.quantity) * Number(line.unitCostBs)) > 0.02) {
         throw new Error('SQLite rechazó una línea de nota de crédito: la salida física no concilia con la entrada original y el asiento enlazado.');
@@ -665,7 +680,20 @@ function validateAccountingSnapshot(previousState, nextState) {
     const inventoryAccountsMatch = [...inventoryByAccount.entries()].every(([code, amount]) =>
       Math.abs(accountSum(code, 'credit', 'Bs') - amount) <= 0.02 &&
       Math.abs(accountSum(code, 'credit', 'Usd') - amount / Number(note.bcvRate)) <= 0.0001);
-    if (Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
+    const allowedCreditNoteAccounts = new Set([
+      ...inventoryByAccount.keys(), sourcePayableAccountCode, '1.1.2.03',
+      '1.1.3.01', '2.1.2.03', '2.1.2.04', '6.1.1.11'
+    ]);
+    const journalLinesValid = journal.items.length > 0 && journal.items.every(item => {
+      const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd]
+        .map(value => Number(value ?? 0));
+      return allowedCreditNoteAccounts.has(String(item.accountCode || '')) &&
+        values.every(value => Number.isFinite(value) && value >= 0) &&
+        !(values[0] > 0 && values[1] > 0) &&
+        !(values[2] > 0 && values[3] > 0);
+    });
+    if (!journalLinesValid ||
+        Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
         Math.abs(totalInventoryCost - Number(note.taxableBaseBs) - Number(note.exemptAmountBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
