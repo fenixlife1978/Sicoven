@@ -110,6 +110,30 @@ test('SQLite permits bank reconciliation metadata changes without changing impor
   ), /modificación de un registro histórico en bankStatementMovements/);
 });
 
+test('SQLite preserves historical bank reconciliation links after unreconciliation', () => {
+  const statement = {
+    id: 'bank-historical', companyId: 'company-1', bankAccountId: 'bank-1',
+    reference: 'TRX-1', amountBs: 1000, isReconciled: true,
+    reconciledWithJournalEntryId: 'entry-1', reconciledJournalEntryIds: ['entry-1']
+  };
+  const unreconciled = {
+    ...statement, isReconciled: false, reconciledWithJournalEntryId: undefined,
+    matchedBy: undefined, reconciledAt: undefined
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState(), bankStatementMovements: [statement] },
+    { ...emptyState(), bankStatementMovements: [unreconciled] }
+  ));
+  assert.throws(() => validateAccountingSnapshot(
+    { ...emptyState(), bankStatementMovements: [statement] },
+    { ...emptyState(), bankStatementMovements: [{ ...unreconciled, reconciledJournalEntryIds: [] }] }
+  ), /historial de conciliación bancaria/);
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    { ...emptyState(), bankStatementMovements: [statement] },
+    { ...emptyState(), bankStatementMovements: [{ ...unreconciled, reconciledJournalEntryIds: ['entry-1', 'entry-2'] }] }
+  ));
+});
+
 test('one-time cleanup of legacy demo companies is permitted', () => {
   const demoEntry = { ...sourceEntry(), id: 'demo-entry', companyId: 'comp-1' };
   assert.doesNotThrow(() => validateAccountingSnapshot(
