@@ -29,7 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
+import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
@@ -356,65 +356,15 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (reason.trim().length < 10 || workpaperNote.trim().length < 10) {
       throw new Error('La causa y el papel de trabajo deben contener al menos 10 caracteres cada uno.');
     }
-    const linkedSale = sales.find(sale => sale.companyId === currentCompany.id && (sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)));
-    const linkedPurchase = purchases.find(purchase => purchase.companyId === currentCompany.id && (purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)));
-    // Reversión fail-closed: una factura con movimientos de Kardex o extractos
-    // bancarios conciliados no puede revertirse solo desde el Libro Diario. El
-    // contra-asiento aislado dejaría inventario/caja/bancos y auxiliares descuadrados.
-    const linkedInventoryMovements = movements.filter(movement =>
-      movement.companyId === currentCompany.id &&
-      (movement.journalEntryId === source.id ||
-        (linkedSale && (movement.documentRef.trim().toUpperCase() === linkedSale.invoiceNumber.trim().toUpperCase() ||
-          movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedSale.invoiceNumber).toUpperCase())) ||
-        (linkedPurchase && (movement.documentRef.trim().toUpperCase() === linkedPurchase.invoiceNumber.trim().toUpperCase() ||
-          movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase())))
-    );
-    // Una factura que declara líneas de inventario no puede reversarse solo
-    // porque falten movimientos de Kardex: esa ausencia es una inconsistencia,
-    // no evidencia de que la mercancía nunca ingresó.
-    if (linkedPurchase?.inventoryLines?.length) {
-      const purchaseReadiness = validatePurchaseInventoryReconciliation({
-        companyId: currentCompany.id, purchase: linkedPurchase, movements, journalEntries
-      });
-      if (!purchaseReadiness.ready) {
-        throw new Error('Reversión de compra bloqueada: la conciliación factura-líneas-Kardex-asiento no está aprobada. ' +
-          (purchaseReadiness.reason || 'Existen diferencias en la trazabilidad de inventario.') +
-          ' No se registró ningún contra-asiento.');
-      }
-      throw new Error('Conciliación de compra verificada: factura, líneas, Kardex y asiento coinciden en Bs. y USD. ' +
-        'La reversión continúa bloqueada porque falta el circuito atómico de nota de crédito que ajuste CxP, IVA, retenciones e IGTF y vincule la devolución física. No se registró ningún contra-asiento.');
+    const assessment = assessJournalReversal({
+      companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
+      journalEntries, bankAccounts, bankStatementMovements, creditSettlements
+    });
+    if (!assessment.ready) {
+      throw new Error('Reversión bloqueada por el análisis integral: ' + assessment.blockers.join(' '));
     }
-    if (linkedInventoryMovements.length > 0) {
-      if (!linkedSale || linkedPurchase) {
-        const movementTypes = [...new Set(linkedInventoryMovements.map(movement => movement.concept))].join(', ');
-        throw new Error('Reversión bloqueada: el asiento tiene ' + linkedInventoryMovements.length +
-          ' movimiento(s) de inventario relacionado(s) (' + movementTypes +
-          '). Se requiere una reversión coordinada de Kardex, costo, existencia y documento fiscal. No se registró ningún contra-asiento.');
-      }
-      const inventoryReadiness = validateSaleInventoryReturnReconciliation({
-        companyId: currentCompany.id,
-        invoiceNumber: linkedSale.invoiceNumber,
-        source,
-        movements,
-        products,
-        journalEntries
-      });
-      if (!inventoryReadiness.ready) {
-        throw new Error('Reversión de venta bloqueada: ' + (inventoryReadiness.reason || 'el Kardex no está completamente conciliado.') +
-          ' No se registró ningún contra-asiento.');
-      }
-    }
-    if (linkedSale || linkedPurchase) {
-      const documentId = linkedSale?.id || linkedPurchase?.id;
-      const kind = linkedSale ? 'SALE_COLLECTION' : 'PURCHASE_PAYMENT';
-      const activeSettlements = creditSettlements.filter(item =>
-        item.companyId === currentCompany.id && item.documentId === documentId &&
-        item.kind === kind && !item.isReversed
-      );
-      if (activeSettlements.length) {
-        throw new Error('La factura tiene ' + activeSettlements.length + ' cobro(s)/pago(s) vigente(s). Revierta primero cada liquidación vinculada; después podrá reversar la factura sin dejar saldos de crédito inconsistentes.');
-      }
-    }
+    const linkedSale = assessment.linkedSale;
+    const linkedPurchase = assessment.linkedPurchase;
     const sourceInClosedPeriod = Boolean(currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
     if (sourceInClosedPeriod && !priorPeriodAdjustment) {
       throw new Error('El asiento pertenece a un período cerrado. Debe usar Ajuste de Ejercicio Anterior (AIA).');
