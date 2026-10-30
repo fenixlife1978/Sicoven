@@ -242,7 +242,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     lineTotal = money(lineTotal);
     const invoiceInventoryTotal = money(Number(purchase.taxableBaseBs || 0) + Number(purchase.exemptAmountBs || 0));
-    if (Math.abs(lineTotal - invoiceInventoryTotal) > 0.02) {
+    if (!Number.isFinite(invoiceInventoryTotal) || Math.abs(lineTotal - invoiceInventoryTotal) > 0.02) {
       throw new Error('SQLite rechazó la compra: las líneas de inventario no concilian con base imponible más exento.');
     }
     const expectedReference = normalizeDocument('FAC-' + purchase.invoiceNumber);
@@ -261,22 +261,40 @@ function validateAccountingSnapshot(previousState, nextState) {
       }
       const movement = matches[0];
       const expectedCost = money(Number(line.quantity) * Number(line.unitCostBs));
+      const movementQuantity = Number(movement.quantity);
+      const movementCostBs = Number(movement.totalCostBs);
+      const movementCostUsd = Number(movement.totalCostUsd);
+      const movementRate = Number(movement.bcvRate);
+      const invoiceRate = Number(purchase.bcvRate);
       if (priorMovementIds.has(String(movement.id)) ||
           movement.date !== purchase.invoiceDate ||
-          Math.abs(Number(movement.quantity) - Number(line.quantity)) > 0.000001 ||
-          Math.abs(money(movement.totalCostBs) - expectedCost) > 0.02 ||
+          !Number.isFinite(movementQuantity) ||
+          Math.abs(movementQuantity - Number(line.quantity)) > 0.000001 ||
+          !Number.isFinite(movementCostBs) ||
+          Math.abs(money(movementCostBs) - expectedCost) > 0.02 ||
+          !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
+          !Number.isFinite(movementRate) || Math.abs(movementRate - invoiceRate) > 0.000001 ||
+          !Number.isFinite(movementCostUsd) ||
+          Math.abs(movementCostUsd - movementCostBs / invoiceRate) > 0.0001 ||
           normalizeRif(movement.counterpartyRif) !== normalizeRif(purchase.supplierRif)) {
-        throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, cantidad o costo con su línea de factura.');
+        throw new Error('SQLite rechazó la compra: una entrada de Kardex no coincide en fecha, proveedor, tasa BCV, cantidad o costo con su línea de factura.');
       }
     }
     const purchaseEntry = purchase.journalEntryId
       ? nextById.get(String(purchase.journalEntryId))
       : undefined;
-    const inventoryDebit = purchaseEntry?.items?.reduce((sum, item) =>
-      sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0), 0);
+    const inventoryDebits = purchaseEntry?.items?.reduce((sum, item) => ({
+      debitBs: sum.debitBs + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) : 0),
+      debitUsd: sum.debitUsd + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) : 0)
+    }), { debitBs: 0, debitUsd: 0 });
+    const inventoryDebitBs = Number(inventoryDebits?.debitBs);
+    const inventoryDebitUsd = Number(inventoryDebits?.debitUsd);
     if (!purchaseEntry || purchaseEntry.companyId !== purchase.companyId ||
-        purchaseEntry.type !== 'COMPRA' || Math.abs(money(inventoryDebit) - lineTotal) > 0.02) {
-      throw new Error('SQLite rechazó la compra: el asiento no reconoce en inventario el costo total conciliado de las líneas de Kardex.');
+        purchaseEntry.type !== 'COMPRA' ||
+        !Number.isFinite(inventoryDebitBs) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
+        !Number.isFinite(inventoryDebitUsd) ||
+        Math.abs(inventoryDebitUsd - lineTotal / Number(purchase.bcvRate)) > 0.0001) {
+      throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo total conciliado de las líneas de Kardex.');
     }
   }
 
