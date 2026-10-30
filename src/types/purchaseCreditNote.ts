@@ -126,9 +126,11 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     }
     requestedProducts.add(product.id);
     requestedMovements.add(movement.id);
+    const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
     if (movement.companyId !== purchase.companyId || movement.productId !== product.id ||
         movement.type !== 'ENTRADA' || movement.concept !== 'COMPRA' ||
-        normalize(movement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber)) {
+        normalize(movement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber) ||
+        normalizeRif(movement.counterpartyRif) !== normalizeRif(purchase.supplierRif)) {
       throw new Error('Una entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
     }
     if (!Number.isFinite(quantity) || quantity <= 0 ||
