@@ -71,7 +71,7 @@ interface AccountingContextType {
   // Compras
   purchases: PurchaseRecord[];
   addPurchase: (purchase: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>) => PurchaseRecord;
-  addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => PurchaseRecord;
+  addPurchaseCreditNote: (request: PurchaseCreditNoteRequest) => Promise<PurchaseRecord>;
   deletePurchase: (id: string) => void;
 
   // Ventas
@@ -1241,7 +1241,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return finalPurchase;
   };
 
-  const addPurchaseCreditNote = (request: PurchaseCreditNoteRequest): PurchaseRecord => runAtomicInvoiceImport(() => {
+  const addPurchaseCreditNote = async (request: PurchaseCreditNoteRequest): Promise<PurchaseRecord> => runAtomicInvoiceImport(async () => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la nota de crédito.');
     const purchase = purchases.find(item => item.id === request.purchaseId && item.companyId === currentCompany.id);
     if (!purchase || purchase.documentType !== '01' || purchase.isCancelled) {
@@ -1389,15 +1389,33 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       notes: request.reason.trim()
     };
     purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
-    setJournalEntries(prev => [...prev, journal]);
-    setMovements(prev => [...prev, ...stampMovements.map(item => item.movement)]);
-    setProducts(prev => prev.map(item => {
+    const nextMovements = [...movements, ...stampMovements.map(item => item.movement)];
+    const nextProducts = products.map(item => {
       const returned = stampMovements.find(entry => entry.product.id === item.id);
       return returned ? { ...item, currentStock: returned.newStock,
         avgCostBs: returned.newStock > 0 ? item.avgCostBs : 0,
         avgCostUsd: returned.newStock > 0 ? item.avgCostUsd : 0 } : item;
-    }));
-    setPurchases(prev => [...prev, note]);
+    });
+    const nextSnapshot = {
+      companies, currentCompanyId, accounts,
+      journalEntries: [...journalEntries, journal], purchases: [...purchases, note], sales,
+      products: nextProducts, movements: nextMovements, vatVouchers, islrVouchers,
+      bankAccounts, bankStatementMovements, creditSettlements, displayCurrency
+    };
+    if (!window.sicovenStore?.save) {
+      throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
+    }
+    // Espera escrituras anteriores y confirma SQLite antes de publicar cambios en React.
+    await saveQueueRef.current;
+    const persisted = await window.sicovenStore.save(token, nextSnapshot);
+    if (persisted?.ok !== true) {
+      throw new Error(persisted?.message || 'SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
+    }
+    setJournalEntries(nextSnapshot.journalEntries);
+    setMovements(nextMovements);
+    setProducts(nextProducts);
+    setPurchases(nextSnapshot.purchases);
+    setStorageError(null);
     return note;
   });
 
