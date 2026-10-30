@@ -50,7 +50,7 @@ export interface PurchaseCreditNoteDraft {
 }
 
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
 
 export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): PurchaseCreditNoteAmounts {
   const { purchase, product, products, originalMovement } = draft;
@@ -64,7 +64,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
       normalize(originalMovement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber)) {
     throw new Error('La entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
   }
-  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draft.returnDate) || draft.returnDate < originalMovement.date) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(draft.returnDate) || draft.returnDate < originalMovement.date) {
     throw new Error('La fecha de la nota de crédito no puede ser anterior a la entrada original.');
   }
   if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
