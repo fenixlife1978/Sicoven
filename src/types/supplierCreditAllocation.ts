@@ -22,6 +22,9 @@ export function allocateSupplierCredit(
   if (values.some(value => !Number.isFinite(value) || value < 0) || invoiceRate <= 0) {
     throw new Error('No se puede distribuir el crédito del proveedor: importes, saldo o tasa inválidos.');
   }
+  if (Math.abs(requestedCreditBs - requestedCreditUsd * invoiceRate) > 0.02) {
+    throw new Error('El crédito del proveedor no concilia entre Bs. y USD. Revise la tasa y el cálculo fiscal de la nota.');
+  }
   const appliedToPayableUsd = Math.round(Math.min(requestedCreditUsd, outstandingPayableUsd) * 100) / 100;
   const supplierAdvanceUsd = Math.round(Math.max(0, requestedCreditUsd - appliedToPayableUsd) * 100) / 100;
   const appliedToPayableBs = Math.round(appliedToPayableUsd * invoiceRate * 100) / 100;
