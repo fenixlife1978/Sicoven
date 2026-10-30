@@ -1657,6 +1657,30 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       date: request.returnDate, description: 'Nota de crédito proveedor ' + request.creditNoteNumber + ' afecta factura ' + purchase.invoiceNumber,
       type: 'AJUSTE', bcvRate: rate, referenceDoc: reference, items, createdAt: new Date().toISOString()
     };
+    const fifoReturnBalances = new Map<string, { bs: number; usd: number }>();
+    for (const product of draftLines.filter(item => item.product.costingMethod === 'PEPS').map(item => item.product)
+      .filter((item, index, all) => all.findIndex(candidate => candidate.id === item.id) === index)) {
+      const history = movements
+        .filter(item => item.companyId === currentCompany.id && item.productId === product.id)
+        .map(item => ({
+          type: item.type, quantity: item.quantity, unitCostBs: item.unitCostBs,
+          unitCostUsd: item.unitCostUsd, date: item.date, documentRef: item.documentRef,
+          balanceQty: item.balanceQty, id: item.id, concept: item.concept,
+          correctionForMovementId: item.correctionForMovementId
+        }));
+      const layers = reconstructFifoLayers(history, product.currentStock).map(layer => ({ ...layer }));
+      for (const returnedLine of valuation.lines.filter(item => item.productId === product.id)) {
+        const layer = layers.find(item => item.sourceMovementId === returnedLine.originalMovementId);
+        if (!layer || Number(layer.quantity) + 0.000001 < Number(returnedLine.quantity)) {
+          throw new Error('La devolución excede la capa PEPS disponible del artículo ' + product.code + '.');
+        }
+        layer.quantity -= Number(returnedLine.quantity);
+      }
+      fifoReturnBalances.set(product.id, {
+        bs: Math.round(layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0) * 100) / 100,
+        usd: Math.round(layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostUsd, 0) * 1000000) / 1000000
+      });
+    }
     const stampMovements = valuation.lines.map((returnedLine, index) => {
       const source = draftLines.find(item =>
         item.product.id === returnedLine.productId &&
@@ -1682,8 +1706,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           unitCostUsd: toUsd(returnedLine.unitCostBs),
           totalCostBs: returnedLine.inventoryCostBs, totalCostUsd: toUsd(returnedLine.inventoryCostBs),
           balanceQty: newStock,
-          balanceTotalBs: product.costingMethod === 'PEPS' ? Number(source.fifoBalanceAfterReturnBs) : Math.round(newStock * product.avgCostBs * 100) / 100,
-          balanceTotalUsd: product.costingMethod === 'PEPS' ? Number(source.fifoBalanceAfterReturnUsd) : Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
+          balanceTotalBs: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.bs) : Math.round(newStock * product.avgCostBs * 100) / 100,
+          balanceTotalUsd: product.costingMethod === 'PEPS' ? Number(fifoReturnBalances.get(product.id)?.usd) : Math.round(newStock * product.avgCostUsd * 1000000) / 1000000,
           journalEntryId: journalId, correctionForMovementId: returnedLine.originalMovementId,
           bcvRate: rate, documentType: 'Nota de crédito proveedor',
           counterpartyRif: purchase.supplierRif, counterpartyName: purchase.supplierName,
