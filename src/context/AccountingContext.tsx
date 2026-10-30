@@ -37,7 +37,7 @@ import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
-import { validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
+import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -857,7 +857,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
 
     const sourceNotes = purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '03' &&
-      !item.isCancelled && String(item.supplierRif || '').trim().toUpperCase() === rif && Number(item.supplierAdvanceUsd || 0) > 0);
+      !item.isCancelled && String(item.supplierRif || '').trim().toUpperCase() === rif &&
+      Number(item.supplierAdvanceUsd || 0) > 0).sort((a, b) =>
+        String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')) || String(a.id).localeCompare(String(b.id)));
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
       ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && !item.isCancelled)
       : undefined;
@@ -943,9 +945,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
       throw cause;
     }
+    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
+      sourceNotes.map(note => ({
+        id: note.id,
+        amountUsd: Number(note.supplierAdvanceUsd || 0),
+        bookValueBs: Number(note.supplierAdvanceBs || 0)
+      })),
+      supplierAdvanceSettlements,
+      currentCompany.id,
+      rif,
+      amountUsd
+    );
+    const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
+    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
+    );
+    if (allocationError) throw new Error(allocationError);
     const settlement: SupplierAdvanceSettlement = {
       ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || target?.supplierName || '',
-      sourceCreditNoteIds: sourceNotes.map(item => item.id), id: `supplier-advance-${currentCompany.id}-${Date.now()}`,
+      sourceCreditNoteIds, sourceCreditNoteAllocations,
+      id: `supplier-advance-${currentCompany.id}-${Date.now()}`,
       companyId: currentCompany.id, amountUsd, amountBs: advanceBookValueBs, advanceBookValueBs,
       cashReceivedBs: draft.kind === 'REFUND_RECEIVED' ? settlementValueBs : undefined,
       exchangeDifferenceBs: differenceBs, journalEntryId: entry.id, createdAt: new Date().toISOString()
