@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import type { Account, JournalEntry } from './accounting';
+import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from './journalReversal';
 
 const accounts: Account[] = [
