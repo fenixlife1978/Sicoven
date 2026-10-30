@@ -23,7 +23,6 @@ const verifyPassword = (password, salt, expected) => {
 };
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
-const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
 
 let db;
