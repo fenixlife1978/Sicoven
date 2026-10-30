@@ -39,7 +39,7 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
   const eligiblePurchases = purchases.filter(p => p.documentType === '01' && !p.isCancelled &&
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
-  const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id);
+  const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id && a.currency === 'BS');
   const rate = Number(bcvRate);
   const usd = Number(amountUsd);
   const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
@@ -148,8 +148,8 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
           </section>}
           {kind === 'REFUND_RECEIVED' && <>
             <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="number" min="0.01" step="0.01" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
-            <label className="block text-xs font-semibold text-slate-700">Cuenta de caja / banco
-              <select required value={treasuryAccountCode} onChange={e => setTreasuryAccountCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Seleccione cuenta</option>{accounts.map(a => <option key={a.id} value={a.accountCode}>{a.bankName} · {a.accountCode} · {a.currency}</option>)}</select>
+            <label className="block text-xs font-semibold text-slate-700">Cuenta bancaria en Bs.
+              <select required value={treasuryAccountCode} onChange={e => setTreasuryAccountCode(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm"><option value="">Seleccione cuenta bancaria en Bs.</option>{accounts.map(a => <option key={a.id} value={a.accountCode}>{a.bankName} · {a.accountCode} · {a.currency}</option>)}</select>
             </label>
           </>}
           <label className="block text-xs font-semibold text-slate-700">Referencia / soporte<input value={reference} onChange={e => setReference(e.target.value)} maxLength={100} placeholder="Transferencia, recibo o documento" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
