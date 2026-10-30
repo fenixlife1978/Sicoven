@@ -760,6 +760,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
+    const prior = creditSettlements.filter(item => item.companyId === currentCompany.id &&
+      item.documentId === draft.documentId && item.kind === kind && !item.isReversed);
     const duplicate = prior.some(item => {
       const sameDate = item.settlementDate === draft.settlementDate;
       const sameAmount = Math.round(item.amountUsd * 100) === Math.round(draft.amountUsd * 100);
@@ -1271,7 +1273,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('La devolución del artículo ' + product.code + ' debe registrarse después del último movimiento de Kardex (' + latestMovementDate + ').');
       }
       return {
-        product, originalMovement, quantity: Number(line.quantity), previouslyReturnedQuantity,
+        product, originalMovement, quantity: Number(line.quantity), previouslyReturnedQuantity: priorReturnedQuantity,
         currentStock: product.currentStock, currentAverageCostBs: product.avgCostBs
       };
     });
