@@ -249,7 +249,7 @@ export const LibroComprasView: React.FC = () => {
                       {formatBs(signed(p, p.totalAmountBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(p.totalAmountUsd)}
+                          {formatUsd(signed(p, p.totalAmountUsd))}
                         </div>
                       )}
                     </td>
