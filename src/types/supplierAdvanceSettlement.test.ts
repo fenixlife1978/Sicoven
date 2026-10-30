@@ -12,6 +12,13 @@ test('acepta reembolso únicamente con cuenta de tesorería identificada', () =>
   assert.equal(validateSupplierAdvanceSettlementDraft(base, 30, undefined, ['1.1.1.03']), null);
 });
 
+test('rechaza una cuenta USD cuando el formulario registra el efectivo recibido en Bs', () => {
+  // El contexto solo entrega códigos de auxiliares BS a este formulario.
+  assert.match(validateSupplierAdvanceSettlementDraft(
+    { ...base, treasuryAccountCode: '1.1.1.07.01' }, 30, undefined, ['1.1.1.06.01']
+  ) || '', /cuenta real de caja o banco/);
+});
+
 test('rechaza reembolso sin cuenta real de caja o banco', () => {
   assert.match(validateSupplierAdvanceSettlementDraft({ ...base, treasuryAccountCode: undefined }, 30, undefined, []) || '', /cuenta real de caja o banco/);
 });
