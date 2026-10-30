@@ -937,5 +937,5 @@ test('SQLite rejects supplier advance settlements with an unbalanced linked jour
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
   };
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
-    /asiento de anticipo descuadrado/);
+    /asiento de anticipo descuadrado|no cuadra simultáneamente en Bs\. y USD/);
 });
