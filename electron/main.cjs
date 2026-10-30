@@ -475,6 +475,14 @@ app.whenReady().then(async () => {
       for (const row of (Array.isArray(state.bankStatementMovements) ? state.bankStatementMovements : [])) {
         const oldRow = oldBankRows.get(String(row.id));
         if (!oldRow) continue;
+        if (oldRow.isReconciled && !row.isReconciled) {
+          auditInsert.run('bank_statement_unreconciled', JSON.stringify({
+            statementMovementId: row.id, companyId: row.companyId, bankAccountId: row.bankAccountId,
+            previousJournalEntryId: oldRow.reconciledWithJournalEntryId || null,
+            reconciliationHistory: oldRow.reconciledJournalEntryIds || [],
+            reference: row.reference, date: row.date, amountBs: row.amountBs, amountUsd: row.amountUsd
+          }));
+        }
         const oldLinks = Array.isArray(oldRow.reconciledJournalEntryIds) ? oldRow.reconciledJournalEntryIds : [];
         const nextLinks = Array.isArray(row.reconciledJournalEntryIds) ? row.reconciledJournalEntryIds : [];
         for (const journalEntryId of nextLinks) {
