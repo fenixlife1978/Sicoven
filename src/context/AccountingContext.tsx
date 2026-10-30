@@ -1452,10 +1452,22 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         avgCostBs: returned.newStock > 0 ? item.avgCostBs : 0,
         avgCostUsd: returned.newStock > 0 ? item.avgCostUsd : 0 } : item;
     });
+    const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
+    const nextVatVouchers = valuation.vatWithheldBs > 0 ? vatVouchers.map(voucher =>
+      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id && !voucher.requiresFiscalCorrection
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+        : voucher
+    ) : vatVouchers;
+    const nextIslrVouchers = valuation.islrWithheldBs > 0 ? islrVouchers.map(voucher =>
+      voucher.companyId === currentCompany.id && voucher.invoiceNumber === purchase.invoiceNumber &&
+      voucher.supplierRif === purchase.supplierRif && !voucher.requiresFiscalCorrection
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+        : voucher
+    ) : islrVouchers;
     const nextSnapshot = {
       companies, currentCompanyId, accounts,
       journalEntries: [...journalEntries, journal], purchases: [...purchases, note], sales,
-      products: nextProducts, movements: nextMovements, vatVouchers, islrVouchers,
+      products: nextProducts, movements: nextMovements, vatVouchers: nextVatVouchers, islrVouchers: nextIslrVouchers,
       bankAccounts, bankStatementMovements, creditSettlements, displayCurrency
     };
     if (!window.sicovenStore?.save) {
@@ -1477,6 +1489,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setMovements(nextMovements);
     setProducts(nextProducts);
     setPurchases(nextSnapshot.purchases);
+    setVatVouchers(nextVatVouchers);
+    setIslrVouchers(nextIslrVouchers);
     setStorageError(null);
     return note;
       });
