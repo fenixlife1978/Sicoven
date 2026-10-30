@@ -87,14 +87,14 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   if (!Number.isFinite(rate) || rate <= 0) throw new Error('La factura no conserva una tasa BCV válida.');
   const requiredAmounts = [
     purchase.taxableBaseBs, purchase.exemptAmountBs, purchase.vatAmountBs,
-    purchase.vatWithheldBs || 0, purchase.islrWithheldBs || 0, purchase.igtfAmountBs || 0,
-    purchase.islrSubtrahendBs || 0, purchase.totalAmountBs, purchase.taxRate
+    purchase.vatWithheldBs ?? 0, purchase.islrWithheldBs ?? 0, purchase.igtfAmountBs ?? 0,
+    purchase.islrSubtrahendBs ?? 0, purchase.totalAmountBs, purchase.taxRate
   ].map(Number);
   if (requiredAmounts.some(value => !Number.isFinite(value) || value < 0) || Number(purchase.taxRate) > 100) {
-    throw new Error('La factura contiene importes o alícuotas fiscales negativos, excesivos o no numéricos; no se puede calcular una devolución segura.');
+    throw new Error('La factura contiene importes fiscales negativos, excesivos o no numéricos; no se puede calcular una devolución segura.');
   }
-  if (Number(purchase.vatWithheldBs || 0) > Number(purchase.vatAmountBs) + 0.02 ||
-      Number(purchase.islrWithheldBs || 0) > Number(purchase.taxableBaseBs) + 0.02) {
+  if (Number(purchase.vatWithheldBs ?? 0) > Number(purchase.vatAmountBs) + 0.02 ||
+      Number(purchase.islrWithheldBs ?? 0) > Number(purchase.taxableBaseBs) + 0.02) {
     throw new Error('Las retenciones originales superan su base o impuesto de referencia.');
   }
   const expectedOriginalVat = money(Number(purchase.taxableBaseBs) * Number(purchase.taxRate) / 100);
@@ -102,7 +102,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     throw new Error('El IVA original no concilia con la base imponible y la alícuota registrada.');
   }
   const expectedOriginalTotal = money(Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) +
-    Number(purchase.vatAmountBs) + Number(purchase.igtfAmountBs || 0));
+    Number(purchase.vatAmountBs) + Number(purchase.igtfAmountBs ?? 0));
   if (Math.abs(expectedOriginalTotal - Number(purchase.totalAmountBs)) > 0.02) {
     throw new Error('El total de la factura original no concilia con sus bases, IVA e IGTF.');
   }
@@ -119,7 +119,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     }
     invoiceProductIds.add(invoiceLine.productId);
   }
-  if (Number(purchase.islrSubtrahendBs || 0) > 0 && Number(purchase.islrWithheldBs || 0) > 0) {
+  if (Number(purchase.islrSubtrahendBs ?? 0) > 0 && Number(purchase.islrWithheldBs ?? 0) > 0) {
     throw new Error('La retención ISLR original tiene sustraendo; el prorrateo automático no es fiscalmente fiable. Requiere cálculo específico de la base y sustraendo de la nota.');
   }
 
@@ -216,12 +216,12 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   exemptAmountBs = money(exemptAmountBs);
   const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * Number(purchase.taxRate) / 100) : 0;
   const vatWithheldBs = Number(purchase.vatAmountBs) > 0
-    ? money(Number(purchase.vatWithheldBs || 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
+    ? money(Number(purchase.vatWithheldBs ?? 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
   const islrWithheldBs = Number(purchase.taxableBaseBs) > 0
-    ? money(Number(purchase.islrWithheldBs || 0) * taxableBaseBs / Number(purchase.taxableBaseBs)) : 0;
+    ? money(Number(purchase.islrWithheldBs ?? 0) * taxableBaseBs / Number(purchase.taxableBaseBs)) : 0;
   const originalIgtfBase = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) + Number(purchase.vatAmountBs);
   const igtfAmountBs = originalIgtfBase > 0
-    ? money(Number(purchase.igtfAmountBs || 0) * (taxableBaseBs + exemptAmountBs + vatAmountBs) / originalIgtfBase) : 0;
+    ? money(Number(purchase.igtfAmountBs ?? 0) * (taxableBaseBs + exemptAmountBs + vatAmountBs) / originalIgtfBase) : 0;
   const totalAmountBs = money(inventoryCostBs + vatAmountBs + igtfAmountBs);
   const netPayableReductionBs = money(totalAmountBs - vatWithheldBs - islrWithheldBs);
   if (netPayableReductionBs <= 0) throw new Error('El efecto neto de la nota no reduce CxP; requiere tratamiento fiscal especial.');

@@ -150,6 +150,9 @@ test('rechaza importes fiscales y retenciones incoherentes', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, igtfAmountBs: Number.NaN }
   })), /importes fiscales negativos o no numéricos/);
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: { ...purchase, vatWithheldBs: Number.NaN }
+  })), /importes fiscales negativos o no numéricos/);
 });
 
 test('rechaza una entrada de Kardex con cantidad o costo no numérico', () => {

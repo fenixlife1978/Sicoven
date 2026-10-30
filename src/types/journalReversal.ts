@@ -106,8 +106,8 @@ export function validateSaleInventoryReturnReconciliation(input: {
     const costCode = product.costOfSalesAccountCode || '5.1.1.01';
     if (source.items.some(item =>
       (item.accountCode === inventoryCode || item.accountCode === costCode) &&
-      (Number(item.debitBs || 0) + Number(item.creditBs || 0) +
-       Number(item.debitUsd || 0) + Number(item.creditUsd || 0)) > 0.01
+      (Number(item.debitBs ?? 0) + Number(item.creditBs ?? 0) +
+       Number(item.debitUsd ?? 0) + Number(item.creditUsd ?? 0)) > 0.01
     )) {
       return blocked('El asiento original ya contiene costo de ventas o inventario; revertirlo además de las devoluciones duplicaría el efecto del Kardex.');
     }
@@ -121,14 +121,14 @@ export function validateSaleInventoryReturnReconciliation(input: {
       return blocked('La salida original de ' + original.productCode + ' no tiene un asiento de costo/inventario verificable.');
     }
     const originalCostTotals = originalCostEntry.items.reduce((sum, item) => ({
-      debitBs: sum.debitBs + Number(item.debitBs || 0),
-      creditBs: sum.creditBs + Number(item.creditBs || 0),
-      debitUsd: sum.debitUsd + Number(item.debitUsd || 0),
-      creditUsd: sum.creditUsd + Number(item.creditUsd || 0),
-      inventoryCreditBs: sum.inventoryCreditBs + (item.accountCode === inventoryCode ? Number(item.creditBs || 0) : 0),
-      costDebitBs: sum.costDebitBs + (item.accountCode === costCode ? Number(item.debitBs || 0) : 0),
-      inventoryCreditUsd: sum.inventoryCreditUsd + (item.accountCode === inventoryCode ? Number(item.creditUsd || 0) : 0),
-      costDebitUsd: sum.costDebitUsd + (item.accountCode === costCode ? Number(item.debitUsd || 0) : 0)
+      debitBs: sum.debitBs + Number(item.debitBs ?? 0),
+      creditBs: sum.creditBs + Number(item.creditBs ?? 0),
+      debitUsd: sum.debitUsd + Number(item.debitUsd ?? 0),
+      creditUsd: sum.creditUsd + Number(item.creditUsd ?? 0),
+      inventoryCreditBs: sum.inventoryCreditBs + (item.accountCode === inventoryCode ? Number(item.creditBs ?? 0) : 0),
+      costDebitBs: sum.costDebitBs + (item.accountCode === costCode ? Number(item.debitBs ?? 0) : 0),
+      inventoryCreditUsd: sum.inventoryCreditUsd + (item.accountCode === inventoryCode ? Number(item.creditUsd ?? 0) : 0),
+      costDebitUsd: sum.costDebitUsd + (item.accountCode === costCode ? Number(item.debitUsd ?? 0) : 0)
     }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
       inventoryCreditBs: 0, costDebitBs: 0, inventoryCreditUsd: 0, costDebitUsd: 0 });
     if (Math.abs(originalCostTotals.debitBs - originalCostTotals.creditBs) >= 0.01 ||
@@ -172,14 +172,14 @@ export function validateSaleInventoryReturnReconciliation(input: {
         return blocked('La devolución ' + correction.documentRef + ' no tiene un asiento exclusivo de inventario/costo vinculado.');
       }
       const totals = entry.items.reduce((sum, item) => ({
-        debitBs: sum.debitBs + Number(item.debitBs || 0),
-        creditBs: sum.creditBs + Number(item.creditBs || 0),
-        debitUsd: sum.debitUsd + Number(item.debitUsd || 0),
-        creditUsd: sum.creditUsd + Number(item.creditUsd || 0),
-        inventoryDebitBs: sum.inventoryDebitBs + (item.accountCode === inventoryCode ? Number(item.debitBs || 0) : 0),
-        costCreditBs: sum.costCreditBs + (item.accountCode === costCode ? Number(item.creditBs || 0) : 0),
-        inventoryDebitUsd: sum.inventoryDebitUsd + (item.accountCode === inventoryCode ? Number(item.debitUsd || 0) : 0),
-        costCreditUsd: sum.costCreditUsd + (item.accountCode === costCode ? Number(item.creditUsd || 0) : 0)
+        debitBs: sum.debitBs + Number(item.debitBs ?? 0),
+        creditBs: sum.creditBs + Number(item.creditBs ?? 0),
+        debitUsd: sum.debitUsd + Number(item.debitUsd ?? 0),
+        creditUsd: sum.creditUsd + Number(item.creditUsd ?? 0),
+        inventoryDebitBs: sum.inventoryDebitBs + (item.accountCode === inventoryCode ? Number(item.debitBs ?? 0) : 0),
+        costCreditBs: sum.costCreditBs + (item.accountCode === costCode ? Number(item.creditBs ?? 0) : 0),
+        inventoryDebitUsd: sum.inventoryDebitUsd + (item.accountCode === inventoryCode ? Number(item.debitUsd ?? 0) : 0),
+        costCreditUsd: sum.costCreditUsd + (item.accountCode === costCode ? Number(item.creditUsd ?? 0) : 0)
       }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
         inventoryDebitBs: 0, costCreditBs: 0, inventoryDebitUsd: 0, costCreditUsd: 0 });
       if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
@@ -232,9 +232,9 @@ export function validatePurchaseInventoryReconciliation(input: {
   const taxableBase = Number(purchase.taxableBaseBs);
   const exemptBase = Number(purchase.exemptAmountBs);
   const vat = Number(purchase.vatAmountBs);
-  const vatWithheld = Number(purchase.vatWithheldBs || 0);
-  const islrWithheld = Number(purchase.islrWithheldBs || 0);
-  const igtf = Number(purchase.igtfAmountBs || 0);
+  const vatWithheld = Number(purchase.vatWithheldBs ?? 0);
+  const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
+  const igtf = Number(purchase.igtfAmountBs ?? 0);
   const total = Number(purchase.totalAmountBs);
   const rate = Number(purchase.bcvRate);
   const baseTotal = money(taxableBase + exemptBase);
@@ -257,9 +257,9 @@ export function validatePurchaseInventoryReconciliation(input: {
     ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId)
     : undefined;
   const journalInventoryDebit = money(purchaseJournal?.items.reduce((sum, item) =>
-    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs || 0) - Number(item.creditBs || 0) : 0), 0) || 0);
+    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitBs ?? 0) - Number(item.creditBs ?? 0) : 0), 0) || 0);
   const journalInventoryDebitUsd = Number(purchaseJournal?.items.reduce((sum, item) =>
-    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd || 0) - Number(item.creditUsd || 0) : 0), 0) || 0);
+    sum + (item.accountCode === '1.1.4.01' ? Number(item.debitUsd ?? 0) - Number(item.creditUsd ?? 0) : 0), 0) || 0);
   const productIds = new Set<string>();
   const validLines = lines.length > 0 && lines.every(line => {
     const quantity = Number(line.quantity);
@@ -296,7 +296,7 @@ export function validatePurchaseInventoryReconciliation(input: {
   const allowedAccounts = new Set(['1.1.4.01', '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
   const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
   const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
-    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value || 0));
+    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
     return Boolean(item.accountCode) && allowedAccounts.has(item.accountCode) &&
       values.every(value => Number.isFinite(value) && value >= 0) &&
       !(values[0] > 0 && values[1] > 0) && !(values[2] > 0 && values[3] > 0);
@@ -304,10 +304,10 @@ export function validatePurchaseInventoryReconciliation(input: {
   const journalByAccount = new Map<string, { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number }>();
   for (const item of journalItems) {
     const current = journalByAccount.get(item.accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
-    current.debitBs += Number(item.debitBs || 0);
-    current.creditBs += Number(item.creditBs || 0);
-    current.debitUsd += Number(item.debitUsd || 0);
-    current.creditUsd += Number(item.creditUsd || 0);
+    current.debitBs += Number(item.debitBs ?? 0);
+    current.creditBs += Number(item.creditBs ?? 0);
+    current.debitUsd += Number(item.debitUsd ?? 0);
+    current.creditUsd += Number(item.creditUsd ?? 0);
     journalByAccount.set(item.accountCode, current);
   }
   const expectedAccounts = new Map<string, { debitBs: number; creditBs: number }>([
@@ -325,18 +325,18 @@ export function validatePurchaseInventoryReconciliation(input: {
       Math.abs(actual.debitUsd - expected.debitBs / rate) <= 0.0001 &&
       Math.abs(actual.creditUsd - expected.creditBs / rate) <= 0.0001;
   });
-  const journalDebitBs = journalItems.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
-  const journalCreditBs = journalItems.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
-  const journalDebitUsd = journalItems.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
-  const journalCreditUsd = journalItems.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  const journalDebitBs = journalItems.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
+  const journalCreditBs = journalItems.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
+  const journalDebitUsd = journalItems.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
+  const journalCreditUsd = journalItems.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
   const journalBalanced = Math.abs(journalDebitBs - journalCreditBs) <= 0.02 &&
     Math.abs(journalDebitUsd - journalCreditUsd) <= 0.0001;
   const purchaseUsdMatches = Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
     Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
     Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.vatWithheldUsd || 0) - vatWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.islrWithheldUsd || 0) - islrWithheld / rate) <= 0.0001 &&
-    Math.abs(Number(purchase.igtfAmountUsd || 0) - igtf / rate) <= 0.0001;
+    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001;
   const journalMatchesInvoice = Boolean(purchaseJournal && purchaseJournal.type === 'COMPRA' &&
     purchaseJournal.companyId === companyId && purchaseJournal.date === purchase.invoiceDate &&
     normalize(purchaseJournal.referenceDoc) === expectedReference && validAmounts &&
@@ -568,10 +568,10 @@ export function assessJournalReversal(input: {
     companyId, source, reversalItems: reversedItems, bankAccounts, statementMovements: bankStatementMovements
   });
   if (!bankReadiness.ready) blockers.push(bankReadiness.reason || 'La conciliación bancaria inversa no está aprobada.');
-  const debitBs = reversedItems.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
-  const creditBs = reversedItems.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
-  const debitUsd = reversedItems.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
-  const creditUsd = reversedItems.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  const debitBs = reversedItems.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
+  const creditBs = reversedItems.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
+  const debitUsd = reversedItems.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
+  const creditUsd = reversedItems.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
   return {
     ready: blockers.length === 0, blockers, documentKind, documentId,
     linkedSale: sale, linkedPurchase: purchase,
