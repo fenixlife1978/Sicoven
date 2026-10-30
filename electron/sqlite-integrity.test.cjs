@@ -16,7 +16,7 @@ test('SQLite integrity check accepts a healthy database', () => {
 test('SQLite integrity check rejects foreign-key violations without changing rows', () => {
   const db = new Database(':memory:');
   try {
-    db.exec('CREATE TABLE parent(id INTEGER PRIMARY KEY); CREATE TABLE child(parent_id INTEGER REFERENCES parent(id)); INSERT INTO child(parent_id) VALUES(99); PRAGMA foreign_keys = ON;');
+    db.exec('PRAGMA foreign_keys = OFF; CREATE TABLE parent(id INTEGER PRIMARY KEY); CREATE TABLE child(parent_id INTEGER REFERENCES parent(id)); INSERT INTO child(parent_id) VALUES(99); PRAGMA foreign_keys = ON;');
     assert.throws(() => assertSqliteIntegrity(db), /relaciones foráneas inconsistentes/);
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM child').get().count, 1);
   } finally {
