@@ -1,4 +1,4 @@
-import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord } from './accounting';
+import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
 
 /**
  * Builds an immutable contra-entry by swapping debit/credit in both currencies.
@@ -398,4 +398,105 @@ export function validateBankStatementReversal(input: {
     });
   }
   return { ready: true, pairs };
+}
+
+
+export interface JournalReversalAssessment {
+  ready: boolean;
+  blockers: string[];
+  documentKind: 'SALE' | 'PURCHASE' | 'GENERAL';
+  documentId?: string;
+  linkedSale?: SaleRecord;
+  linkedPurchase?: PurchaseRecord;
+  linkedInventoryMovementCount: number;
+  linkedBankMovementCount: number;
+  activeSettlementCount: number;
+  inventoryReadiness?: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation;
+  bankReadiness: BankStatementReversalReadiness;
+  debitBs: number;
+  creditBs: number;
+  debitUsd: number;
+  creditUsd: number;
+}
+
+/**
+ * Single preflight for the guided reversal assistant. It classifies the source
+ * entry and checks every currently modeled auxiliary before the UI enables
+ * posting. Posting repeats these checks in AccountingContext and SQLite.
+ */
+export function assessJournalReversal(input: {
+  companyId: string;
+  source: JournalEntry;
+  accounts: Account[];
+  sales: SaleRecord[];
+  purchases: PurchaseRecord[];
+  movements: InventoryMovement[];
+  products: InventoryProduct[];
+  journalEntries: JournalEntry[];
+  bankAccounts: BankAccount[];
+  bankStatementMovements: BankStatementMovement[];
+  creditSettlements: Array<{ companyId: string; documentId: string; kind: string; isReversed?: boolean }>;
+}): JournalReversalAssessment {
+  const { companyId, source, accounts, sales, purchases, movements, products,
+    journalEntries, bankAccounts, bankStatementMovements, creditSettlements } = input;
+  const sale = sales.find(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
+  const purchase = purchases.find(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
+  const documentKind = sale ? 'SALE' : purchase ? 'PURCHASE' : 'GENERAL';
+  const documentId = sale?.id || purchase?.id;
+  const reference = sale?.invoiceNumber || purchase?.invoiceNumber;
+  const linkedMovements = movements.filter(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      Boolean(reference && [reference, 'FAC-' + reference].includes(String(item.documentRef || '').trim().toUpperCase()))));
+  const linkedBankRows = bankStatementMovements.filter(item => item.companyId === companyId &&
+    (item.reconciledWithJournalEntryId === source.id || item.reconciledJournalEntryIds?.includes(source.id)));
+  const kind = sale ? 'SALE_COLLECTION' : purchase ? 'PURCHASE_PAYMENT' : '';
+  const settlements = documentId && kind ? creditSettlements.filter(item =>
+    item.companyId === companyId && item.documentId === documentId &&
+    item.kind === kind && !item.isReversed) : [];
+  const blockers: string[] = [];
+  if (source.reversalOfEntryId) blockers.push('El asiento seleccionado ya es un contra-asiento.');
+  if (source.reversedByEntryId || journalEntries.some(item =>
+    item.companyId === companyId && item.reversalOfEntryId === source.id)) {
+    blockers.push('El asiento original ya tiene una reversión registrada.');
+  }
+  if (sale?.isCancelled || purchase?.isCancelled) blockers.push('El documento comercial ya está anulado o reversado.');
+  let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
+  if (purchase?.inventoryLines?.length) {
+    inventoryReadiness = validatePurchaseInventoryReconciliation({
+      companyId, purchase, movements, journalEntries
+    });
+    blockers.push(inventoryReadiness.ready
+      ? 'La compra tiene inventario vinculado: debe tramitarse mediante documento fiscal de nota de crédito y devolución coordinada, no con un contra-asiento aislado.'
+      : 'La conciliación de compra no está aprobada: ' + (inventoryReadiness.reason || 'revise factura, Kardex y asiento.'));
+  } else if (sale && linkedMovements.length) {
+    inventoryReadiness = validateSaleInventoryReturnReconciliation({
+      companyId, invoiceNumber: sale.invoiceNumber, source, movements, products, journalEntries
+    });
+    if (!inventoryReadiness.ready) blockers.push(inventoryReadiness.reason || 'La devolución de inventario de la venta no está conciliada.');
+  } else if (linkedMovements.length) {
+    blockers.push('El asiento tiene movimientos de inventario relacionados. Deben identificarse y conciliarse antes de reversar.');
+  }
+  if (settlements.length) blockers.push('Hay ' + settlements.length + ' cobro(s)/pago(s) vigente(s) asociados al documento; revierta primero sus liquidaciones.');
+  const reversedItems = buildReversalItems(source, accounts);
+  const bankReadiness = validateBankStatementReversal({
+    companyId, source, reversalItems: reversedItems, bankAccounts, statementMovements: bankStatementMovements
+  });
+  if (!bankReadiness.ready) blockers.push(bankReadiness.reason || 'La conciliación bancaria inversa no está aprobada.');
+  const debitBs = reversedItems.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+  const creditBs = reversedItems.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+  const debitUsd = reversedItems.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+  const creditUsd = reversedItems.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  return {
+    ready: blockers.length === 0, blockers, documentKind, documentId,
+    linkedSale: sale, linkedPurchase: purchase,
+    linkedInventoryMovementCount: linkedMovements.length,
+    linkedBankMovementCount: linkedBankRows.length,
+    activeSettlementCount: settlements.length,
+    inventoryReadiness, bankReadiness,
+    debitBs, creditBs, debitUsd, creditUsd
+  };
 }
