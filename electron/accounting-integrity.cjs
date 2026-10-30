@@ -62,11 +62,22 @@ function validateAccountingSnapshot(previousState, nextState) {
   assertAppendOnlyCollection(priorState, nextState, 'creditSettlements',
     ['isReversed', 'reversedByJournalEntryId'], ['isReversed']);
   assertAppendOnlyCollection(priorState, nextState, 'bankStatementMovements',
-    ['isReconciled', 'reconciledWithJournalEntryId', 'matchedBy', 'reconciledAt']);
+    ['isReconciled', 'reconciledWithJournalEntryId', 'reconciledJournalEntryIds', 'matchedBy', 'reconciledAt']);
   assertAppendOnlyCollection(priorState, nextState, 'vatVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionNote'], ['requiresFiscalCorrection']);
+  const nextBankRows = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
+  for (const oldRow of asArray(priorState.bankStatementMovements)) {
+    if (isLegacyDemoRecord(oldRow)) continue;
+    const nextRow = nextBankRows.get(String(oldRow.id));
+    if (!nextRow) continue; // La validación append-only anterior ya rechazó su eliminación.
+    const oldLinks = Array.isArray(oldRow.reconciledJournalEntryIds) ? oldRow.reconciledJournalEntryIds : [];
+    const nextLinks = Array.isArray(nextRow.reconciledJournalEntryIds) ? nextRow.reconciledJournalEntryIds : [];
+    if (new Set(nextLinks).size !== nextLinks.length || oldLinks.some(id => !nextLinks.includes(id))) {
+      throw new Error('SQLite bloqueó la eliminación o alteración del historial de conciliación bancaria del movimiento ' + oldRow.id + '.');
+    }
+  }
 
   const oldCompanies = new Map(asArray(priorState.companies).map(company => [String(company.id), company]));
   const nextCompanies = new Map(asArray(nextState.companies).map(company => [String(company.id), company]));
