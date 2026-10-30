@@ -96,10 +96,10 @@ test('bloquea PEPS, costo promedio divergente y fecha en período cerrado', () =
 
 test('rechaza fechas con formato ISO pero imposibles en el calendario', () => {
   assert.throws(() => calculatePurchaseCreditNote({
-    ...draft(), returnDate: '2026-02-30'
+    ...draft(), returnDate: '2026-10-32'
   }), /fecha de la nota de crédito/);
   assert.throws(() => calculatePurchaseCreditNote({
-    ...draft(), purchase: { ...purchase, invoiceDate: '2026-13-01' }
+    ...draft(), returnDate: '2027-01-01', purchase: { ...purchase, invoiceDate: '2026-13-01' }
   }), /fecha de la nota de crédito/);
 });
 
