@@ -601,10 +601,11 @@ test('SQLite rejects cumulative supplier returns above the original invoice quan
 });
 
 
-test('SQLite persists a reconciled supplier credit note across database reopen and rolls back atomically on audit failure', () => {
+test('Production SQLite persistence rolls back atomically on audit failure and survives database reopen', () => {
   const fs = require('node:fs');
   const os = require('node:os');
   const path = require('node:path');
+  const { persistAccountingSnapshot } = require('./accounting-persistence.cjs');
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-credit-note-'));
   const filename = path.join(directory, 'sicoven.sqlite');
   const { prior, next } = supplierCreditFixture();
@@ -633,26 +634,10 @@ test('SQLite persists a reconciled supplier credit note across database reopen a
     db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)')
       .run('accounting', JSON.stringify(prior));
 
-    const persistSnapshot = db.transaction(snapshot => {
-      const stored = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
-      const previous = JSON.parse(stored.state_json);
-      validateAccountingSnapshot(previous, snapshot);
-      db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'")
-        .run(JSON.stringify(snapshot));
-      const note = snapshot.purchases.find(item => item.id === 'purchase-credit-note');
-      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
-        .run('supplier_credit_note_posted', JSON.stringify({
-          documentId: note.id,
-          originalPurchaseId: note.originalPurchaseId,
-          journalEntryId: note.journalEntryId,
-          creditNoteLines: note.creditNoteLines
-        }));
-    });
-
     db.exec(`CREATE TRIGGER reject_supplier_credit_audit BEFORE INSERT ON audit_events
       WHEN NEW.event_type='supplier_credit_note_posted'
       BEGIN SELECT RAISE(ABORT, 'simulated audit write failure'); END;`);
-    assert.throws(() => persistSnapshot(next), /simulated audit write failure/);
+    assert.throws(() => persistAccountingSnapshot(db, next), /simulated audit write failure/);
     assert.deepEqual(
       JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json),
       prior,
@@ -661,7 +646,8 @@ test('SQLite persists a reconciled supplier credit note across database reopen a
     assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
 
     db.exec('DROP TRIGGER reject_supplier_credit_audit');
-    persistSnapshot(next);
+    const saved = persistAccountingSnapshot(db, next);
+    assert.equal(saved.ok, true);
     db.pragma('wal_checkpoint(TRUNCATE)');
     db.close();
     db = null;
@@ -676,8 +662,8 @@ test('SQLite persists a reconciled supplier credit note across database reopen a
     assert.equal(reopened.journalEntries.find(item => item.id === 'credit-entry').referenceDoc, 'NC-PROV-NC-001');
     assert.equal(reopened.vatVouchers[0].correctionEntryIds[0], 'credit-entry');
     assert.equal(reopened.islrVouchers[0].correctionEntryIds[0], 'credit-entry');
-    const audit = db.prepare("SELECT event_type,details_json FROM audit_events").get();
-    assert.equal(audit.event_type, 'supplier_credit_note_posted');
+    const audit = db.prepare("SELECT details_json FROM audit_events WHERE event_type='supplier_credit_note_posted'").get();
+    assert.ok(audit);
     assert.equal(JSON.parse(audit.details_json).documentId, 'purchase-credit-note');
   } finally {
     if (db?.open) db.close();
