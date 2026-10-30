@@ -130,6 +130,12 @@ export function validateSaleInventoryReturnReconciliation(input: {
     )) {
       return blocked('La devolución de ' + original.productCode + ' no tiene movimientos de entrada válidos y fechados después de la venta.');
     }
+    const returnedCostBs = corrections.reduce((sum, item) => sum + Number(item.totalCostBs), 0);
+    const returnedCostUsd = corrections.reduce((sum, item) => sum + Number(item.totalCostUsd), 0);
+    if (Math.abs(returnedCostBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(returnedCostUsd - Number(original.totalCostUsd)) > 0.02) {
+      return blocked('El costo devuelto de ' + original.productCode + ' no coincide con el costo original del Kardex.');
+    }
     for (const correction of corrections) {
       const entry = journalEntries.find(item => item.id === correction.journalEntryId && item.companyId === companyId);
       if (!entry || entry.type !== 'INVENTARIO' || entry.date !== correction.date ||
