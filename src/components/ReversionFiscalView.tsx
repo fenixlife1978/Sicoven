@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
+import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
@@ -49,6 +49,18 @@ export const ReversionFiscalView: React.FC = () => {
   useEffect(() => { void refreshAuditEvents(); }, [refreshAuditEvents]);
 
   const source = journalEntries.find(entry => entry.id === selectedId);
+  const reversalAssessment = useMemo(() => {
+    if (!source) return null;
+    try {
+      return assessJournalReversal({
+        companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
+        journalEntries, bankAccounts, bankStatementMovements, creditSettlements
+      });
+    } catch {
+      return null;
+    }
+  }, [source, currentCompany.id, accounts, sales, purchases, movements, products,
+      journalEntries, bankAccounts, bankStatementMovements, creditSettlements]);
   const isPriorPeriod = Boolean(source && currentCompany.closedThroughDate && source.date <= currentCompany.closedThroughDate);
   const retainedEarningsAccounts = accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement);
   const accountMap = useMemo(() => new Map(accounts.map(account => [account.code, account])), [accounts]);
@@ -76,8 +88,8 @@ export const ReversionFiscalView: React.FC = () => {
   const preview = previewResult.items;
   const previewError = previewResult.error;
 
-  const linkedSale = source ? sales.find(sale => sale.journalEntryId === source.id || (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + sale.invoiceNumber)) : undefined;
-  const linkedPurchase = source ? purchases.find(purchase => purchase.journalEntryId === source.id || (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + purchase.invoiceNumber)) : undefined;
+  const linkedSale = reversalAssessment?.linkedSale;
+  const linkedPurchase = reversalAssessment?.linkedPurchase;
   const linkedInvoiceNumber = linkedSale?.invoiceNumber || linkedPurchase?.invoiceNumber;
   const linkedInventoryMovements = source
     ? movements.filter(movement => movement.companyId === currentCompany.id &&
@@ -113,9 +125,9 @@ export const ReversionFiscalView: React.FC = () => {
     ? creditSettlements.filter(item => item.companyId === currentCompany.id &&
         item.documentId === linkedDocumentId && item.kind === linkedSettlementKind && !item.isReversed)
     : [];
-  const reversalBlockReasons = [
+  const reversalBlockReasons = reversalAssessment?.blockers || [
     ...(requiresInventoryReview ? [linkedPurchase
-      ? 'La reversión directa de la factura original permanece bloqueada para evitar duplicar efectos. Registre la devolución mediante el formulario de nota de crédito de esta sección; la factura histórica se conserva.'
+      ? 'La compra tiene inventario vinculado: requiere un documento fiscal de nota de crédito y devolución coordinada.'
       : saleInventoryReadiness?.reason || 'Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
     ...(linkedBankMovements.length && !bankReversalReadiness.ready ? [bankReversalReadiness.reason || 'No se pudo conciliar el movimiento bancario inverso.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
