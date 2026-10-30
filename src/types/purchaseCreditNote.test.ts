@@ -11,6 +11,7 @@ const purchase: PurchaseRecord = {
   retentionRate: 75, vatWithheldBs: 24, islrWithheldBs: 2,
   bcvRate: 100, totalAmountUsd: 2.3896, taxableBaseUsd: 2,
   vatAmountUsd: 0.32, vatWithheldUsd: 0.24, islrWithheldUsd: 0.02,
+  igtfApplicable: true, igtfRate: 3, igtfAmountBs: 6.96, igtfAmountUsd: 0.0696,
   paymentTerm: 'CREDITO', inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
 };
 const product: InventoryProduct = {
