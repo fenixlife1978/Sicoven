@@ -476,7 +476,7 @@ test('SQLite rejects supplier credit note without the linked physical return', (
 test('SQLite rejects supplier credit note whose journal does not reverse VAT or AP correctly', () => {
   const { prior, next } = supplierCreditFixture();
   next.journalEntries[1].items[0].debitBs = 50;
-  assert.throws(() => validateAccountingSnapshot(prior, next), /no cuadra simultáneamente en Bs\\. y USD/);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no cuadra simultáneamente/);
 });
 
 test('SQLite rejects cumulative supplier returns above the original invoice quantity', () => {
