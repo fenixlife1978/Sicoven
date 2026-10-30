@@ -33,7 +33,7 @@ const downloadCsv = (filename: string, headers: string[], rows: unknown[][]) => 
 };
 
 export const InventarioContableTools: React.FC = () => {
-  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction } = useAccounting();
+  const { currentCompany, products, movements, accounts, journalEntries, importInventoryProducts, importInventoryMovements, updateProduct, addJournalEntry, executeProduction, waitForPersistence, isStorageReady, storageError } = useAccounting();
   const [importing, setImporting] = useState(false);
   const [importMode, setImportMode] = useState<'INVENTARIO_INICIAL' | 'MOVIMIENTOS'>('INVENTARIO_INICIAL');
   const [message, setMessage] = useState('');
@@ -328,23 +328,30 @@ export const InventarioContableTools: React.FC = () => {
     setError(''); setMessage(''); setProductionBusy(true);
     try {
       const result = await executeProduction(finishedProductId, Number(productionQty), productionDate, Number(productionRate), productionRef.trim() || ('PROD-' + Date.now()));
-      setMessage('Producción registrada y confirmada en SQLite: ' + result.length + ' movimientos de consumo/entrada y asiento contable.');
+      setMessage('Consumo de materiales y entrada de producción confirmados en SQLite (' + result.length + ' movimientos). El costo registrado incluye solo materiales; no incluye mano de obra ni costos indirectos de fabricación.');
     } catch (e) { setError(e instanceof Error ? e.message : 'No se pudo registrar la producción.'); }
     finally { setProductionBusy(false); }
   };
 
-  const closeInventoryPeriod = () => {
+  const closeInventoryPeriod = async () => {
     setError(''); setMessage(''); setClosingBusy(true);
     try {
+      if (!currentCompany.id) throw new Error('Seleccione una empresa antes de cerrar el inventario.');
       if (!periodStart || !periodEnd || periodStart > periodEnd) throw new Error('Seleccione un período contable válido.');
+      if (currentCompany.closedThroughDate && periodStart <= currentCompany.closedThroughDate) {
+        throw new Error('El período seleccionado se superpone con un período contable ya cerrado hasta ' + currentCompany.closedThroughDate + '.');
+      }
+      if (!window.sicovenStore) throw new Error('El cierre de inventario requiere la edición de escritorio con SQLite local.');
+      if (!isStorageReady || storageError) throw new Error(storageError || 'SQLite todavía no está lista para confirmar el cierre.');
       const rate = Number(closingRate);
       if (!Number.isFinite(rate) || rate <= 0) throw new Error('Introduzca la tasa BCV histórica correspondiente al cierre.');
       const reference = 'CIERRE-INVENTARIO-' + periodStart + '-' + periodEnd;
-      if (journalEntries.some(entry => entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
+      if (journalEntries.some(entry => entry.companyId === currentCompany.id && entry.referenceDoc === reference)) throw new Error('Este período ya tiene un asiento de cierre con esa referencia.');
       const groups = new Map<string, { inventoryCode: string; costCode: string; opening: number; purchases: number; closing: number; nonSaleReductions: number }>();
-      const entriesInPeriod = journalEntries.filter(entry => entry.date >= periodStart && entry.date <= periodEnd);
-      for (const product of products) {
-        const history = movements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
+      const entriesInPeriod = journalEntries.filter(entry => entry.companyId === currentCompany.id && entry.date >= periodStart && entry.date <= periodEnd);
+      const companyProducts = products.filter(product => product.companyId === currentCompany.id);
+      for (const product of companyProducts) {
+        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
         if (product.currentStock > 0 && history.length === 0) throw new Error('El artículo ' + product.code + ' tiene existencia sin Kardex. Registre o importe su inventario inicial antes del cierre.');
         const before = history.filter(m => m.date < periodStart);
         const atEnd = history.filter(m => m.date <= periodEnd);
@@ -402,7 +409,8 @@ export const InventarioContableTools: React.FC = () => {
         entryNumber: 0, date: periodEnd, description: 'Cierre y conciliación de inventario ' + periodStart + ' a ' + periodEnd,
         type: 'CIERRE', bcvRate: rate, referenceDoc: reference, items
       });
-      setMessage('Cierre de inventario registrado y conciliado con los costos de ventas existentes. Referencia: ' + reference);
+      await waitForPersistence();
+      setMessage('Cierre de inventario registrado, conciliado y confirmado en SQLite. Empresa: ' + currentCompany.name + '. Referencia: ' + reference);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'No se pudo cerrar el inventario.');
     } finally { setClosingBusy(false); }
@@ -452,7 +460,8 @@ export const InventarioContableTools: React.FC = () => {
 
 
     <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-4">
-      <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-violet-700" /><h2 className="font-bold text-slate-900">Matriz insumo-producto y producción</h2></div>
+      <div className="flex items-center gap-2"><FileSpreadsheet className="h-5 w-5 text-violet-700" /><h2 className="font-bold text-slate-900">Matriz insumo-producto y producción (materiales)</h2></div>
+      <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">La orden calcula y capitaliza únicamente los materiales de la matriz. No incluye mano de obra directa ni costos indirectos de fabricación; incorpórelos antes de considerar este importe como costo industrial completo.</p>
       <p className="text-sm text-slate-600">Configure la receta por unidad del producto terminado. Al ejecutar una orden, SICOVEN descuenta materias primas según su método de costeo, registra el consumo en productos en proceso y capitaliza el costo en el producto terminado mediante un asiento de partida doble.</p>
       <label className="block text-sm font-medium text-slate-700">Producto terminado
         <select value={finishedProductId} onChange={e => setFinishedProductId(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2">
