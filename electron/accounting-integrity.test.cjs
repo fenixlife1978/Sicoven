@@ -83,6 +83,81 @@ test('SQLite rejects a second contra-entry for the same original', () => {
   ), /segunda reversión/);
 });
 
+test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
+  const purchase = {
+    id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: 'FAC-100', documentType: '01',
+    taxableBaseBs: 200, exemptAmountBs: 0, journalEntryId: 'purchase-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    items: [line(200, 0, 2, 0), line(0, 200, 0, 2)],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase] }
+  ), /número de entradas de Kardex no coincide/);
+});
+
+test('SQLite accepts a purchase only when invoice, inventory debit and Kardex lines reconcile', () => {
+  const purchase = {
+    id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '100', documentType: '01',
+    taxableBaseBs: 200, exemptAmountBs: 0, journalEntryId: 'purchase-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-new', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-100', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
+  ));
+});
+
+test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
+  const purchase = {
+    id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '100', documentType: '01',
+    taxableBaseBs: 200, exemptAmountBs: 0, journalEntryId: 'purchase-entry',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 150, creditBs: 0, debitUsd: 1.5, creditUsd: 0 },
+      { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 150, debitUsd: 0, creditUsd: 1.5 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-new', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-100', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, totalCostBs: 200, totalCostUsd: 2
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
+  ), /asiento no reconoce en inventario/);
+});
+
 test('SQLite keeps inventory movements append-only', () => {
   const movement = { id: 'mov-1', companyId: 'company-1', productId: 'p-1', quantity: 2, totalCostBs: 200 };
   assert.throws(() => validateAccountingSnapshot(
