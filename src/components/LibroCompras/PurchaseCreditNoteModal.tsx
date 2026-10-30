@@ -50,7 +50,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
 
   const eligible = purchase.documentType === '01' && !purchase.isCancelled &&
     purchase.paymentTerm === 'CREDITO' && Boolean(purchase.inventoryLines?.length);
-  const invalidRows = rows.filter(row => !row.product || !row.originalMovement || row.available <= 1e-8);
+  const invalidRows = rows.filter(row => !row.product || !row.originalMovement);
   const selectedLines = rows.flatMap(row => {
     const quantity = Number(quantities[row.line.productId] || 0);
     if (!row.originalMovement || !Number.isFinite(quantity) || quantity <= 0) return [];
@@ -94,7 +94,6 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
         reason: reason.trim()
       });
       setSuccess('Nota de crédito ' + (note.creditNoteNumber || note.invoiceNumber) + ' registrada y confirmada en SQLite. Kardex, CxP y asiento contable quedaron enlazados.');
-      window.setTimeout(() => onClose(), 900);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo confirmar la nota de crédito en SQLite.');
     } finally {
