@@ -386,7 +386,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
     const linkedBankMovements = bankStatementMovements.filter(movement =>
-      movement.companyId === currentCompany.id && movement.reconciledWithJournalEntryId === source.id
+      movement.companyId === currentCompany.id &&
+      (movement.reconciledWithJournalEntryId === source.id ||
+        movement.reconciledJournalEntryIds?.includes(source.id))
     );
     if (linkedBankMovements.length > 0) {
       throw new Error('Reversión bloqueada: el asiento está conciliado con ' + linkedBankMovements.length +
