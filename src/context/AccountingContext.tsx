@@ -29,7 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
+import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
@@ -358,7 +358,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const assessment = assessJournalReversal({
       companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
-      journalEntries, bankAccounts, bankStatementMovements, creditSettlements
+      journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+      priorPeriodAdjustment, retainedEarningsAccountCode
     });
     if (!assessment.ready) {
       throw new Error('Reversión bloqueada por el análisis integral: ' + assessment.blockers.join(' '));
