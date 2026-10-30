@@ -27,6 +27,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [supplierCreditReason, setSupplierCreditReason] = useState('');
   const [supplierCreditNoteSubmitting, setSupplierCreditNoteSubmitting] = useState(false);
   const [reversalSubmitting, setReversalSubmitting] = useState(false);
+  const [correctionSubmitting, setCorrectionSubmitting] = useState(false);
 
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
@@ -218,6 +219,7 @@ export const ReversionFiscalView: React.FC = () => {
   };
 
   const registerInventoryCorrection = async () => {
+    if (correctionSubmitting) return;
     if (linkedPurchase && !linkedSale) {
       setFeedback({kind:'error', message:'La devolución física a proveedor no se automatiza desde la reversión de factura: el contra-asiento ya revierte CxP y el asiento original. Registrar aquí otra devolución podría duplicar el efecto contable. Requiere conciliación documentada de la cuenta de inventario antes de generar el movimiento físico.'});
       return;
@@ -249,6 +251,7 @@ export const ReversionFiscalView: React.FC = () => {
       setFeedback({kind:'error', message:'La devolución a proveedor con PEPS requiere identificar el lote de origen. No se registró el movimiento.'});
       return;
     }
+    setCorrectionSubmitting(true);
     try {
       const rate = Number(original.bcvRate || currentCompany.bcvRate);
       addMovement({
@@ -270,7 +273,9 @@ export const ReversionFiscalView: React.FC = () => {
       setCorrectionMovementId('');
       setCorrectionDocumentRef('');
     } catch (error) {
-      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la corrección de inventario.'});
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la corrección de inventario en SQLite.'});
+    } finally {
+      setCorrectionSubmitting(false);
     }
   };
 
@@ -398,7 +403,7 @@ export const ReversionFiscalView: React.FC = () => {
                       <div><label className="block text-xs font-semibold mb-1">Ref. nota/soporte</label><input value={correctionDocumentRef} onChange={event=>setCorrectionDocumentRef(event.target.value)} maxLength={120} placeholder="NC-000123" className="w-full rounded-lg border border-slate-300 p-2 text-sm" /></div>
                     </div>
                     {selectedCorrectionSource && !linkedSale && products.find(item=>item.id===selectedCorrectionSource.productId)?.costingMethod === 'PEPS' && <p className="text-xs text-amber-800">PEPS: la devolución al proveedor queda bloqueada hasta identificar el lote original; no se descargará un lote aproximado.</p>}
-                    <button type="button" onClick={registerInventoryCorrection} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700">Registrar devolución y asiento de inventario</button>
+                    <button type="button" onClick={registerInventoryCorrection} disabled={correctionSubmitting} className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-semibold text-white hover:bg-slate-700">{correctionSubmitting ? 'Guardando y confirmando en SQLite…' : 'Registrar devolución y asiento de inventario'}</button>
                   </> : <p className="text-xs text-slate-600">No hay unidades pendientes que coincidan con una salida por venta o una entrada por compra. Si la mercancía no regresó físicamente, documente su disposición en el papel de trabajo sin alterar existencias.</p>}
                 </div>
                 <div className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-xs text-rose-900"><strong>Control de seguridad:</strong> una casilla o una referencia escrita no sustituyen la conciliación técnica. Mientras existan movimientos de Kardex vinculados, el contra-asiento de la factura permanecerá bloqueado hasta completar el flujo coordinado de inventario, costo y documento fiscal.</div></div>}
