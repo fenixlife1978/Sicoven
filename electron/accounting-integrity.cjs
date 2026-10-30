@@ -741,7 +741,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     } else {
       const target = purchaseById.get(String(settlement.targetPurchaseId || ''));
       const payableDebit = journal.items.reduce((sum, item) =>
-        sum + (item.accountCode === '2.1.1.01' ? Number(item.debitBs || 0) : 0), 0), 0);
+        sum + (item.accountCode === '2.1.1.01' ? Number(item.debitBs || 0) : 0), 0);
       if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
           String(target.supplierRif || '').trim().toUpperCase() !== rif || payableDebit <= 0) {
         throw new Error('SQLite rechazó una aplicación de anticipo a una factura de otro proveedor o sin débito de CxP.');
