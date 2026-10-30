@@ -278,7 +278,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     try {
       const result = operation();
       if (result && typeof (result as any).then === 'function') {
-        return (result as Promise<T>).catch(rollback) as T;
+        return (result as unknown as Promise<T>).catch(rollback) as T;
       }
       return result;
     } catch (error) {
@@ -1424,7 +1424,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     await saveQueueRef.current;
     const persisted = await window.sicovenStore.save(token, nextSnapshot);
     if (persisted?.ok !== true) {
-      throw new Error(persisted?.message || 'SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
+      throw new Error('SQLite no confirmó la nota de crédito. No se aplicaron los cambios en pantalla.');
     }
     setJournalEntries(nextSnapshot.journalEntries);
     setMovements(nextMovements);
