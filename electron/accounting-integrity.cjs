@@ -491,6 +491,15 @@ function validateAccountingSnapshot(previousState, nextState) {
         !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) <= 0) {
       throw new Error('SQLite rechazó la nota de crédito: falta factura original, proveedor, soporte, líneas de Kardex o reducción de CxP válida.');
     }
+    const sourceEntryForPayable = asArray(nextState.journalEntries).find(item =>
+      item.companyId === original.companyId && item.id === original.journalEntryId);
+    const sourcePayableAccounts = [...new Set(asArray(sourceEntryForPayable?.items)
+      .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+      .map(item => String(item.accountCode)))];
+    if (sourcePayableAccounts.length !== 1) {
+      throw new Error('SQLite rechazó la nota de crédito: no se identifica una única cuenta auxiliar CxP en la factura original.');
+    }
+    const sourcePayableAccountCode = sourcePayableAccounts[0];
     const sourceLines = Array.isArray(original.inventoryLines) ? original.inventoryLines : [];
     const sourceMovements = asArray(nextState.movements).filter(item =>
       item.companyId === original.companyId && item.type === 'ENTRADA' &&
@@ -632,8 +641,8 @@ function validateAccountingSnapshot(previousState, nextState) {
       Math.abs(accountSum(code, 'credit', 'Usd') - amount / Number(note.bcvRate)) <= 0.0001);
     if (Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
         Math.abs(totalInventoryCost - Number(note.taxableBaseBs) - Number(note.exemptAmountBs)) > 0.02 ||
-        Math.abs(accountSum('2.1.1.01', 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
-        Math.abs(accountSum('2.1.1.01', 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
+        Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
+        Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
         !inventoryAccountsMatch ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Bs') - Number(note.vatAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('1.1.3.01', 'credit', 'Usd') - Number(note.vatAmountUsd || 0)) > 0.0001 ||
