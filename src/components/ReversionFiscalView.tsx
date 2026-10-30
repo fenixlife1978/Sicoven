@@ -26,6 +26,7 @@ export const ReversionFiscalView: React.FC = () => {
   const [supplierCreditControlNumber, setSupplierCreditControlNumber] = useState('');
   const [supplierCreditReason, setSupplierCreditReason] = useState('');
   const [supplierCreditNoteSubmitting, setSupplierCreditNoteSubmitting] = useState(false);
+  const [reversalSubmitting, setReversalSubmitting] = useState(false);
 
   const [closedDate, setClosedDate] = useState(currentCompany.closedThroughDate || '');
   const [feedback, setFeedback] = useState<{kind:'success'|'error'; message:string}|null>(null);
@@ -272,14 +273,15 @@ export const ReversionFiscalView: React.FC = () => {
     }
   };
 
-  const submitReversal = () => {
-    if (!source || reversalDisabled) return;
+  const submitReversal = async () => {
+    if (!source || reversalDisabled || reversalSubmitting) return;
     const confirmed = window.confirm(
       'Se registrará un contra-asiento nuevo e inmutable. No se borrará el asiento original. La reversión contable no sustituye la nota de crédito ni la rectificación fiscal que legalmente corresponda. ¿Desea continuar?'
     );
     if (!confirmed) return;
+    setReversalSubmitting(true);
     try {
-      const entry = reverseJournalEntry(
+      const entry = await reverseJournalEntry(
         source.id, effectiveDate, reason,
         workpaperNote,
         isPriorPeriod, isPriorPeriod ? retainedEarningsCode : undefined
@@ -289,7 +291,9 @@ export const ReversionFiscalView: React.FC = () => {
       setWorkpaperNote('');
       setSelectedId('');
     } catch (error) {
-      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión.'});
+      setFeedback({kind:'error', message:error instanceof Error ? error.message : 'No se pudo registrar la reversión en SQLite.'});
+    } finally {
+      setReversalSubmitting(false);
     }
   };
 
@@ -410,7 +414,7 @@ export const ReversionFiscalView: React.FC = () => {
               <textarea value={workpaperNote} onChange={event=>setWorkpaperNote(event.target.value)} rows={3} maxLength={5000} placeholder="Fundamento técnico, soporte revisado, responsable y efecto fiscal pendiente…" className="w-full rounded-lg border border-slate-300 p-2.5 text-sm" />
               {previewError && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900"><strong>No se puede simular una reversión válida:</strong> {previewError}</div>}
               {reversalBlockReasons.length > 0 && <div role="alert" className="rounded-lg border border-rose-300 bg-rose-50 p-3 text-sm text-rose-900 space-y-1"><strong>Reversión bloqueada por integridad cruzada</strong>{reversalBlockReasons.map((message,index)=><p key={index}>• {message}</p>)}<p className="font-medium">No basta con marcar una revisión manual: el sistema debe comprobar la reversión de los auxiliares y su asiento vinculado antes de permitir la aprobación.</p></div>}
-                            <button disabled={reversalDisabled} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> Aprobar y registrar contra-asiento</button>
+                            <button disabled={reversalDisabled || reversalSubmitting} onClick={submitReversal} className="w-full rounded-lg bg-emerald-700 px-4 py-3 text-sm font-bold text-white hover:bg-emerald-800 disabled:cursor-not-allowed disabled:bg-slate-300 flex items-center justify-center gap-2"><ShieldCheck className="w-4 h-4" /> {reversalSubmitting ? 'Guardando y confirmando en SQLite…' : 'Aprobar y registrar contra-asiento'}</button>
             </div>
             <div className="space-y-3">
               <h2 className="font-bold text-slate-900">Vista previa del impacto contable</h2>
