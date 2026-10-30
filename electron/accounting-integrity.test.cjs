@@ -599,3 +599,88 @@ test('SQLite rejects cumulative supplier returns above the original invoice quan
   next.journalEntries.push(secondEntry);
   assert.throws(() => validateAccountingSnapshot(prior, next), /devoluciones acumuladas superan/);
 });
+
+
+test('SQLite persists a reconciled supplier credit note across database reopen and rolls back atomically on audit failure', () => {
+  const fs = require('node:fs');
+  const os = require('node:os');
+  const path = require('node:path');
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'sicoven-credit-note-'));
+  const filename = path.join(directory, 'sicoven.sqlite');
+  const { prior, next } = supplierCreditFixture();
+  let db;
+  try {
+    db = new Database(filename);
+    db.pragma('journal_mode = WAL');
+    db.pragma('synchronous = FULL');
+    db.exec(`
+      CREATE TABLE app_state (
+        state_key TEXT PRIMARY KEY,
+        state_json TEXT NOT NULL,
+        updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TABLE audit_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        event_type TEXT NOT NULL,
+        details_json TEXT NOT NULL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now'))
+      );
+      CREATE TRIGGER audit_events_no_update BEFORE UPDATE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+      CREATE TRIGGER audit_events_no_delete BEFORE DELETE ON audit_events
+        BEGIN SELECT RAISE(ABORT, 'audit_events is append-only'); END;
+    `);
+    db.prepare('INSERT INTO app_state(state_key,state_json) VALUES(?,?)')
+      .run('accounting', JSON.stringify(prior));
+
+    const persistSnapshot = db.transaction(snapshot => {
+      const stored = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      const previous = JSON.parse(stored.state_json);
+      validateAccountingSnapshot(previous, snapshot);
+      db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'")
+        .run(JSON.stringify(snapshot));
+      const note = snapshot.purchases.find(item => item.id === 'purchase-credit-note');
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('supplier_credit_note_posted', JSON.stringify({
+          documentId: note.id,
+          originalPurchaseId: note.originalPurchaseId,
+          journalEntryId: note.journalEntryId,
+          creditNoteLines: note.creditNoteLines
+        }));
+    });
+
+    db.exec(`CREATE TRIGGER reject_supplier_credit_audit BEFORE INSERT ON audit_events
+      WHEN NEW.event_type='supplier_credit_note_posted'
+      BEGIN SELECT RAISE(ABORT, 'simulated audit write failure'); END;`);
+    assert.throws(() => persistSnapshot(next), /simulated audit write failure/);
+    assert.deepEqual(
+      JSON.parse(db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json),
+      prior,
+      'el fallo de auditoría debe revertir también el estado contable'
+    );
+    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
+
+    db.exec('DROP TRIGGER reject_supplier_credit_audit');
+    persistSnapshot(next);
+    db.pragma('wal_checkpoint(TRUNCATE)');
+    db.close();
+    db = null;
+
+    db = new Database(filename);
+    const reopened = JSON.parse(
+      db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json
+    );
+    assert.equal(reopened.purchases.find(item => item.id === 'purchase-credit-note').documentType, '03');
+    assert.equal(reopened.purchases.find(item => item.id === 'purchase-credit-note').originalPurchaseId, 'purchase-original');
+    assert.equal(reopened.movements.find(item => item.id === 'return-movement').journalEntryId, 'credit-entry');
+    assert.equal(reopened.journalEntries.find(item => item.id === 'credit-entry').referenceDoc, 'NC-PROV-NC-001');
+    assert.equal(reopened.vatVouchers[0].correctionEntryIds[0], 'credit-entry');
+    assert.equal(reopened.islrVouchers[0].correctionEntryIds[0], 'credit-entry');
+    const audit = db.prepare("SELECT event_type,details_json FROM audit_events").get();
+    assert.equal(audit.event_type, 'supplier_credit_note_posted');
+    assert.equal(JSON.parse(audit.details_json).documentId, 'purchase-credit-note');
+  } finally {
+    if (db?.open) db.close();
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});
