@@ -111,6 +111,34 @@ export function validateSaleInventoryReturnReconciliation(input: {
     )) {
       return blocked('El asiento original ya contiene costo de ventas o inventario; revertirlo además de las devoluciones duplicaría el efecto del Kardex.');
     }
+    const originalCostEntry = original.journalEntryId
+      ? journalEntries.find(item => item.id === original.journalEntryId && item.companyId === companyId)
+      : undefined;
+    if (!originalCostEntry || originalCostEntry.type !== 'INVENTARIO' ||
+        originalCostEntry.date !== original.date || originalCostEntry.referenceDoc !== original.documentRef ||
+        originalCostEntry.items.length !== 2 ||
+        originalCostEntry.items.some(item => item.accountCode !== inventoryCode && item.accountCode !== costCode)) {
+      return blocked('La salida original de ' + original.productCode + ' no tiene un asiento de costo/inventario verificable.');
+    }
+    const originalCostTotals = originalCostEntry.items.reduce((sum, item) => ({
+      debitBs: sum.debitBs + Number(item.debitBs || 0),
+      creditBs: sum.creditBs + Number(item.creditBs || 0),
+      debitUsd: sum.debitUsd + Number(item.debitUsd || 0),
+      creditUsd: sum.creditUsd + Number(item.creditUsd || 0),
+      inventoryCreditBs: sum.inventoryCreditBs + (item.accountCode === inventoryCode ? Number(item.creditBs || 0) : 0),
+      costDebitBs: sum.costDebitBs + (item.accountCode === costCode ? Number(item.debitBs || 0) : 0),
+      inventoryCreditUsd: sum.inventoryCreditUsd + (item.accountCode === inventoryCode ? Number(item.creditUsd || 0) : 0),
+      costDebitUsd: sum.costDebitUsd + (item.accountCode === costCode ? Number(item.debitUsd || 0) : 0)
+    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
+      inventoryCreditBs: 0, costDebitBs: 0, inventoryCreditUsd: 0, costDebitUsd: 0 });
+    if (Math.abs(originalCostTotals.debitBs - originalCostTotals.creditBs) >= 0.01 ||
+        Math.abs(originalCostTotals.debitUsd - originalCostTotals.creditUsd) >= 0.01 ||
+        Math.abs(originalCostTotals.inventoryCreditBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(originalCostTotals.costDebitBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(originalCostTotals.inventoryCreditUsd - Number(original.totalCostUsd)) > 0.02 ||
+        Math.abs(originalCostTotals.costDebitUsd - Number(original.totalCostUsd)) > 0.02) {
+      return blocked('El asiento original de costo no coincide con el valor histórico del Kardex para ' + original.productCode + '.');
+    }
     const corrections = movements.filter(item =>
       item.companyId === companyId && item.correctionForMovementId === original.id
     );
