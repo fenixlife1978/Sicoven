@@ -1241,7 +1241,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (duplicateInvoice) {
       throw new Error('Ya existe una compra registrada con ese tipo de documento, proveedor y número de factura.');
     }
-    const igtfAmount = Number(purchaseData.igtfAmountBs || 0);\n    if (igtfAmount > 0 && purchaseData.paymentTerm === 'CREDITO') {\n      throw new Error('No se puede reconocer IGTF al registrar una compra totalmente a crédito. La obligación se evalúa cuando se debite la cuenta o se cancele la deuda.');\n    }
+    const igtfAmount = Number(purchaseData.igtfAmountBs || 0);
+    if (igtfAmount > 0 && purchaseData.paymentTerm === 'CREDITO') {
+      throw new Error('No se puede reconocer IGTF al registrar una compra totalmente a crédito. La obligación se evalúa cuando se debite la cuenta o se cancele la deuda.');
+    }
     const eligibleIgtfMethods = ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'];
     if (igtfAmount > 0 && (!purchaseData.igtfApplicable || !eligibleIgtfMethods.includes(purchaseData.paymentMethod || ''))) {
       throw new Error('El IGTF requiere un medio de pago elegible y confirmación expresa.');
