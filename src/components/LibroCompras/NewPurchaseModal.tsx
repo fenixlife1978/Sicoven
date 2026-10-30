@@ -264,7 +264,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 >
                   <option value="01">01 - Factura</option>
                   <option value="02" disabled>02 - Nota de Débito (flujo contable pendiente)</option>
-                  <option value="03" disabled>03 - Nota de Crédito (flujo contable pendiente)</option>
+                  <option value="03" disabled>03 - Nota de Crédito (usar Devolver en factura original)</option>
                 </select>
               </div>
               <div>
