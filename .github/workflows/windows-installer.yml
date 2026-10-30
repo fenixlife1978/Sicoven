@@ -68,7 +68,17 @@ jobs:
           if (Test-Path $installDir) {
             Remove-Item -Path $installDir -Recurse -Force
           }
-          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
+          if (-not $install.WaitForExit(120000)) {
+            $autoApplication = Get-Process -Name "SICOVEN" -ErrorAction SilentlyContinue
+            if ($autoApplication) {
+              & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null
+            }
+            if (-not $install.WaitForExit(30000)) {
+              throw "El instalador NSIS no terminó dentro del tiempo permitido."
+            }
+          }
+          $install.Refresh()
           if ($install.ExitCode -ne 0) {
             throw "El instalador NSIS terminó con código $($install.ExitCode)."
           }
@@ -79,6 +89,11 @@ jobs:
             if (-not (Test-Path $required -PathType Leaf)) {
               throw "Falta un archivo esencial después de instalar: $required"
             }
+          }
+          $autoApplication = Get-Process -Name "SICOVEN" -ErrorAction SilentlyContinue
+          if ($autoApplication) {
+            & taskkill.exe /IM SICOVEN.exe /T /F | Out-Null
+            Start-Sleep -Seconds 2
           }
           $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
           Start-Sleep -Seconds 12
