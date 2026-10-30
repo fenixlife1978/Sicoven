@@ -479,6 +479,9 @@ export function assessJournalReversal(input: {
     blockers.push('El asiento original ya tiene una reversión registrada.');
   }
   if (sale?.isCancelled || purchase?.isCancelled) blockers.push('El documento comercial ya está anulado o reversado.');
+  if (purchase?.documentType === '03') {
+    blockers.push('El asiento corresponde a una nota de crédito de proveedor. Su reversión exige un documento fiscal correctivo y conciliación propia; no se permite un contra-asiento genérico.');
+  }
   if (linkedCreditNotes.length) blockers.push('La factura tiene ' + linkedCreditNotes.length + ' nota(s) de crédito de proveedor vinculada(s). Debe conciliarse primero el historial fiscal y físico de esas notas; no se permite reversar la factura como si estuviera intacta.');
   let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
   if (purchase?.inventoryLines?.length) {
