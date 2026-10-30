@@ -27,7 +27,8 @@ test('rechaza aplicación a otro proveedor y aplicación con cuenta de banco', (
   assert.match(validateSupplierAdvanceSettlementDraft(draft, 30, 'J-12345678-9') || '', /no debe generar movimiento/);
 });
 
-test('rechaza importe superior al saldo y diferencia de moneda', () => {
+test('rechaza importe superior al saldo y permite que el efectivo difiera del valor histórico', () => {
   assert.match(validateSupplierAdvanceSettlementDraft(base, 10, undefined, ['1.1.1.03']) || '', /supera el saldo/);
-  assert.match(validateSupplierAdvanceSettlementDraft({ ...base, amountBs: 1900 }, 30, undefined, ['1.1.1.03']) || '', /no coincide/);
+  assert.equal(validateSupplierAdvanceSettlementDraft({ ...base, amountBs: 1900 }, 30, undefined, ['1.1.1.03']), null);
+  assert.match(validateSupplierAdvanceSettlementDraft({ ...base, cashReceivedBs: 0 }, 30, undefined, ['1.1.1.03']) || '', /efectivamente recibido/);
 });
