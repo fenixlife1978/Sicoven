@@ -1299,6 +1299,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (valuation.netPayableReductionUsd > balance.outstandingUsd + 0.005) {
       throw new Error('La nota de crédito supera el saldo pendiente de CxP. El excedente debe registrarse como saldo a favor del proveedor mediante un circuito separado.');
     }
+    if (draftLines.some(line => (line.product.inventoryAccountCode || '1.1.4.01') !== '1.1.4.01')) {
+      throw new Error('La factura original contabilizó el inventario en la cuenta 1.1.4.01. Este producto tiene otra cuenta auxiliar configurada; la devolución queda bloqueada hasta conciliar y corregir la imputación contable original.');
+    }
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
     const requiredAccounts = ['2.1.1.01', ...inventoryAccountCodes];
     if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
