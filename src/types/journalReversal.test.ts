@@ -406,3 +406,24 @@ test('evaluación genérica detecta una liquidación vigente vinculada a la fact
   assert.equal(result.activeSettlementCount, 1);
   assert.match(result.blockers.join(' '), /cobro\(s\)\/pago\(s\) vigente/);
 });
+
+
+test('la evaluación genérica detecta notas de crédito fiscales relacionadas con la factura original', () => {
+  const creditNote: PurchaseRecord = {
+    ...reconciledPurchase,
+    id: 'purchase-credit-200', opNumber: 2, invoiceNumber: 'NC-200',
+    documentType: '03', originalPurchaseId: reconciledPurchase.id,
+    affectedInvoiceNumber: reconciledPurchase.invoiceNumber,
+    creditNoteNumber: 'NC-200', inventoryLines: undefined
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: reconciledPurchaseJournal, accounts, sales: [],
+    purchases: [reconciledPurchase, creditNote], movements: [reconciledPurchaseMovement],
+    products: [], journalEntries: [reconciledPurchaseJournal],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.documentKind, 'PURCHASE');
+  assert.equal(result.linkedCreditNoteCount, 1);
+  assert.equal(result.ready, false);
+  assert.match(result.blockers.join(' '), /nota\(s\) de crédito de proveedor vinculada\(s\)/);
+});
