@@ -1016,13 +1016,25 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const balance = getCreditBalance(draft.documentId, kind);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
+    const isBankTransfer = draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD';
+    const settlementBank = isBankTransfer
+      ? bankAccounts.find(bank => bank.id === draft.bankAccountId && bank.companyId === currentCompany.id)
+      : undefined;
+    if (isBankTransfer) {
+      if (!settlementBank) throw new Error('La cuenta bancaria seleccionada no pertenece a la empresa activa.');
+      const expectedCurrency = draft.method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
+      if (settlementBank.currency !== expectedCurrency) throw new Error('La moneda de la transferencia no coincide con la moneda de la cuenta bancaria seleccionada.');
+      if (!draft.reference?.trim()) throw new Error('La referencia o comprobante de la transferencia es obligatorio.');
+      const linkedAux = accounts.find(account => account.code === settlementBank.accountCode && account.isMovement);
+      if (!linkedAux) throw new Error('El auxiliar contable de la cuenta bancaria no existe o no admite movimientos.');
+    }
     const normalizedReference = draft.reference?.trim().toLocaleLowerCase();
     const prior = creditSettlements.filter(item => item.companyId === currentCompany.id &&
       item.documentId === draft.documentId && item.kind === kind && !item.isReversed);
     const duplicate = prior.some(item => {
       const sameDate = item.settlementDate === draft.settlementDate;
       const sameAmount = Math.round(item.amountUsd * 100) === Math.round(draft.amountUsd * 100);
-      const sameMethod = item.method === draft.method;
+      const sameMethod = item.method === draft.method && item.bankAccountId === draft.bankAccountId;
       const sameRate = Math.round(item.bcvRate * 1000000) === Math.round(draft.bcvRate * 1000000);
       const sameReference = Boolean(normalizedReference && item.reference?.trim().toLocaleLowerCase() === normalizedReference);
       // La referencia bancaria/transferencia identifica la operación: no se
@@ -1075,15 +1087,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const operationKey = [
       currentCompany.id, draft.documentId, kind, draft.settlementDate,
       Math.round(draft.amountUsd * 100), Math.round(draft.amountBs * 100),
-      Math.round(draft.bcvRate * 1000000), draft.method,
+      Math.round(draft.bcvRate * 1000000), draft.method, draft.bankAccountId || '',
       (draft.reference || '').trim().toLocaleLowerCase()
     ].join('|');
     if (settlementInFlightRef.current.has(operationKey)) {
       throw new Error('Esta liquidación ya se está registrando o fue registrada en esta sesión. Verifique el saldo antes de reintentar.');
     }
     settlementInFlightRef.current.add(operationKey);
-    const cashCode = draft.method === 'CASH_USD' || draft.method === 'BANK_TRANSFER_USD' ? '1.1.1.02' :
-      draft.method === 'BANK_TRANSFER_BS' ? '1.1.1.03' : '1.1.1.01';
+    const cashCode = settlementBank?.accountCode || (draft.method === 'CASH_USD' ? '1.1.1.02' : '1.1.1.01');
     const cashAccount = accounts.find(account => account.code === cashCode && account.isMovement);
     const controlCode = kind === 'SALE_COLLECTION' ? '1.1.2.01' : '2.1.1.01';
     const controlAccount = accounts.find(account => account.code === controlCode && account.isMovement);
@@ -1117,11 +1128,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     let entry: JournalEntry;
     try {
       const baseItems: JournalEntryItem[] = kind === 'SALE_COLLECTION' ? [
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cobro de factura de crédito' },
+        { accountCode: cashCode, accountName: cashAccount.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: isBankTransfer ? 'Cobro de factura de crédito por transferencia bancaria' : 'Cobro de factura de crédito' },
         { accountCode: controlCode, accountName: controlAccount.name, debitBs: 0, creditBs: amountAtInvoiceRate, debitUsd: 0, creditUsd: amountUsd, description: 'Cancelación parcial de cuenta por cobrar al valor contable original' }
       ] : [
         { accountCode: controlCode, accountName: controlAccount.name, debitBs: amountAtInvoiceRate, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Cancelación parcial de cuenta por pagar al valor contable original' },
-        { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Pago de factura de crédito' }
+        { accountCode: cashCode, accountName: cashAccount.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: isBankTransfer ? 'Pago de factura de crédito por transferencia bancaria' : 'Pago de factura de crédito' }
       ];
       entry = addJournalEntry({
         entryNumber: 0,
@@ -1142,6 +1153,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       companyId: currentCompany.id,
       amountBs,
       amountUsd,
+      bankAccountId: settlementBank?.id,
       fxFiscalAdjustmentProposal,
       journalEntryId: entry.id,
       createdAt: new Date().toISOString()
