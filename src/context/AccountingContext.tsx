@@ -393,7 +393,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const assessment = assessJournalReversal({
       companyId: currentCompany.id, source, accounts, sales, purchases, movements, products,
-      journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+      journalEntries, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements,
       priorPeriodAdjustment, retainedEarningsAccountCode
     });
     if (!assessment.ready) {
