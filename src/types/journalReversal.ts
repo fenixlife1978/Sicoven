@@ -408,6 +408,7 @@ export interface JournalReversalAssessment {
   documentId?: string;
   linkedSale?: SaleRecord;
   linkedPurchase?: PurchaseRecord;
+  linkedCreditNoteCount: number;
   linkedInventoryMovementCount: number;
   linkedBankMovementCount: number;
   activeSettlementCount: number;
@@ -449,6 +450,12 @@ export function assessJournalReversal(input: {
     (item.journalEntryId === source.id ||
       (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
   const documentKind = sale ? 'SALE' : purchase ? 'PURCHASE' : 'GENERAL';
+  // A supplier credit note is a fiscal child document of the original purchase.
+  // It must be included in the preflight even though its Kardex rows and journal
+  // are linked to the credit note reference, not to the original invoice.
+  const linkedCreditNotes = purchase && purchase.documentType === '01'
+    ? purchases.filter(item => item.companyId === companyId && item.documentType === '03' && item.originalPurchaseId === purchase.id)
+    : [];
   const documentId = sale?.id || purchase?.id;
   const reference = sale?.invoiceNumber || purchase?.invoiceNumber;
   const normalizedReferences = reference
@@ -472,6 +479,7 @@ export function assessJournalReversal(input: {
     blockers.push('El asiento original ya tiene una reversión registrada.');
   }
   if (sale?.isCancelled || purchase?.isCancelled) blockers.push('El documento comercial ya está anulado o reversado.');
+  if (linkedCreditNotes.length) blockers.push('La factura tiene ' + linkedCreditNotes.length + ' nota(s) de crédito de proveedor vinculada(s). Debe conciliarse primero el historial fiscal y físico de esas notas; no se permite reversar la factura como si estuviera intacta.');
   let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
   if (purchase?.inventoryLines?.length) {
     inventoryReadiness = validatePurchaseInventoryReconciliation({
@@ -501,6 +509,7 @@ export function assessJournalReversal(input: {
   return {
     ready: blockers.length === 0, blockers, documentKind, documentId,
     linkedSale: sale, linkedPurchase: purchase,
+    linkedCreditNoteCount: linkedCreditNotes.length,
     linkedInventoryMovementCount: linkedMovements.length,
     linkedBankMovementCount: linkedBankRows.length,
     activeSettlementCount: settlements.length,
