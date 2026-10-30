@@ -7,7 +7,7 @@ import { buildReversalItems, assessJournalReversal, validateBankStatementReversa
 export const ReversionFiscalView: React.FC = () => {
   const {
     currentCompany, accounts, journalEntries, sales, purchases, movements, products, addMovement, addPurchaseCreditNote,
-    bankAccounts, bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, reverseJournalEntry, closeAccountingPeriod
+    bankAccounts, bankStatementMovements, creditSettlements, getCreditBalance, getAuditEvents, waitForPersistence, reverseJournalEntry, closeAccountingPeriod
   } = useAccounting();
   const now = new Date();
   const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -217,7 +217,7 @@ export const ReversionFiscalView: React.FC = () => {
     }
   };
 
-  const registerInventoryCorrection = () => {
+  const registerInventoryCorrection = async () => {
     if (linkedPurchase && !linkedSale) {
       setFeedback({kind:'error', message:'La devolución física a proveedor no se automatiza desde la reversión de factura: el contra-asiento ya revierte CxP y el asiento original. Registrar aquí otra devolución podría duplicar el efecto contable. Requiere conciliación documentada de la cuenta de inventario antes de generar el movimiento físico.'});
       return;
@@ -264,6 +264,7 @@ export const ReversionFiscalView: React.FC = () => {
         balanceTotalUsd: product.currentStock * product.avgCostUsd,
         correctionForMovementId: original.id
       });
+      await waitForPersistence();
       setFeedback({kind:'success', message:'Devolución física registrada y enlazada al movimiento original del Kardex. El asistente volverá a comprobar si todas las cantidades de la factura fueron devueltas y si cada asiento de costo concilia; una devolución parcial no habilita la reversión total.'});
       setCorrectionQuantity('1');
       setCorrectionMovementId('');
