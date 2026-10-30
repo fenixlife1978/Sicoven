@@ -85,7 +85,16 @@ const originalSaleMovement = {
   id: 'm-sale', companyId: 'c-1', productId: 'p-1', productName: 'Producto', productCode: 'P-1',
   date: '2026-10-01', type: 'SALIDA' as const, concept: 'VENTA', documentRef: 'FAC-100',
   quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2,
-  balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0
+  balanceQty: 0, balanceTotalBs: 0, balanceTotalUsd: 0, journalEntryId: 'j-sale-cost'
+};
+const originalSaleCostEntry: JournalEntry = {
+  id: 'j-sale-cost', companyId: 'c-1', entryNumber: 9, date: '2026-10-01',
+  description: 'Costo de venta', type: 'INVENTARIO', referenceDoc: 'FAC-100',
+  bcvRate: 100, createdAt: '2026-10-01T10:00:00.000Z',
+  items: [
+    { accountCode: '5.1.1.01', accountName: 'Costo de ventas', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+    { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
+  ]
 };
 const customerReturnMovement = {
   ...originalSaleMovement, id: 'm-return', date: '2026-10-02', type: 'ENTRADA' as const,
@@ -106,7 +115,7 @@ const customerReturnEntry: JournalEntry = {
 test('no exige reversión de inventario si la factura no tiene movimientos de Kardex', () => {
   const result = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
-    movements: [], products: [inventoryProduct], journalEntries: [saleInvoice]
+    movements: [], products: [inventoryProduct], journalEntries: [saleInvoice, originalSaleCostEntry]
   });
   assert.equal(result.ready, true);
   assert.equal(result.originalMovementCount, 0);
@@ -125,7 +134,7 @@ test('permite la reversión de venta solo cuando la devolución total y su asien
   const result = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: saleInvoice,
     movements: [originalSaleMovement, customerReturnMovement],
-    products: [inventoryProduct], journalEntries: [saleInvoice, customerReturnEntry]
+    products: [inventoryProduct], journalEntries: [saleInvoice, originalSaleCostEntry, customerReturnEntry]
   });
   assert.equal(result.ready, true);
   assert.equal(result.originalMovementCount, 1);
@@ -164,7 +173,7 @@ test('bloquea doble reversión de costo si el asiento original ya contiene inven
   const result = validateSaleInventoryReturnReconciliation({
     companyId: 'c-1', invoiceNumber: '100', source: sourceWithCost,
     movements: [originalSaleMovement, customerReturnMovement],
-    products: [inventoryProduct], journalEntries: [sourceWithCost, customerReturnEntry]
+    products: [inventoryProduct], journalEntries: [sourceWithCost, originalSaleCostEntry, customerReturnEntry]
   });
   assert.equal(result.ready, false);
   assert.match(result.reason || '', /duplicaría el efecto del Kardex/);
