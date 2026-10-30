@@ -400,7 +400,7 @@ app.whenReady().then(async () => {
     const emptyState = {
       companies: [], currentCompanyId: '', accounts: [],
       journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
-      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], supplierAdvanceSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
     };
     const reset = db.transaction(() => {
       db.prepare('DELETE FROM app_state').run();
