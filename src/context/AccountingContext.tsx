@@ -29,7 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 
@@ -371,7 +371,16 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // porque falten movimientos de Kardex: esa ausencia es una inconsistencia,
     // no evidencia de que la mercancía nunca ingresó.
     if (linkedPurchase?.inventoryLines?.length) {
-      throw new Error('Reversión de compra bloqueada: la factura contiene líneas de inventario. Primero debe conciliarse cada línea con sus entradas de Kardex y el asiento de inventario; después se requiere el flujo integral de nota de crédito para CxP, IVA, retenciones e IGTF. No se registró ningún contra-asiento.');
+      const purchaseReadiness = validatePurchaseInventoryReconciliation({
+        companyId: currentCompany.id, purchase: linkedPurchase, movements, journalEntries
+      });
+      if (!purchaseReadiness.ready) {
+        throw new Error('Reversión de compra bloqueada: la conciliación factura-líneas-Kardex-asiento no está aprobada. ' +
+          (purchaseReadiness.reason || 'Existen diferencias en la trazabilidad de inventario.') +
+          ' No se registró ningún contra-asiento.');
+      }
+      throw new Error('Conciliación de compra verificada: factura, líneas, Kardex y asiento coinciden en Bs. y USD. ' +
+        'La reversión continúa bloqueada porque falta el circuito atómico de nota de crédito que ajuste CxP, IVA, retenciones e IGTF y vincule la devolución física. No se registró ningún contra-asiento.');
     }
     if (linkedInventoryMovements.length > 0) {
       if (!linkedSale || linkedPurchase) {
