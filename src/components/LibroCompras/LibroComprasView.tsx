@@ -309,7 +309,7 @@ export const LibroComprasView: React.FC = () => {
                         title="Anulación con reversión contable pendiente"
                       >
                         <AlertTriangle className="w-3.5 h-3.5" />
-                      </button>
+                      </button>}
                     </td>
                   </tr>
                 ))
