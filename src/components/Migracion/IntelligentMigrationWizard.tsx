@@ -48,7 +48,7 @@ const pick = (row:Row, ...keys:string[]) => {
 };
 
 export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClose}) => {
- const { products, importInventoryProducts, importBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
+ const { products, importInventoryProducts, importBackupJson, restoreBackupJson, accounts, addAccount, addJournalEntry, addSale, addPurchase, runAtomicInvoiceImport, sales, purchases, journalEntries, currentCompany } = useAccounting();
  const [files,setFiles]=useState<File[]>([]);
  const [rows,setRows]=useState<Row[]>([]);
  const [headers,setHeaders]=useState<string[]>([]);
@@ -243,15 +243,15 @@ export const IntelligentMigrationWizard: React.FC<{onClose:()=>void}> = ({onClos
    setSelected(inventoryReadyInOneSource && detected.includes('inventory') ? ['inventory'] : []);
   }catch(e){setError(e instanceof Error?e.message:'No se pudieron leer los archivos.');}
  };
- const runBackupImport=()=>{
+ const runBackupImport=async()=>{
   setError('');setNotice('');
   if(!backupPayload){setError('No hay un respaldo válido seleccionado.');return;}
   if(!confirmed){setError('Confirma que deseas reemplazar los datos actuales por el contenido del respaldo.');return;}
   setBusy(true);
   try{
-   const imported=importBackupJson(backupPayload);
+   const imported=await restoreBackupJson(backupPayload);
    if(!imported) throw new Error('SICOVEN rechazó el respaldo por estructura inválida, referencias rotas o inconsistencias contables. Los datos actuales se conservan.');
-   setNotice('Respaldo restaurado y validado. Revisa empresa activa, saldos, inventario y asientos antes de continuar.');
+   setNotice('Respaldo restaurado y confirmado en SQLite. Revisa empresa activa, saldos, inventario y asientos antes de continuar.');
   }catch(e){setError(e instanceof Error?e.message:'No se pudo restaurar el respaldo.');}
   finally{setBusy(false);}
  };
