@@ -20,6 +20,7 @@ import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
+import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
 import type { PurchaseRecord } from '../../types/accounting';
 
 export const LibroComprasView: React.FC = () => {
@@ -34,6 +35,7 @@ export const LibroComprasView: React.FC = () => {
   const sqliteAvailable = typeof window !== 'undefined' && Boolean(window.sicovenStore?.save);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
+  const [showSupplierAdvances, setShowSupplierAdvances] = useState(false);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
@@ -141,6 +143,13 @@ export const LibroComprasView: React.FC = () => {
                 Descargar TXT IVA
               </button>
             )}
+            <button
+              onClick={() => setShowSupplierAdvances(true)}
+              className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-xl transition border border-indigo-200"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Anticipos proveedor
+            </button>
             <button
               onClick={() => setIsModalOpen(true)}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow cursor-pointer"
@@ -408,6 +417,7 @@ export const LibroComprasView: React.FC = () => {
 
       <NewPurchaseModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
       {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
+      {showSupplierAdvances && <SupplierAdvanceSettlementModal onClose={() => setShowSupplierAdvances(false)} />}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="PURCHASE_PAYMENT" onClose={() => setSettlementTarget(null)} />}
     </div>
   );
