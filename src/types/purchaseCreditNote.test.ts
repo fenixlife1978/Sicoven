@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
-import { calculatePurchaseCreditNote } from './purchaseCreditNote';
+import { calculatePurchaseCreditNote, type PurchaseCreditNoteDraftLine } from './purchaseCreditNote';
 
 const purchase: PurchaseRecord = {
   id: 'pur-1', companyId: 'co-1', opNumber: 1, invoiceDate: '2026-10-01',
@@ -42,7 +42,6 @@ const draft = (options: {
   controlNumber: '00-NC-001', reason: 'Mercancía defectuosa devuelta',
   closedThroughDate: options.closedThroughDate
 });
-import type { PurchaseCreditNoteDraftLine } from './purchaseCreditNote';
 
 test('calcula nota de crédito parcial y revierte proporcionalmente IVA, retenciones e IGTF', () => {
   const result = calculatePurchaseCreditNote(draft());
