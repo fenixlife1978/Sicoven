@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, LockKeyhole, ShieldCheck, Undo2 } from 'lucide-react';
 import { useAccounting, type AccountingAuditEvent } from '../context/AccountingContext';
 import { formatBs, formatUsd, formatDate } from '../utils/formatters';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
+import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation, type BankStatementReversalReadiness } from '../types/journalReversal';
 
 export const ReversionFiscalView: React.FC = () => {
   const {
@@ -122,26 +122,11 @@ export const ReversionFiscalView: React.FC = () => {
 
   const purchaseLineReconciliation = useMemo(() => {
     if (!linkedPurchase) return null;
-    const lines = linkedPurchase.inventoryLines || [];
-    const purchaseJournal = journalEntries.find(entry => entry.id === linkedPurchase.journalEntryId);
-    const lineTotal = lines.reduce((sum,line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0),0);
-    const baseTotal = Number(linkedPurchase.taxableBaseBs || 0) + Number(linkedPurchase.exemptAmountBs || 0);
-    const linkedMovements = movements.filter(m => m.companyId === currentCompany.id && m.type === 'ENTRADA' && m.concept === 'COMPRA' &&
-      m.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).trim().toUpperCase() && !m.correctionForMovementId);
-    const movementTotal = linkedMovements.reduce((sum,m)=>sum+Number(m.totalCostBs||0),0);
-    const movementQuantitiesMatch = lines.length > 0 && lines.every(line => {
-      const matching = linkedMovements.filter(m=>m.productId===line.productId);
-      return matching.length === 1 && Math.abs(Number(matching[0].quantity)-Number(line.quantity)) <= 1e-8 &&
-        Math.abs(Number(matching[0].totalCostBs)-Number(line.quantity)*Number(line.unitCostBs)) <= 0.02;
-    }) && linkedMovements.length === lines.length;
-    const journalInventoryDebit = purchaseJournal?.items.filter(item=>item.accountCode==='1.1.4.01')
-      .reduce((sum,item)=>sum+Number(item.debitBs||0)-Number(item.creditBs||0),0);
-    const hasLines = lines.length > 0;
-    const linesMatchInvoice = hasLines && Math.abs(lineTotal-baseTotal)<=0.02;
-    const journalMatchesInvoice = Number.isFinite(journalInventoryDebit) && Math.abs(Number(journalInventoryDebit)-baseTotal)<=0.02;
-    const movementMatchesLines = movementQuantitiesMatch && Math.abs(movementTotal-lineTotal)<=0.02;
-    return {hasLines,lineTotal,baseTotal,movementTotal,journalInventoryDebit:Number(journalInventoryDebit||0),linesMatchInvoice,journalMatchesInvoice,movementMatchesLines,ok:hasLines&&linesMatchInvoice&&journalMatchesInvoice&&movementMatchesLines};
+    return validatePurchaseInventoryReconciliation({
+      companyId: currentCompany.id, purchase: linkedPurchase, movements, journalEntries
+    });
   }, [linkedPurchase, journalEntries, movements, currentCompany.id]);
+
 
   const correctableMovements = linkedInventoryMovements.filter(movement => {
     const matchesDocumentFlow = linkedSale
