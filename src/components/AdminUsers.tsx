@@ -75,9 +75,9 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
       return;
     }
 
-    if (!password || password.length < 6) {
+    if (!password || password.length < 10) {
       setMessage({
-        text: 'La contraseña debe tener al menos 6 caracteres.',
+        text: 'La contraseña debe tener al menos 10 caracteres.',
         type: 'error',
       });
       setBusy(false);

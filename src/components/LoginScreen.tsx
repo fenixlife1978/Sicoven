@@ -387,31 +387,6 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           box-shadow: 0 2px 6px rgba(16, 185, 129, 0.4);
         }
 
-        .quick-credentials-hint {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-          margin-top: 8px;
-          font-size: 11px;
-          color: #64748b;
-        }
-
-        .quick-credentials-btn {
-          background: rgba(255, 255, 255, 0.9);
-          border: 1px solid #cbd5e1;
-          color: #334155;
-          padding: 3px 8px;
-          border-radius: 6px;
-          cursor: pointer;
-          font-size: 11px;
-          transition: background 0.15s;
-        }
-
-        .quick-credentials-btn:hover {
-          background: #ffffff;
-          color: #0f172a;
-        }
-
         @media (max-width: 700px) {
           .login-screen {
             min-height: 100dvh;

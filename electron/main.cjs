@@ -369,7 +369,7 @@ app.whenReady().then(async () => {
     const username = rawUsername.replace(/\s+/g, '_');
     const password = String(input?.password || '');
     if (!/^[A-Za-z0-9._-]{3,32}$/.test(username)) return { ok: false, message: 'El usuario debe tener entre 3 y 32 caracteres (solo letras sin acentos, números, punto, guion o guion bajo).' };
-    if (password.length < 6 || password.length > 256) return { ok: false, message: 'La contraseña debe tener al menos 6 caracteres.' };
+    if (password.length < 10 || password.length > 256) return { ok: false, message: 'La contraseña debe tener al menos 10 caracteres.' };
     try {
       const credential = hashPassword(password);
       const createAdmin = db.transaction(() => {

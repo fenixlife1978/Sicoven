@@ -21,6 +21,8 @@ const main = read('electron/main.cjs');
 assert.match(main, /CREATE TABLE IF NOT EXISTS auth_sessions/);
 assert.match(main, /sicoven:auth-setup-status/);
 assert.match(main, /sicoven:auth-initialize/);
+assert.match(main, /password\.length < 10/);
+assert.doesNotMatch(login, /quick-credentials-btn/);
 assert.doesNotMatch(main, /hashPassword\('Admin123'\)/);
 assert.match(main, /sicoven:auth-restore/);
 assert.match(main, /DELETE FROM auth_sessions WHERE token_hash=\?/);
@@ -38,6 +40,7 @@ assert.match(main, /expiry <= Date/);
 assert.match(main, /!licenseView/);
 
 const admins = read('src/components/AdminUsers.tsx');
+assert.match(admins, /password\.length < 10/);
 assert.doesNotMatch(admins, /sicoven_web_admin_users/);
 assert.doesNotMatch(admins, /localStorage\.setItem\(WEB_ADMINS_STORAGE_KEY/);
 
