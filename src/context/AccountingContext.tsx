@@ -870,7 +870,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : undefined;
     if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('La factura destino no existe, no es una factura original o está reversada.');
     const balance = getSupplierAdvanceBalance(rif);
-    const treasuryCodes = bankAccounts.filter(item => item.companyId === currentCompany.id).map(item => item.accountCode);
+    // El formulario captura el importe efectivamente recibido en Bs.; por tanto,
+    // no debe permitir seleccionar una cuenta bancaria denominada en USD.
+    const treasuryCodes = bankAccounts.filter(item => item.companyId === currentCompany.id && item.currency === 'BS').map(item => item.accountCode);
     const validation = validateSupplierAdvanceSettlementDraft(draft, balance.outstandingUsd, target?.supplierRif, treasuryCodes);
     if (validation) throw new Error(validation);
     if (draft.kind === 'APPLIED_TO_PURCHASE') {
