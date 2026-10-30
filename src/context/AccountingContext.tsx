@@ -310,6 +310,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const waitForPersistence = (): Promise<void> => {
+    if (persistenceFaultRef.current) return Promise.reject(new Error('La persistencia SQLite falló. SICOVEN bloqueó las operaciones; cierre y vuelva a abrir la aplicación.'));
     if (window.sicovenStore && !storageReady) return Promise.reject(new Error('SQLite todavía no está lista.'));
     return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
   };
@@ -359,6 +360,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     priorPeriodAdjustment = false,
     retainedEarningsAccountCode?: string
   ): Promise<JournalEntry> => {
+    if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
@@ -489,6 +491,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Serializa las escrituras completas de app_state: varias actualizaciones rápidas
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
+  const persistenceFaultRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
@@ -619,6 +622,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (window.sicovenStore) {
       const snapshotToSave = stateSnapshot;
       const saveTask = saveQueueRef.current.then(async () => {
+        if (persistenceFaultRef.current) throw new Error('La persistencia SQLite quedó bloqueada tras un fallo anterior.');
         const result = await window.sicovenStore!.save(token, snapshotToSave);
         if (result?.ok !== true) throw new Error('SQLite no confirmó el guardado del estado contable.');
         setStorageError(null);
@@ -629,7 +633,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         error => {
           const normalized = error instanceof Error ? error : new Error('Error desconocido al guardar en SQLite.');
           console.error('Error guardando los datos contables en SQLite:', normalized);
+          persistenceFaultRef.current = true;
           setStorageError(normalized.message);
+          setStorageReady(false);
           waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
         }
       );
