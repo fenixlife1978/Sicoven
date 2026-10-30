@@ -15,7 +15,7 @@ const sourceEntry = () => ({
 });
 const reversalEntry = () => ({
   id: 'entry-2', companyId: 'company-1', entryNumber: 2, date: '2026-10-02',
-  description: 'REVERSIÓN / Corrección documentada', type: 'AJUSTE', bcvRate: 100,
+  description: 'REVERSIÓN / Corrección documentada', type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-1',
   items: [line(0, 100, 0, 1), line(100, 0, 1, 0)],
   createdAt: '2026-10-02T10:00:00.000Z', reversalOfEntryId: 'entry-1',
   reversalReason: 'Corrección documentada de error', workpaperNote: 'Papel de trabajo y soporte revisado'
@@ -61,6 +61,18 @@ test('SQLite accepts one new, balanced contra-entry with reciprocal immutable li
     emptyState([original]),
     emptyState([linkedOriginal, reversal])
   ));
+});
+
+test('SQLite rejects a balanced contra-entry whose lines do not exactly reverse the source', () => {
+  const original = sourceEntry();
+  const reversal = {
+    ...reversalEntry(),
+    items: [line(50, 0, 0.5, 0), line(0, 50, 0, 0.5)]
+  };
+  const linkedOriginal = { ...original, reversedByEntryId: reversal.id, isAdjusted: true };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState([original]), emptyState([linkedOriginal, reversal])
+  ), /no invierte exactamente Debe\/Haber/);
 });
 
 test('SQLite rejects a contra-entry without reciprocal linkage or supporting paper', () => {
