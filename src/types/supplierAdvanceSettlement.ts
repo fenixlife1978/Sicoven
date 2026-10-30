@@ -1,11 +1,25 @@
 export type SupplierAdvanceSettlementKind = 'REFUND_RECEIVED' | 'APPLIED_TO_PURCHASE';
 
+export interface SupplierAdvanceCreditNoteAllocation {
+  creditNoteId: string;
+  amountUsd: number;
+  bookValueBs: number;
+}
+
+export interface SupplierAdvanceCreditNoteSource {
+  id: string;
+  amountUsd: number;
+  bookValueBs: number;
+}
+
 export interface SupplierAdvanceSettlement {
   id: string;
   companyId: string;
   supplierRif: string;
   supplierName: string;
   sourceCreditNoteIds: string[];
+  /** Exact per-credit-note consumption; required for all newly posted settlements. */
+  sourceCreditNoteAllocations?: SupplierAdvanceCreditNoteAllocation[];
   kind: SupplierAdvanceSettlementKind;
   date: string;
   amountUsd: number;
@@ -73,6 +87,97 @@ export function validateSupplierAdvanceSettlementDraft(
       return 'El anticipo solo puede aplicarse a una factura del mismo proveedor (RIF).';
     }
     if (draft.treasuryAccountCode) return 'La aplicación de un anticipo no debe generar movimiento de caja o banco.';
+  }
+  return null;
+}
+
+
+const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+
+/**
+ * Allocates a settlement against each source credit note in deterministic FIFO order.
+ * Previously posted active allocations are deducted per note; legacy settlements
+ * without allocations are rejected because their source balance cannot be reconstructed safely.
+ */
+export function allocateSupplierAdvanceCreditNotes(
+  sources: SupplierAdvanceCreditNoteSource[],
+  settlements: SupplierAdvanceSettlement[],
+  companyId: string,
+  supplierRif: string,
+  requestedUsd: number
+): SupplierAdvanceCreditNoteAllocation[] {
+  if (!Number.isFinite(requestedUsd) || requestedUsd <= 0) {
+    throw new Error('El importe a distribuir entre notas de crédito debe ser mayor que cero.');
+  }
+  const rif = String(supplierRif || '').trim().toUpperCase();
+  const usedByNote = new Map<string, { usd: number; bs: number }>();
+  for (const settlement of settlements) {
+    if (settlement.companyId !== companyId || settlement.isReversed ||
+        String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
+    const allocations = settlement.sourceCreditNoteAllocations;
+    if (!Array.isArray(allocations) || allocations.length === 0) {
+      throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
+    }
+    for (const allocation of allocations) {
+      if (!allocation || typeof allocation.creditNoteId !== 'string' ||
+          !Number.isFinite(allocation.amountUsd) || allocation.amountUsd <= 0 ||
+          !Number.isFinite(allocation.bookValueBs) || allocation.bookValueBs < 0) {
+        throw new Error('La distribución histórica de anticipos contiene datos inválidos.');
+      }
+      const current = usedByNote.get(allocation.creditNoteId) || { usd: 0, bs: 0 };
+      current.usd = roundMoney(current.usd + allocation.amountUsd);
+      current.bs = roundMoney(current.bs + allocation.bookValueBs);
+      usedByNote.set(allocation.creditNoteId, current);
+    }
+  }
+  let remaining = roundMoney(requestedUsd);
+  const result: SupplierAdvanceCreditNoteAllocation[] = [];
+  for (const source of sources) {
+    if (remaining <= 0.005) break;
+    if (!source || !source.id || !Number.isFinite(source.amountUsd) || source.amountUsd <= 0 ||
+        !Number.isFinite(source.bookValueBs) || source.bookValueBs < 0) {
+      throw new Error('Una nota de crédito fuente tiene importes inválidos.');
+    }
+    const used = usedByNote.get(source.id) || { usd: 0, bs: 0 };
+    const availableUsd = roundMoney(source.amountUsd - used.usd);
+    const availableBs = Math.max(0, roundMoney(source.bookValueBs - used.bs));
+    if (availableUsd <= 0.005) continue;
+    const takeUsd = Math.min(remaining, availableUsd);
+    const takeBs = takeUsd >= availableUsd - 0.005
+      ? availableBs
+      : roundMoney(availableBs * takeUsd / availableUsd);
+    result.push({ creditNoteId: source.id, amountUsd: roundMoney(takeUsd), bookValueBs: takeBs });
+    remaining = roundMoney(remaining - takeUsd);
+  }
+  if (remaining > 0.005) {
+    throw new Error('La liquidación supera el saldo distribuible de las notas de crédito fuente.');
+  }
+  return result;
+}
+
+/** Structural and arithmetic validation used by SQLite and backup import guards. */
+export function validateSupplierAdvanceCreditNoteAllocations(
+  allocations: SupplierAdvanceCreditNoteAllocation[],
+  sourceCreditNoteIds: string[],
+  amountUsd: number,
+  bookValueBs: number
+): string | null {
+  if (!Array.isArray(allocations) || allocations.length === 0) return 'La liquidación no tiene distribución individual por nota de crédito.';
+  const ids = allocations.map(item => item?.creditNoteId);
+  if (ids.some(id => typeof id !== 'string' || !id.trim()) || new Set(ids).size !== ids.length) {
+    return 'La distribución por nota de crédito contiene identificadores vacíos o duplicados.';
+  }
+  if (!Array.isArray(sourceCreditNoteIds) || sourceCreditNoteIds.length !== ids.length ||
+      ids.some(id => !sourceCreditNoteIds.includes(id))) {
+    return 'Las notas fuente no coinciden con la distribución individual.';
+  }
+  const valid = allocations.every(item => Number.isFinite(item.amountUsd) && item.amountUsd > 0 &&
+    Number.isFinite(item.bookValueBs) && item.bookValueBs >= 0);
+  if (!valid) return 'La distribución por nota de crédito contiene importes inválidos.';
+  const sumUsd = roundMoney(allocations.reduce((sum, item) => sum + item.amountUsd, 0));
+  const sumBs = roundMoney(allocations.reduce((sum, item) => sum + item.bookValueBs, 0));
+  if (Math.abs(sumUsd - roundMoney(amountUsd)) > 0.01 || Math.abs(sumBs - roundMoney(bookValueBs)) > 0.02) {
+    return 'La distribución individual no coincide con el importe liquidado ni con su valor histórico.';
   }
   return null;
 }
