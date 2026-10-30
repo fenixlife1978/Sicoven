@@ -436,7 +436,7 @@ const supplierCreditFixture = () => {
     id: 'return-movement', companyId: 'company-1', productId: 'p-1',
     date: '2026-10-10', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA',
     documentRef: 'NC-PROV-NC-001', quantity: 1, unitCostBs: 100,
-    totalCostBs: 100, totalCostUsd: 1, correctionForMovementId: 'purchase-movement',
+    totalCostBs: 100, totalCostUsd: 1, balanceQty: 1, correctionForMovementId: 'purchase-movement',
     journalEntryId: 'credit-entry', counterpartyRif: 'J-12345678-9'
   };
   const note = {
