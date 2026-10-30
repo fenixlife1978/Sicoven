@@ -65,8 +65,10 @@ jobs:
             throw 'El bundle completo contiene datos de ejemplo; no se publicará este instalador.'
           }
       - name: Package full Windows installer
+        if: startsWith(github.ref, 'refs/tags/v')
         run: npm run dist
       - name: Verify full installer
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $installer = Get-ChildItem -Path release -Filter '*.exe' -File | Select-Object -First 1
@@ -97,6 +99,7 @@ jobs:
             gh release create $tag $files --target $env:GITHUB_SHA --title $title --notes $notes
           }
       - name: Upload complete edition installer
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-COMPLETO-Windows-x64
@@ -104,6 +107,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Publish artifact checksums
+        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: |
           $files = @((Get-ChildItem -Path release -Filter '*.exe' -File))
@@ -114,6 +118,7 @@ jobs:
             "$hash  $($file.Name)" | Out-File -FilePath checksums-sha256.txt -Append -Encoding utf8
           }
       - name: Upload installer checksums
+        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@v4
         with:
           name: SICOVEN-SHA256-checksums
