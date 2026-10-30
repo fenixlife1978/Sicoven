@@ -30,7 +30,7 @@ import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters'
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
-import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, type CostLayer } from '../types/inventoryAccounting';
+import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 
@@ -1926,26 +1926,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         totalCostBs = Math.round(Number(row.quantity) * effectiveUnitCost * 100) / 100;
       } else if (row.type === 'SALIDA') {
         if (product.costingMethod === 'PEPS') {
-          const layers: CostLayer[] = [];
-          const history = virtualMovements.filter(m => m.productId === product.id).slice().sort((a,b) => a.date.localeCompare(b.date));
-          let runningQuantity = 0;
-          for (const m of history) {
-            if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
-            else if (m.type === 'SALIDA') {
-              let remaining = m.quantity;
-              for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
-              runningQuantity -= m.quantity;
-            } else {
-              const delta = m.balanceQty - runningQuantity;
-              if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
-              else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
-              runningQuantity = m.balanceQty;
-            }
-          }
-          const layerQty = layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0);
-          if (layerQty < product.currentStock - 1e-8) layers.unshift({ quantity: product.currentStock - layerQty, unitCostBs: product.avgCostBs, unitCostUsd: product.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
-          if (layers.reduce((sum,layer) => sum + Math.max(0,layer.quantity),0) > product.currentStock + 1e-8) throw new Error('Fila ' + (index + 2) + ': el Kardex PEPS no concilia para ' + product.code + '.');
-          const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
+          const history = virtualMovements.filter(m => m.companyId === currentCompany.id && m.productId === product.id);
+          const layers = reconstructFifoLayers(history, product.currentStock);
+          const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
           totalCostBs = calculateFifoIssue(layers, Number(row.quantity)).totalCostBs;
           newStock = Math.max(0, product.currentStock - Number(row.quantity));
           newAverageBs = newStock > 0 ? Math.max(0, fifoLayerValue - totalCostBs) / newStock : 0;
@@ -2180,43 +2163,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
     } else if (movData.type === 'SALIDA') {
       if (prod.costingMethod === 'PEPS') {
-        const layers: CostLayer[] = [];
-        let runningQuantity = 0;
-        for (const priorMovement of prior) {
-          if (priorMovement.type === 'ENTRADA') {
-            layers.push({ quantity: priorMovement.quantity, unitCostBs: priorMovement.unitCostBs, unitCostUsd: priorMovement.unitCostUsd, date: priorMovement.date, documentRef: priorMovement.documentRef });
-            runningQuantity += priorMovement.quantity;
-          } else if (priorMovement.type === 'SALIDA') {
-            let remaining = priorMovement.quantity;
-            for (const layer of layers) {
-              const used = Math.min(layer.quantity, remaining);
-              layer.quantity -= used;
-              remaining -= used;
-              if (remaining <= 1e-8) break;
-            }
-            runningQuantity -= priorMovement.quantity;
-          } else if (priorMovement.type === 'AJUSTE') {
-            const delta = priorMovement.balanceQty - runningQuantity;
-            if (delta > 0) layers.push({ quantity: delta, unitCostBs: priorMovement.unitCostBs, unitCostUsd: priorMovement.unitCostUsd, date: priorMovement.date, documentRef: priorMovement.documentRef });
-            else if (delta < 0) {
-              let remaining = Math.abs(delta);
-              for (const layer of layers) {
-                const used = Math.min(layer.quantity, remaining);
-                layer.quantity -= used;
-                remaining -= used;
-                if (remaining <= 1e-8) break;
-              }
-            }
-            runningQuantity = priorMovement.balanceQty;
-          }
-        }
-        const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
-        if (layerQuantity < prod.currentStock - 1e-8) {
-          layers.unshift({ quantity: prod.currentStock - layerQuantity, unitCostBs: prod.avgCostBs, unitCostUsd: prod.avgCostUsd, date: '0000-01-01', documentRef: 'SALDO-APERTURA-LEGADO' });
-        } else if (layerQuantity > prod.currentStock + 1e-8) {
-          throw new Error('El Kardex PEPS no concilia con la existencia actual. Reconstruya el Kardex antes de registrar salidas.');
-        }
-        const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
+        const layers = reconstructFifoLayers(prior, prod.currentStock);
+        const fifoLayerValue = layers.reduce((sum, layer) => sum + layer.quantity * layer.unitCostBs, 0);
         const fifo = calculateFifoIssue(layers, Number(movData.quantity));
         totalCostBs = fifo.totalCostBs;
         totalCostUsd = Math.round(totalCostBs / rate * 1000000) / 1000000;
@@ -2374,27 +2322,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       let componentNewAverageBs = component.avgCostBs;
       let componentNewAverageUsd = component.avgCostUsd;
       if (component.costingMethod === 'PEPS') {
-        const layers: CostLayer[] = [];
-        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id).slice().sort((a,b) => a.date.localeCompare(b.date));
-        let runningQuantity = 0;
-        for (const m of history) {
-          if (m.type === 'ENTRADA') { layers.push({ quantity: m.quantity, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef }); runningQuantity += m.quantity; }
-          else if (m.type === 'SALIDA') {
-            let remaining = m.quantity;
-            for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; }
-            runningQuantity -= m.quantity;
-          } else {
-            const delta = m.balanceQty - runningQuantity;
-            if (delta > 0) layers.push({ quantity: delta, unitCostBs: m.unitCostBs, unitCostUsd: m.unitCostUsd, date: m.date, documentRef: m.documentRef });
-            else if (delta < 0) { let remaining = Math.abs(delta); for (const layer of layers) { const used = Math.min(layer.quantity, remaining); layer.quantity -= used; remaining -= used; if (remaining <= 1e-8) break; } }
-            runningQuantity = m.balanceQty;
-          }
-        }
-        const layerQuantity = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity), 0);
-        if (Math.abs(layerQuantity - component.currentStock) > 1e-8) {
-          throw new Error('El Kardex PEPS no conserva las capas originales de ' + component.code + '. No se crearán capas de costo estimadas para completar la existencia.');
-        }
-        const availableLayers = layerQuantity;
+        const history = movements.filter(m => m.companyId === currentCompany.id && m.productId === component.id);
+        const layers = reconstructFifoLayers(history, component.currentStock);
+        const availableLayers = layers.reduce((sum, layer) => sum + layer.quantity, 0);
         if (availableLayers < requiredQuantity - 1e-8) throw new Error('El Kardex PEPS no cubre la existencia disponible de ' + component.code + '.');
         const fifoLayerValue = layers.reduce((sum, layer) => sum + Math.max(0, layer.quantity) * layer.unitCostBs, 0);
         totalBs = calculateFifoIssue(layers, requiredQuantity).totalCostBs;
