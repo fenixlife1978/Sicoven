@@ -1813,7 +1813,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
-    const rate = Number(saleData.bcvRate || currentCompany.bcvRate);
+    const rate = Number(saleData.bcvRate);
     const saleAmounts = [
       saleData.totalAmountBs, saleData.taxableBaseBs, saleData.exemptAmountBs,
       saleData.vatAmountBs, saleData.vatWithheldBs || 0, saleData.igtfAmountBs || 0

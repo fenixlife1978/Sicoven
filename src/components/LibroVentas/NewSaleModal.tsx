@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { TrendingUp, X, Check } from 'lucide-react';
 import { formatBs, formatUsd, formatRif } from '../../utils/formatters';
+import { getValidBcvRate } from '../../types/saleBcvRate';
 
 interface NewSaleModalProps {
   isOpen: boolean;
@@ -34,7 +35,8 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
   const [applyIgtf, setApplyIgtf] = useState(false);
 
   // Currency
-  const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 68.50);
+  const bcvRate = getValidBcvRate(currentCompany.bcvRate) ?? 0;
+  const hasValidBcvRate = bcvRate > 0;
   const [notes, setNotes] = useState<string>('');
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
   const [creditDays, setCreditDays] = useState<number>(7);
@@ -44,6 +46,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   if (!isOpen) return null;
 
+  // La tasa de la empresa es la única fuente autorizada; nunca se inventa una tasa de respaldo.
   // Real-time calculations
   const vatAmountBs = Math.round(taxableBaseBs * (taxRate / 100) * 100) / 100;
   const invoiceSubtotalBs = Math.round((taxableBaseBs + exemptAmountBs + vatAmountBs) * 100) / 100;
@@ -62,6 +65,10 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!hasValidBcvRate) {
+      window.alert('No hay una tasa BCV válida registrada para esta empresa. Actualice la tasa en Configuración antes de registrar la venta.');
+      return;
+    }
     if (!customerRif.trim() || !customerName.trim() || !invoiceNumber.trim()) return;
     if (totalAmountBs <= 0) return;
     if (clientIsSpecial && !/^[0-9]{14}$/.test(retentionVoucherNumber.trim())) {
@@ -371,6 +378,11 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
           {/* Summary Box */}
           <div className="bg-slate-900 text-white p-4 rounded-xl space-y-2">
             <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-400">Tasa BCV aplicada:</span>
+              <span className="font-mono">{hasValidBcvRate ? `${bcvRate.toLocaleString('es-VE')} Bs./USD` : 'No configurada'}</span>
+            </div>
+            {!hasValidBcvRate && <p role="alert" className="rounded-lg border border-amber-400/40 bg-amber-400/10 p-2 text-amber-200">No se puede registrar esta venta hasta configurar una tasa BCV válida en la empresa.</p>}
+            <div className="flex justify-between items-center text-xs">
               <span className="text-slate-400">Total Factura (IVA e IGTF si aplica):</span>
               <span className="font-mono font-bold">{formatBs(totalAmountBs)} ({formatUsd(totalAmountUsd)})</span>
             </div>
@@ -396,7 +408,7 @@ export const NewSaleModal: React.FC<NewSaleModalProps> = ({ isOpen, onClose }) =
             </button>
             <button
               type="submit"
-              disabled={totalAmountBs <= 0}
+              disabled={!hasValidBcvRate || totalAmountBs <= 0}
               className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow transition cursor-pointer disabled:opacity-40"
             >
               <Check className="w-4 h-4" />
