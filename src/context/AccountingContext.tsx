@@ -453,10 +453,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : purchase));
     if (linkedPurchase) {
       setVatVouchers(prev => prev.map(voucher => voucher.purchaseRecordId === linkedPurchase.id
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id, correctionNote: reason.trim() }
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id,
+          correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), reversal.id])],
+          correctionNote: reason.trim() }
         : voucher));
       setIslrVouchers(prev => prev.map(voucher => voucher.id === 'vouch-islr-' + linkedPurchase.id
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id, correctionNote: reason.trim() }
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: reversal.id,
+          correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), reversal.id])],
+          correctionNote: reason.trim() }
         : voucher));
     }
     setCreditSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
@@ -1481,14 +1485,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }));
     setPurchases(prev => [...prev, note]);
     setVatVouchers(prev => prev.map(voucher =>
-      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id && !voucher.requiresFiscalCorrection
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+      voucher.companyId === currentCompany.id && voucher.purchaseRecordId === purchase.id
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId,
+          correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), journalId])],
+          correctionNote: [voucher.correctionNote, fiscalCorrectionNote].filter(Boolean).join(' | ') }
         : voucher
     ));
     setIslrVouchers(prev => prev.map(voucher =>
       voucher.companyId === currentCompany.id && voucher.invoiceNumber === purchase.invoiceNumber &&
-      voucher.supplierRif === purchase.supplierRif && !voucher.requiresFiscalCorrection
-        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId, correctionNote: fiscalCorrectionNote }
+      voucher.supplierRif === purchase.supplierRif
+        ? { ...voucher, requiresFiscalCorrection: true, correctionEntryId: journalId,
+          correctionEntryIds: [...new Set([...(voucher.correctionEntryIds || (voucher.correctionEntryId ? [voucher.correctionEntryId] : [])), journalId])],
+          correctionNote: [voucher.correctionNote, fiscalCorrectionNote].filter(Boolean).join(' | ') }
         : voucher
     ));
     await persistenceConfirmation;
