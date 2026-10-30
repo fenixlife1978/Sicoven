@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, X } from 'lucide-react';
 import { useAccounting } from '../../context/AccountingContext';
+import { allocateSupplierAdvanceCreditNotes } from '../../types/supplierAdvanceSettlement';
 
 interface Props { onClose: () => void; }
 
@@ -11,7 +12,7 @@ const today = () => {
 
 export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => {
   const {
-    purchases, bankAccounts, currentCompany, getSupplierAdvanceBalance,
+    purchases, bankAccounts, currentCompany, getSupplierAdvanceBalance, supplierAdvanceSettlements,
     addSupplierAdvanceSettlement, isStorageReady, storageError
   } = useAccounting();
   const suppliers = useMemo(() => {
@@ -39,6 +40,36 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
     p.paymentTerm === 'CREDITO' && String(p.supplierRif).trim().toUpperCase() === supplierRif &&
     p.companyId === currentCompany.id);
   const accounts = bankAccounts.filter(a => a.companyId === currentCompany.id);
+  const allocationPreview = useMemo(() => {
+    if (!supplierRif || !Number.isFinite(usd) || usd <= 0) return { rows: [], error: '' };
+    const rif = supplierRif.trim().toUpperCase();
+    const sourceNotes = purchases.filter(p => p.companyId === currentCompany.id && p.documentType === '03' &&
+      !p.isCancelled && String(p.supplierRif || '').trim().toUpperCase() === rif &&
+      Number(p.supplierAdvanceUsd || 0) > 0).sort((a, b) =>
+        String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')) || String(a.id).localeCompare(String(b.id)));
+    try {
+      const allocations = allocateSupplierAdvanceCreditNotes(
+        sourceNotes.map(p => ({ id: p.id, amountUsd: Number(p.supplierAdvanceUsd || 0), bookValueBs: Number(p.supplierAdvanceBs || 0) })),
+        supplierAdvanceSettlements, currentCompany.id, rif, Math.round(usd * 100) / 100
+      );
+      const rows = allocations.map(allocation => {
+        const note = sourceNotes.find(p => p.id === allocation.creditNoteId)!;
+        const previouslyUsed = supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
+          !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
+          .flatMap(item => item.sourceCreditNoteAllocations || [])
+          .filter(item => item.creditNoteId === note.id)
+          .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+        return {
+          id: note.id, invoice: note.invoiceNumber, date: note.invoiceDate,
+          appliedUsd: allocation.amountUsd, appliedBs: allocation.bookValueBs,
+          remainingUsd: Math.max(0, Number(note.supplierAdvanceUsd || 0) - previouslyUsed - allocation.amountUsd)
+        };
+      });
+      return { rows, error: '' };
+    } catch (cause) {
+      return { rows: [], error: cause instanceof Error ? cause.message : 'No se pudo calcular la distribución FIFO.' };
+    }
+  }, [supplierRif, usd, purchases, supplierAdvanceSettlements, currentCompany.id]);
   const rate = Number(bcvRate);
   const usd = Number(amountUsd);
   const validAmount = Number.isFinite(usd) && usd > 0 && Number.isFinite(rate) && rate > 0;
@@ -99,6 +130,22 @@ export const SupplierAdvanceSettlementModal: React.FC<Props> = ({ onClose }) => 
             <label className="text-xs font-semibold text-slate-700">Importe USD<input required type="number" min="0.01" step="0.01" value={amountUsd} onChange={e => setAmountUsd(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="text-xs font-semibold text-slate-700">Tasa BCV<input required type="number" min="0.000001" step="0.000001" value={bcvRate} onChange={e => setBcvRate(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
           </div>
+          {validAmount && amountUsd.trim() !== '' && <section className="rounded-xl border border-slate-200 p-3">
+            <h3 className="text-xs font-bold text-slate-800">Previsualización FIFO por nota de crédito</h3>
+            {allocationPreview.error ? <p role="alert" className="mt-2 text-xs text-amber-800">{allocationPreview.error}</p> :
+              allocationPreview.rows.length === 0 ? <p className="mt-2 text-xs text-slate-500">No hay notas disponibles para distribuir este importe.</p> :
+              <div className="mt-2 overflow-x-auto">
+                <table className="w-full min-w-[430px] text-left text-[11px]">
+                  <thead><tr className="border-b text-slate-500"><th className="py-2 pr-2">Nota / fecha</th><th className="py-2 pr-2 text-right">Aplicado USD</th><th className="py-2 pr-2 text-right">Valor histórico Bs</th><th className="py-2 text-right">Saldo USD</th></tr></thead>
+                  <tbody>{allocationPreview.rows.map(row => <tr key={row.id} className="border-b border-slate-100">
+                    <td className="py-2 pr-2 font-medium">{row.invoice || row.id}<span className="block text-slate-400">{row.date}</span></td>
+                    <td className="py-2 pr-2 text-right font-mono">{row.appliedUsd.toFixed(2)}</td>
+                    <td className="py-2 pr-2 text-right font-mono">{row.appliedBs.toLocaleString('es-VE',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+                    <td className="py-2 text-right font-mono">{row.remainingUsd.toFixed(2)}</td>
+                  </tr>)}</tbody>
+                </table>
+              </div>}
+          </section>}
           {kind === 'REFUND_RECEIVED' && <>
             <label className="block text-xs font-semibold text-slate-700">Importe efectivamente recibido en Bs<input required type="number" min="0.01" step="0.01" value={cashReceivedBs} onChange={e => setCashReceivedBs(e.target.value)} className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2"/></label>
             <label className="block text-xs font-semibold text-slate-700">Cuenta de caja / banco
