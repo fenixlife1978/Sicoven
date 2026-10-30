@@ -347,6 +347,20 @@ test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventar
   assert.equal(result.journalInventoryDebitUsd, 2);
 });
 
+test('bloquea asientos de compra con cuentas auxiliares adicionales no justificadas', () => {
+  const journalWithExtraAccount: JournalEntry = {
+    ...reconciledPurchaseJournal,
+    items: [...reconciledPurchaseJournal.items,
+      { accountCode: '6.1.1.11', accountName: 'IGTF no facturado', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 }]
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [journalWithExtraAccount]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.journalMatchesInvoice, false);
+});
+
 test('bloquea la devolución si el asiento original usa una cuenta distinta a la del artículo', () => {
   const result = validatePurchaseInventoryReconciliation({
     companyId: 'c-1', purchase: reconciledPurchase,
