@@ -47,6 +47,24 @@ describe('motor de inventario contable', () => {
     assert.equal(layers[1].unitCostBs, 20);
   });
 
+  it('descarga una devolución a proveedor de su capa PEPS original y no de la capa más antigua', () => {
+    const layers = reconstructFifoLayers([
+      { id: 'purchase-old', type: 'ENTRADA', quantity: 5, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-OLD', balanceQty: 5 },
+      { id: 'purchase-target', type: 'ENTRADA', quantity: 3, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-02', documentRef: 'FAC-TARGET', balanceQty: 8 },
+      { id: 'supplier-return', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', correctionForMovementId: 'purchase-target',
+        quantity: 1, unitCostBs: 20, unitCostUsd: 2, date: '2026-01-03', documentRef: 'NC-PROV-1', balanceQty: 7 }
+    ], 7);
+    assert.equal(layers.find(layer => layer.sourceMovementId === 'purchase-old')?.quantity, 5);
+    assert.equal(layers.find(layer => layer.sourceMovementId === 'purchase-target')?.quantity, 2);
+  });
+
+  it('bloquea devoluciones PEPS históricas sin vínculo a la entrada original', () => {
+    assert.throws(() => reconstructFifoLayers([
+      { id: 'purchase-1', type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', documentRef: 'FAC-1', balanceQty: 2 },
+      { id: 'return-1', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA', quantity: 1, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-02', documentRef: 'NC-1', balanceQty: 1 }
+    ], 1), /no identifica la entrada original/);
+  });
+
   it('bloquea PEPS si faltan capas de apertura o un movimiento excede las capas existentes', () => {
     assert.throws(() => reconstructFifoLayers([
       { type: 'ENTRADA', quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01', balanceQty: 2 }
