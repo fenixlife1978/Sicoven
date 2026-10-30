@@ -284,6 +284,8 @@ app.whenReady().then(async () => {
       fs.appendFileSync(path.join(app.getPath('userData'), 'sicoven-startup.log'), `[${new Date().toISOString()}] sqlite-integrity: ${detail}\\n`, 'utf8');
     } catch {}
     dialog.showErrorBox('SICOVEN protegió la base de datos', `${detail}\\n\\nNo se borró ni se reemplazó ningún dato. Conserva el archivo sicoven.sqlite y solicita revisión técnica antes de continuar.`);
+    try { if (db && db.open) db.close(); } catch {}
+    db = null;
     app.quit();
     return;
   }
