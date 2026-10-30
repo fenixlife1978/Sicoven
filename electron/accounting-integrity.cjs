@@ -492,8 +492,10 @@ function validateAccountingSnapshot(previousState, nextState) {
         duplicateNoteNumber ||
         !note.creditNoteNumber || !note.controlNumber || String(note.notes || '').trim().length < 10 ||
         lines.length === 0 || !note.journalEntryId ||
-        !Number.isFinite(Number(note.netPayableReductionBs)) || Number(note.netPayableReductionBs) <= 0 ||
-        !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) <= 0) {
+        !Number.isFinite(Number(note.netPayableReductionBs)) || Number(note.netPayableReductionBs) < 0 ||
+        !Number.isFinite(Number(note.netPayableReductionUsd)) || Number(note.netPayableReductionUsd) < 0 ||
+        !Number.isFinite(Number(note.supplierAdvanceBs || 0)) || Number(note.supplierAdvanceBs || 0) < 0 ||
+        !Number.isFinite(Number(note.supplierAdvanceUsd || 0)) || Number(note.supplierAdvanceUsd || 0) < 0) {
       throw new Error('SQLite rechazó la nota de crédito: falta factura original, proveedor, soporte, líneas de Kardex o reducción de CxP válida.');
     }
     const sourceEntryForPayable = asArray(nextState.journalEntries).find(item =>
@@ -658,7 +660,10 @@ function validateAccountingSnapshot(previousState, nextState) {
         Math.abs(accountSum('6.1.1.11', 'credit', 'Bs') - Number(note.igtfAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum('6.1.1.11', 'credit', 'Usd') - Number(note.igtfAmountUsd || 0)) > 0.0001 ||
         Math.abs(Number(note.totalAmountBs) - Number(note.taxableBaseBs) - Number(note.exemptAmountBs) - Number(note.vatAmountBs) - Number(note.igtfAmountBs || 0)) > 0.02 ||
-        Math.abs(Number(note.netPayableReductionBs) - (Number(note.totalAmountBs) - Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0))) > 0.02) {
+        Math.abs(Number(note.netPayableReductionBs) + Number(note.supplierAdvanceBs || 0) -
+           (Number(note.totalAmountBs) - Number(note.vatWithheldBs || 0) - Number(note.islrWithheldBs || 0))) > 0.02 ||
+         Math.abs(Number(note.netPayableReductionUsd) + Number(note.supplierAdvanceUsd || 0) -
+           (Number(note.totalAmountUsd) - Number(note.vatWithheldUsd || 0) - Number(note.islrWithheldUsd || 0))) > 0.0001) {
       throw new Error('SQLite rechazó la nota de crédito: el asiento no está balanceado o no revierte CxP, inventario, IVA, retenciones e IGTF.');
     }
     const paid = asArray(nextState.creditSettlements).filter(item =>
