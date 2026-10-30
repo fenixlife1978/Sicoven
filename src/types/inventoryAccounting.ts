@@ -2,6 +2,13 @@ export type InventoryCostingMethod = 'PROMEDIO_PONDERADO' | 'PEPS';
 export type InventoryVatTreatment = 'GENERAL_16' | 'REDUCIDA_8' | 'EXENTO' | 'EXONERADO';
 export type InventoryItemType = 'MERCANCIA' | 'MATERIA_PRIMA' | 'PRODUCTO_EN_PROCESO' | 'PRODUCTO_TERMINADO' | 'SUBPRODUCTO';
 
+/** Cuenta de inventario por defecto según la naturaleza contable del artículo. */
+export function getDefaultInventoryAccountCode(itemType?: InventoryItemType): string {
+  if (itemType === 'MATERIA_PRIMA') return '1.1.4.02';
+  if (itemType === 'PRODUCTO_EN_PROCESO') return '1.1.4.04';
+  return '1.1.4.01';
+}
+
 export interface CostLayer {
   quantity: number;
   unitCostBs: number;
