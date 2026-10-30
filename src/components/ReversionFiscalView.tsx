@@ -100,7 +100,7 @@ export const ReversionFiscalView: React.FC = () => {
     : [];
   const reversalBlockReasons = [
     ...(requiresInventoryReview ? [saleInventoryReadiness?.reason || 'Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
-    ...(linkedBankMovements.length ? ['Hay movimientos bancarios que fueron conciliados con este asiento. La desconciliación no borra ese vínculo histórico; se requiere registrar y conciliar la operación bancaria inversa antes de reversar.'] : []),
+    ...(linkedBankMovements.length ? ['Hay movimientos bancarios que fueron conciliados con este asiento. La desconciliación no borra ese vínculo histórico. El flujo de reversión bancaria coordinada todavía no está habilitado, por lo que el contra-asiento permanece bloqueado.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
   const reversalDisabled = !source || Boolean(previewError) || hasReversal(source.id) || reversalBlockReasons.length > 0 ||
