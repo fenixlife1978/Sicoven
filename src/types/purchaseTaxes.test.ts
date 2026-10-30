@@ -33,4 +33,9 @@ test('redondea el IGTF al céntimo y rechaza importes o tasas no finitos', () =>
   assert.equal(calculatePurchaseIgtf(Number.NaN, 'ZELLE', true).amountBs, 0);
   assert.equal(calculatePurchaseIgtf(Number.POSITIVE_INFINITY, 'ZELLE', true).amountBs, 0);
 });
-\ntest('no anticipa IGTF en una factura a crédito aunque se confirme un medio extranjero', () => {\n  for (const method of ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'] as const) {\n    assert.deepEqual(calculatePurchaseIgtf(1000, method, true, 3, 'CREDITO'), { applicable: false, rate: 0, amountBs: 0 });\n  }\n});\n
+
+test('no anticipa IGTF en una factura a crédito aunque se confirme un medio extranjero', () => {
+  for (const method of ['FOREIGN_CASH', 'ZELLE', 'INTERNATIONAL_TRANSFER', 'CRYPTO'] as const) {
+    assert.deepEqual(calculatePurchaseIgtf(1000, method, true, 3, 'CREDITO'), { applicable: false, rate: 0, amountBs: 0 });
+  }
+});
