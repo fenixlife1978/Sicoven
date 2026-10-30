@@ -597,6 +597,13 @@ function validateAccountingSnapshot(previousState, nextState) {
       if (!originalMovement || !returnMovement || !newSupplierReturns.some(item => item.id === returnMovement.id) ||
           journalMovementIds.has(String(returnMovement.id)) || sourceMovementIds.has(String(line.originalMovementId)) ||
           originalMovement.productId !== line.productId || returnMovement.productId !== line.productId ||
+          !originalLine ||
+          Math.abs(Number(originalMovement.quantity) - Number(originalLine.quantity)) > 0.000001 ||
+          Math.abs(Number(originalMovement.unitCostBs) - Number(originalLine.unitCostBs)) > 0.02 ||
+          Math.abs(Number(originalMovement.totalCostBs) - Number(originalLine.quantity) * Number(originalLine.unitCostBs)) > 0.02 ||
+          originalMovement.date !== original.invoiceDate ||
+          Math.abs(Number(originalMovement.bcvRate) - Number(original.bcvRate)) > 0.000001 ||
+          normalizeRif(originalMovement.counterpartyRif) !== normalizeRif(original.supplierRif) ||
           returnMovement.type !== 'SALIDA' || returnMovement.concept !== 'DEVOLUCION_COMPRA' ||
           returnMovement.date !== note.invoiceDate ||
           returnMovement.correctionForMovementId !== originalMovement.id ||
