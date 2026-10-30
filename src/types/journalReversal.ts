@@ -229,9 +229,25 @@ export function validatePurchaseInventoryReconciliation(input: {
   const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const lines = Array.isArray(purchase.inventoryLines) ? purchase.inventoryLines : [];
-  const baseTotal = money(Number(purchase.taxableBaseBs || 0) + Number(purchase.exemptAmountBs || 0));
+  const taxableBase = Number(purchase.taxableBaseBs);
+  const exemptBase = Number(purchase.exemptAmountBs);
+  const vat = Number(purchase.vatAmountBs);
+  const vatWithheld = Number(purchase.vatWithheldBs || 0);
+  const islrWithheld = Number(purchase.islrWithheldBs || 0);
+  const igtf = Number(purchase.igtfAmountBs || 0);
+  const total = Number(purchase.totalAmountBs);
+  const rate = Number(purchase.bcvRate);
+  const baseTotal = money(taxableBase + exemptBase);
   const lineTotal = money(lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0));
+  const expectedTotal = money(baseTotal + vat + igtf);
+  const expectedPayable = money(total - vatWithheld - islrWithheld);
+  const validAmounts = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate,
+    Number(purchase.taxRate)].every(value => Number.isFinite(value) && value >= 0) &&
+    rate > 0 && Number(purchase.taxRate) <= 100 &&
+    vatWithheld <= vat + 0.02 && islrWithheld <= taxableBase + 0.02 &&
+    expectedPayable > 0 && Math.abs(total - expectedTotal) <= 0.02;
   const expectedReference = normalize('FAC-' + purchase.invoiceNumber);
+  const supplierRif = normalizeRif(purchase.supplierRif);
   const linkedMovements = movements.filter(movement =>
     movement.companyId === companyId && movement.type === 'ENTRADA' && movement.concept === 'COMPRA' &&
     normalize(movement.documentRef) === expectedReference && !movement.correctionForMovementId
@@ -254,40 +270,87 @@ export function validatePurchaseInventoryReconciliation(input: {
     productIds.add(String(line.productId));
     return true;
   });
-  const rate = Number(purchase.bcvRate);
-  const validRate = Number.isFinite(rate) && rate > 0;
   const linesMatchInvoice = validLines && Math.abs(lineTotal - baseTotal) <= 0.02;
-  const movementMatchesLines = validRate && linkedMovements.length === lines.length && lines.every(line => {
-    const matches = linkedMovements.filter(movement => String(movement.productId) === String(line.productId));
-    if (matches.length !== 1) return false;
-    const movement = matches[0];
-    const quantity = Number(line.quantity);
-    const expectedBs = money(quantity * Number(line.unitCostBs));
-    const expectedUsd = expectedBs / rate;
-    return movement.date === purchase.invoiceDate &&
-      normalizeRif(movement.counterpartyRif) === normalizeRif(purchase.supplierRif) &&
-      Number.isFinite(Number(movement.bcvRate)) && Math.abs(Number(movement.bcvRate) - rate) <= 0.000001 &&
-      Math.abs(Number(movement.quantity) - quantity) <= 0.000001 &&
-      Math.abs(Number(movement.unitCostBs) - Number(line.unitCostBs)) <= 0.02 &&
-      Number.isFinite(Number(movement.unitCostUsd)) &&
-      Math.abs(Number(movement.unitCostUsd) - Number(line.unitCostBs) / rate) <= 0.0001 &&
-      Math.abs(money(Number(movement.totalCostBs)) - expectedBs) <= 0.02 &&
-      Number.isFinite(Number(movement.totalCostUsd)) &&
-      Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
-  }) && Math.abs(movementTotal - lineTotal) <= 0.02;
+  const movementMatchesLines = validLines && validAmounts && Boolean(supplierRif) &&
+    linkedMovements.length === lines.length && lines.every(line => {
+      const matches = linkedMovements.filter(movement => String(movement.productId) === String(line.productId));
+      if (matches.length !== 1) return false;
+      const movement = matches[0];
+      const quantity = Number(line.quantity);
+      const unitCost = Number(line.unitCostBs);
+      const expectedBs = money(quantity * unitCost);
+      const expectedUsd = expectedBs / rate;
+      const movementRif = normalizeRif(movement.counterpartyRif);
+      return movement.date === purchase.invoiceDate && Boolean(movementRif) && movementRif === supplierRif &&
+        Number.isFinite(Number(movement.bcvRate)) && Math.abs(Number(movement.bcvRate) - rate) <= 0.000001 &&
+        Number.isFinite(Number(movement.quantity)) && Math.abs(Number(movement.quantity) - quantity) <= 0.000001 &&
+        Number.isFinite(Number(movement.unitCostBs)) && Math.abs(Number(movement.unitCostBs) - unitCost) <= 0.02 &&
+        Number.isFinite(Number(movement.unitCostUsd)) &&
+        Math.abs(Number(movement.unitCostUsd) - unitCost / rate) <= 0.0001 &&
+        Number.isFinite(Number(movement.totalCostBs)) &&
+        Math.abs(money(Number(movement.totalCostBs)) - expectedBs) <= 0.02 &&
+        Number.isFinite(Number(movement.totalCostUsd)) &&
+        Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
+    }) && Math.abs(movementTotal - lineTotal) <= 0.02;
+
+  const allowedAccounts = new Set(['1.1.4.01', '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
+  const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
+  const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
+    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value || 0));
+    return Boolean(item.accountCode) && allowedAccounts.has(item.accountCode) &&
+      values.every(value => Number.isFinite(value) && value >= 0) &&
+      !(values[0] > 0 && values[1] > 0) && !(values[2] > 0 && values[3] > 0);
+  });
+  const journalByAccount = new Map<string, { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number }>();
+  for (const item of journalItems) {
+    const current = journalByAccount.get(item.accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    current.debitBs += Number(item.debitBs || 0);
+    current.creditBs += Number(item.creditBs || 0);
+    current.debitUsd += Number(item.debitUsd || 0);
+    current.creditUsd += Number(item.creditUsd || 0);
+    journalByAccount.set(item.accountCode, current);
+  }
+  const expectedAccounts = new Map<string, { debitBs: number; creditBs: number }>([
+    ['1.1.4.01', { debitBs: baseTotal, creditBs: 0 }],
+    ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
+    ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
+    ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
+    ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
+    ['2.1.1.01', { debitBs: 0, creditBs: expectedPayable }]
+  ]);
+  const journalAccountsMatch = journalItemsValid && [...expectedAccounts.entries()].every(([code, expected]) => {
+    const actual = journalByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    return Math.abs(actual.debitBs - expected.debitBs) <= 0.02 &&
+      Math.abs(actual.creditBs - expected.creditBs) <= 0.02 &&
+      Math.abs(actual.debitUsd - expected.debitBs / rate) <= 0.0001 &&
+      Math.abs(actual.creditUsd - expected.creditBs / rate) <= 0.0001;
+  });
+  const journalDebitBs = journalItems.reduce((sum, item) => sum + Number(item.debitBs || 0), 0);
+  const journalCreditBs = journalItems.reduce((sum, item) => sum + Number(item.creditBs || 0), 0);
+  const journalDebitUsd = journalItems.reduce((sum, item) => sum + Number(item.debitUsd || 0), 0);
+  const journalCreditUsd = journalItems.reduce((sum, item) => sum + Number(item.creditUsd || 0), 0);
+  const journalBalanced = Math.abs(journalDebitBs - journalCreditBs) <= 0.02 &&
+    Math.abs(journalDebitUsd - journalCreditUsd) <= 0.0001;
+  const purchaseUsdMatches = Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatWithheldUsd || 0) - vatWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.islrWithheldUsd || 0) - islrWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.igtfAmountUsd || 0) - igtf / rate) <= 0.0001;
   const journalMatchesInvoice = Boolean(purchaseJournal && purchaseJournal.type === 'COMPRA' &&
     purchaseJournal.companyId === companyId && purchaseJournal.date === purchase.invoiceDate &&
-    normalize(purchaseJournal.referenceDoc) === expectedReference && validRate &&
-    Math.abs(Number(purchaseJournal.bcvRate) - rate) <= 0.000001 &&
-    Math.abs(journalInventoryDebit - lineTotal) <= 0.02 &&
+    normalize(purchaseJournal.referenceDoc) === expectedReference && validAmounts &&
+    Number.isFinite(Number(purchaseJournal.bcvRate)) && Math.abs(Number(purchaseJournal.bcvRate) - rate) <= 0.000001 &&
+    journalAccountsMatch && journalBalanced && purchaseUsdMatches &&
+    Math.abs(journalInventoryDebit - baseTotal) <= 0.02 &&
     Number.isFinite(journalInventoryDebitUsd) &&
-    Math.abs(journalInventoryDebitUsd - lineTotal / rate) <= 0.0001);
+    Math.abs(journalInventoryDebitUsd - baseTotal / rate) <= 0.0001);
   const ok = linesMatchInvoice && movementMatchesLines && journalMatchesInvoice;
   const reason = !validLines ? 'Faltan líneas de inventario válidas o hay productos duplicados.'
-    : !validRate ? 'La factura no conserva una tasa BCV válida.'
+    : !validAmounts ? 'Los importes fiscales, retenciones, total o tasa BCV de la factura no son coherentes.'
     : !linesMatchInvoice ? 'Las líneas no concilian con la base imponible más el exento.'
     : !movementMatchesLines ? 'El Kardex no coincide por artículo, fecha, proveedor, cantidad, costo o tasa BCV en ambas monedas.'
-    : !journalMatchesInvoice ? 'El asiento de compra no reconoce el costo de inventario conciliado en Bs. y USD.'
+    : !journalMatchesInvoice ? 'El asiento original no concilia inventario, IVA, IGTF, retenciones y CxP por cuenta en Bs. y USD.'
     : undefined;
   return {
     ready: ok, reason, lineCount: lines.length, movementCount: linkedMovements.length,

@@ -454,3 +454,44 @@ test('la evaluación genérica detecta notas de crédito fiscales relacionadas c
   assert.equal(result.ready, false);
   assert.match(result.blockers.join(' '), /nota\(s\) de crédito de proveedor vinculada\(s\)/);
 });
+
+test('bloquea una compra si el RIF de proveedor falta en factura y Kardex', () => {
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1',
+    purchase: { ...reconciledPurchase, supplierRif: '' },
+    movements: [{ ...reconciledPurchaseMovement, counterpartyRif: '' }],
+    journalEntries: [reconciledPurchaseJournal]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.movementMatchesLines, false);
+});
+
+test('bloquea una compra si el asiento no concilia IVA o CxP aunque inventario cuadre', () => {
+  const wrongPayable = {
+    ...reconciledPurchaseJournal,
+    items: reconciledPurchaseJournal.items.map(item => item.accountCode === '2.1.1.01'
+      ? { ...item, creditBs: 200, creditUsd: 2 } : item)
+  };
+  const wrongVat = {
+    ...reconciledPurchaseJournal,
+    items: reconciledPurchaseJournal.items.map(item => item.accountCode === '1.1.3.01'
+      ? { ...item, debitBs: 20, debitUsd: 0.2 } : item)
+  };
+  for (const journal of [wrongPayable, wrongVat]) {
+    const result = validatePurchaseInventoryReconciliation({
+      companyId: 'c-1', purchase: reconciledPurchase,
+      movements: [reconciledPurchaseMovement], journalEntries: [journal]
+    });
+    assert.equal(result.ready, false);
+    assert.equal(result.journalMatchesInvoice, false);
+  }
+});
+
+test('bloquea una compra con total fiscal incoherente aunque el inventario cuadre', () => {
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: { ...reconciledPurchase, totalAmountBs: 200 },
+    movements: [reconciledPurchaseMovement], journalEntries: [reconciledPurchaseJournal]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.journalMatchesInvoice, false);
+});
