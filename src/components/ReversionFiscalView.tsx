@@ -381,6 +381,8 @@ export const ReversionFiscalView: React.FC = () => {
               : event.eventType === 'credit_settlement_reversed' ? 'Liquidación de crédito reversada'
               : event.eventType === 'bank_statement_reconciled' ? 'Movimiento bancario conciliado'
               : event.eventType === 'bank_statement_unreconciled' ? 'Movimiento bancario desconciliado'
+              : event.eventType === 'inventory_movement_posted' ? 'Movimiento de Kardex registrado'
+              : event.eventType === 'inventory_correction_posted' ? 'Corrección de Kardex registrada'
               : event.eventType === 'accounting_period_closed' ? 'Período contable cerrado'
               : event.eventType === 'factory_reset' ? 'Reinicio de datos operativos'
               : event.eventType === 'state_saved' ? 'Estado contable persistido en SQLite'
@@ -396,6 +398,7 @@ export const ReversionFiscalView: React.FC = () => {
               {Boolean(details.documentId) && <p>Documento vinculado: {String(details.documentId)}</p>}
               {Boolean(details.closedThroughDate) && <p>Cierre hasta: {String(details.closedThroughDate)}</p>}
               {Boolean(details.statementMovementId) && <p>Extracto: {String(details.statementMovementId)} · asiento vinculado: {String(details.journalEntryId || '')} · referencia: {String(details.reference || '')}</p>}
+              {Boolean(details.movementId) && <p>Kardex: {String(details.productCode || '')} · {String(details.concept || '')} · cantidad {String(details.quantity || '')} · documento {String(details.documentRef || '')} · asiento {String(details.journalEntryId || '')}</p>}
             </article>;
           })}
         </div>
