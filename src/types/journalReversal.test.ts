@@ -9,7 +9,9 @@ const accounts: Account[] = [
   { code:'3.1', name:'Resultados acumulados', type:'PATRIMONIO', level:2, isMovement:true },
   { code:'4.1', name:'Ingresos', type:'INGRESOS', level:2, isMovement:true },
   { code:'5.1', name:'Costo de ventas', type:'COSTOS', level:2, isMovement:true },
-  { code:'1.1.4.01', name:'Inventario', type:'ACTIVO', level:4, isMovement:true }
+  { code:'1.1.4.01', name:'Inventario', type:'ACTIVO', level:4, isMovement:true },
+  { code:'1.1.3.01', name:'IVA crédito fiscal', type:'ACTIVO', level:4, isMovement:true },
+  { code:'2.1.1.01', name:'Cuentas por pagar proveedores', type:'PASIVO', level:4, isMovement:true }
 ];
 const source: JournalEntry = {
   id:'j-1', companyId:'c-1', entryNumber:1, date:'2026-08-15', description:'Venta',
