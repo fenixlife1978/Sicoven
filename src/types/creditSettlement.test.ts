@@ -10,7 +10,7 @@ const settlement = (overrides: Partial<CreditSettlement> = {}): CreditSettlement
 });
 const draft: CreditSettlementDraft = {
   documentId: 'invoice-1', kind: 'SALE_COLLECTION', settlementDate: '2026-10-20',
-  bcvRate: 100, amountUsd: 25, amountBs: 2500, method: 'BANK_TRANSFER_BS'
+  bcvRate: 100, amountUsd: 25, amountBs: 2500, method: 'CASH_BS'
 };
 
 describe('credit settlement balances and validation', () => {
@@ -52,6 +52,15 @@ describe('credit settlement balances and validation', () => {
 
   it('accepts a valid partial settlement', () => {
     assert.equal(validateCreditSettlement(draft, 100), null);
+  });
+
+  it('blocks bank transfers until a specific bank account can be linked and reconciled', () => {
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS' }, 100) || '', /Transferencias temporalmente bloqueadas/i);
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD' }, 100) || '', /Transferencias temporalmente bloqueadas/i);
+  });
+
+  it('blocks unspecified treasury methods', () => {
+    assert.match(validateCreditSettlement({ ...draft, method: 'OTHER' }, 100) || '', /no identifica una cuenta de tesorería/i);
   });
 
   it('rejects amounts above outstanding principal', () => {
