@@ -82,15 +82,25 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
     throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
   }
 
+  if (Number(purchase.islrSubtrahendBs || 0) > 0 && Number(purchase.islrWithheldBs || 0) > 0) {
+    throw new Error('La retención ISLR original tiene sustraendo; el prorrateo automático no es fiscalmente fiable. Requiere cálculo específico de la base y sustraendo de la nota.');
+  }
   const lines = purchase.inventoryLines;
   let taxableLines = 0;
   let exemptLines = 0;
+  const taxableRates = new Set<number>();
   for (const item of lines) {
     const matchingProduct = products.find(candidate => candidate.id === item.productId && candidate.companyId === purchase.companyId);
     if (!matchingProduct) throw new Error('No se puede certificar el tratamiento fiscal de todas las líneas de la factura.');
     const value = Number(item.quantity) * Number(item.unitCostBs);
     if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptLines += value;
-    else taxableLines += value;
+    else {
+      taxableLines += value;
+      taxableRates.add(matchingProduct.vatTreatment === 'REDUCIDA_8' ? 8 : 16);
+    }
+  }
+  if (taxableRates.size > 1 || (taxableRates.size === 1 && !taxableRates.has(Number(purchase.taxRate)))) {
+    throw new Error('La factura contiene alícuotas de IVA mixtas o distintas a la tasa registrada. No se puede prorratear la nota con un único porcentaje.');
   }
   if (Math.abs(money(taxableLines) - money(purchase.taxableBaseBs)) > 0.02 ||
       Math.abs(money(exemptLines) - money(purchase.exemptAmountBs)) > 0.02) {
