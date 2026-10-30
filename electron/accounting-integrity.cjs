@@ -177,6 +177,43 @@ function validateAccountingSnapshot(previousState, nextState) {
           String(entry.date || '') < String(source.date || '')) {
         throw new Error('SQLite rechazó un contra-asiento sin origen, enlace recíproco, justificación, papel de trabajo o fecha válida.');
       }
+      if (entry.type !== 'AJUSTE' ||
+          String(entry.referenceDoc || '') !== 'REV-' + source.entryNumber ||
+          Math.abs(Number(entry.bcvRate) - Number(source.bcvRate)) > 0.000001 ||
+          !Array.isArray(source.items) || source.items.length !== entry.items.length) {
+        throw new Error('SQLite rechazó el contra-asiento: tipo, referencia, tasa BCV o cantidad de líneas no coincide con el asiento original.');
+      }
+      const accountByCode = new Map(asArray(nextState.accounts).map(account => [String(account.code), account]));
+      let retainedTargetCode = '';
+      for (let index = 0; index < source.items.length; index++) {
+        const originalLine = source.items[index];
+        const reversalLine = entry.items[index];
+        const originalAccount = accountByCode.get(String(originalLine.accountCode));
+        const remapToEquity = Boolean(entry.priorPeriodAdjustment && originalAccount &&
+          ['INGRESOS', 'COSTOS', 'GASTOS'].includes(originalAccount.type));
+        if (remapToEquity) {
+          const targetAccount = accountByCode.get(String(reversalLine.accountCode));
+          if (!targetAccount || targetAccount.type !== 'PATRIMONIO' || !targetAccount.isMovement ||
+              (retainedTargetCode && retainedTargetCode !== targetAccount.code)) {
+            throw new Error('SQLite rechazó el AIA: los resultados del período deben reclasificarse a una única cuenta de patrimonio de movimiento.');
+          }
+          retainedTargetCode = targetAccount.code;
+        } else if (reversalLine.accountCode !== originalLine.accountCode) {
+          throw new Error('SQLite rechazó el contra-asiento: no conserva la cuenta de la línea original.');
+        }
+        const pairs = [
+          [reversalLine.debitBs, originalLine.creditBs, 0.01],
+          [reversalLine.creditBs, originalLine.debitBs, 0.01],
+          [reversalLine.debitUsd, originalLine.creditUsd, 0.0001],
+          [reversalLine.creditUsd, originalLine.debitUsd, 0.0001]
+        ];
+        if (pairs.some(([actual, expected, tolerance]) =>
+          !Number.isFinite(Number(actual)) || !Number.isFinite(Number(expected)) ||
+          Math.abs(Number(actual) - Number(expected)) > tolerance)) {
+          throw new Error('SQLite rechazó el contra-asiento: la línea ' + (index + 1) +
+            ' no invierte exactamente Debe/Haber en Bs. y USD.');
+        }
+      }
     }
   }
 
