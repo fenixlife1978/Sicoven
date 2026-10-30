@@ -115,7 +115,7 @@ test('SQLite rejects supplier debit/credit notes imported as new purchase record
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState(), purchases: [note] }
-  ), /cada nota de crédito debe tener exactamente su salida de Kardex asociada/);
+  ), /falta factura original, proveedor, soporte/);
 });
 
 test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
