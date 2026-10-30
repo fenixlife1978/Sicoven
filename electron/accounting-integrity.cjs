@@ -100,8 +100,13 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = []) {
       inventoryByAccount.set(code, (inventoryByAccount.get(code) || 0) + amount);
     }
   } else inventoryByAccount.set('1.1.4.01', base);
-  const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', '2.1.1.01']);
   const items = asArray(entry.items);
+  const payableAccounts = [...new Set(items
+    .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+    .map(item => String(item.accountCode)))];
+  if (payableAccounts.length !== 1) return false;
+  const payableAccountCode = payableAccounts[0];
+  const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', payableAccountCode]);
   if (!items.length || !items.every(item => {
     const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
     return Boolean(item.accountCode) && allowed.has(item.accountCode) &&
@@ -124,7 +129,7 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = []) {
     ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
     ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
     ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
-    ['2.1.1.01', { debitBs: 0, creditBs: payable }]
+    [payableAccountCode, { debitBs: 0, creditBs: payable }]
   ]);
   for (const [accountCode, amount] of expected) {
     const actual = byAccount.get(accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
