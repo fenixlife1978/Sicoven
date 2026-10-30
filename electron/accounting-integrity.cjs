@@ -545,7 +545,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (!voucher.requiresFiscalCorrection) continue;
     const purchase = purchaseById.get(String(voucher.purchaseRecordId));
     const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
-    if (!hasValidFiscalCorrection(purchase, correction)) {
+    if (!purchase || purchase.companyId !== voucher.companyId || !hasValidFiscalCorrection(purchase, correction)) {
       throw new Error('SQLite rechazó una marca de corrección de retención IVA sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
