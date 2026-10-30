@@ -29,7 +29,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
-import { buildReversalItems } from '../types/journalReversal';
+import { buildReversalItems, validateSaleInventoryReturnReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, validateInventoryMovement, type CostLayer } from '../types/inventoryAccounting';
 import { isValidIsoDate } from '../types/migrationParsing';
 
@@ -364,10 +364,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         (linkedPurchase && movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase()))
     );
     if (linkedInventoryMovements.length > 0) {
-      const movementTypes = [...new Set(linkedInventoryMovements.map(movement => movement.concept))].join(', ');
-      throw new Error('Reversión bloqueada: el asiento tiene ' + linkedInventoryMovements.length +
-        ' movimiento(s) de inventario relacionado(s) (' + movementTypes +
-        '). Se requiere una reversión coordinada de Kardex, costo, existencia y asiento contable. No se registró ningún contra-asiento.');
+      if (!linkedSale || linkedPurchase) {
+        const movementTypes = [...new Set(linkedInventoryMovements.map(movement => movement.concept))].join(', ');
+        throw new Error('Reversión bloqueada: el asiento tiene ' + linkedInventoryMovements.length +
+          ' movimiento(s) de inventario relacionado(s) (' + movementTypes +
+          '). Se requiere una reversión coordinada de Kardex, costo, existencia y documento fiscal. No se registró ningún contra-asiento.');
+      }
+      const inventoryReadiness = validateSaleInventoryReturnReconciliation({
+        companyId: currentCompany.id,
+        invoiceNumber: linkedSale.invoiceNumber,
+        source,
+        movements,
+        products,
+        journalEntries
+      });
+      if (!inventoryReadiness.ready) {
+        throw new Error('Reversión de venta bloqueada: ' + (inventoryReadiness.reason || 'el Kardex no está completamente conciliado.') +
+          ' No se registró ningún contra-asiento.');
+      }
     }
     const linkedBankMovements = bankStatementMovements.filter(movement =>
       movement.companyId === currentCompany.id && movement.reconciledWithJournalEntryId === source.id
