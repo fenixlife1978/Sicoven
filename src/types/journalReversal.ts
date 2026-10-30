@@ -242,7 +242,7 @@ export function validateBankStatementReversal(input: {
       ? Math.abs(reversalDebit - originalAmount) < tolerance && reversalCredit < tolerance
       : Math.abs(reversalCredit - originalAmount) < tolerance && reversalDebit < tolerance;
     if (!reversalMatches) {
-      return { ready: false, reason: 'El contra-asiento propuesto no compensa exactamente la línea de la cuenta bancaria ' + bank.name + '.', pairs: [] };
+      return { ready: false, reason: 'El contra-asiento propuesto no compensa exactamente la línea de la cuenta bancaria ' + bank.bankName + '.', pairs: [] };
     }
     usedOppositeIds.add(opposite.id);
     pairs.push({
