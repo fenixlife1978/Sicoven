@@ -511,6 +511,14 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     const sourcePayableAccountCode = sourcePayableAccounts[0];
     const sourceLines = Array.isArray(original.inventoryLines) ? original.inventoryLines : [];
+    const sourceProducts = asArray(nextState.products);
+    for (const sourceLine of sourceLines) {
+      const sourceProduct = sourceProducts.find(item =>
+        String(item.id) === String(sourceLine.productId) && String(item.companyId) === String(original.companyId));
+      if (!sourceProduct) {
+        throw new Error('SQLite rechazó la factura de compra: no existe el artículo asociado en el catálogo de la empresa.');
+      }
+    }
     const sourceMovements = asArray(nextState.movements).filter(item =>
       item.companyId === original.companyId && item.type === 'ENTRADA' &&
       item.concept === 'COMPRA' && !item.correctionForMovementId &&
@@ -518,15 +526,10 @@ function validateAccountingSnapshot(previousState, nextState) {
     const sourceLineTotal = money(sourceLines.reduce((sum, item) =>
       sum + Number(item.quantity || 0) * Number(item.unitCostBs || 0), 0));
     const sourceEntry = original.journalEntryId ? nextById.get(String(original.journalEntryId)) : undefined;
-    const sourceProducts = asArray(nextState.products);
     const sourceInventoryAccounts = new Set();
     for (const sourceLine of sourceLines) {
       const sourceProduct = sourceProducts.find(item =>
         String(item.id) === String(sourceLine.productId) && String(item.companyId) === String(original.companyId));
-      if (!sourceProduct) {
-        sourceInventoryAccounts.clear();
-        break;
-      }
       sourceInventoryAccounts.add(String(sourceProduct.inventoryAccountCode || '1.1.4.01'));
     }
     const sourceInventoryDebit = sourceEntry?.items?.reduce((sum, item) =>
