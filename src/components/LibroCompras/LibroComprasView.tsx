@@ -109,7 +109,7 @@ export const LibroComprasView: React.FC = () => {
         {/* Action buttons (hidden on print) */}
         <div className="flex flex-wrap items-center justify-between gap-3 pt-2 no-print border-t border-slate-100">
           <div className="flex items-center gap-2 text-xs text-slate-600">
-            <span>Facturas Registradas: <strong className="text-slate-900">{filteredPurchases.length}</strong></span>
+            <span>Documentos Registrados: <strong className="text-slate-900">{filteredPurchases.length}</strong></span>
             <span>•</span>
             <span className="text-indigo-700 font-medium">Libro Fiscal Reglamentario</span>
           </div>
