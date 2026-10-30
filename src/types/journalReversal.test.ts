@@ -347,6 +347,34 @@ test('certifica compras cuando cada artículo usa su cuenta auxiliar de inventar
   assert.equal(result.journalInventoryDebitUsd, 2);
 });
 
+test('certifica conciliación de compra usando la auxiliar CxP original distinta de 2.1.1.01', () => {
+  const alternatePayableJournal: JournalEntry = {
+    ...reconciledPurchaseJournal,
+    items: reconciledPurchaseJournal.items.map(item => item.accountCode === '2.1.1.01'
+      ? { ...item, accountCode: '2.1.1.09', accountName: 'CxP proveedor auxiliar' } : item)
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [alternatePayableJournal]
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.journalMatchesInvoice, true);
+});
+
+test('bloquea conciliación si el asiento original tiene dos auxiliares CxP proveedor', () => {
+  const ambiguousPayableJournal: JournalEntry = {
+    ...reconciledPurchaseJournal,
+    items: [...reconciledPurchaseJournal.items,
+      { accountCode: '2.1.1.09', accountName: 'CxP duplicada', debitBs: 0, creditBs: 1, debitUsd: 0, creditUsd: 0.01 }]
+  };
+  const result = validatePurchaseInventoryReconciliation({
+    companyId: 'c-1', purchase: reconciledPurchase,
+    movements: [reconciledPurchaseMovement], journalEntries: [ambiguousPayableJournal]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.journalMatchesInvoice, false);
+});
+
 test('bloquea asientos de compra con cuentas auxiliares adicionales no justificadas', () => {
   const journalWithExtraAccount: JournalEntry = {
     ...reconciledPurchaseJournal,
