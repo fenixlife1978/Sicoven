@@ -83,6 +83,29 @@ test('SQLite rejects a second contra-entry for the same original', () => {
   ), /segunda reversión/);
 });
 
+test('SQLite rejects supplier-return movements imported through a snapshot or backup', () => {
+  const returnMovement = {
+    id: 'supplier-return-1', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-12', type: 'SALIDA', concept: 'DEVOLUCION_COMPRA',
+    documentRef: 'NC-100', quantity: 1, totalCostBs: 100
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState(), movements: [returnMovement] }
+  ), /bloqueó la devolución a proveedor/);
+});
+
+test('SQLite rejects supplier debit/credit notes imported as new purchase records', () => {
+  const note = {
+    id: 'purchase-note-1', companyId: 'company-1', invoiceNumber: 'NC-100',
+    supplierRif: 'J-12345678-9', documentType: '03', totalAmountBs: 100
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(),
+    { ...emptyState(), purchases: [note] }
+  ), /bloqueó una nota de débito\/crédito de proveedor/);
+});
+
 test('SQLite rejects a purchase whose declared inventory lines are missing from Kardex', () => {
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
