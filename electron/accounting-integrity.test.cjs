@@ -130,7 +130,7 @@ test('SQLite rejects a purchase whose declared inventory lines are missing from 
   };
   const entry = {
     id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
-    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-100',
     items: [line(200, 0, 2, 0), line(0, 200, 0, 2)],
     createdAt: '2026-10-10T10:00:00.000Z'
   };
@@ -152,7 +152,7 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   };
   const entry = {
     id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
-    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-100',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
       { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
@@ -183,7 +183,7 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
   };
   const entry = {
     id: 'purchase-entry', companyId: 'company-1', entryNumber: 1,
-    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100,
+    date: '2026-10-10', description: 'Compra', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-100',
     items: [
       { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 150, creditBs: 0, debitUsd: 1.5, creditUsd: 0 },
       { accountCode: '2.1.1.01', accountName: 'CxP', debitBs: 0, creditBs: 150, debitUsd: 0, creditUsd: 1.5 }
