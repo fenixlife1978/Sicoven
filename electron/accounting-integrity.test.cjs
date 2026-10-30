@@ -711,7 +711,7 @@ test('SQLite rejects supplier advance settlements without source credit notes an
     id: 'advance-settlement-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
     kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 10, amountBs: 1000,
     advanceBookValueBs: 900, cashReceivedBs: 1000, bcvRate: 100,
-    sourceCreditNoteIds: ['missing-credit-note'], treasuryAccountCode: '1.1.1.03',
+    sourceCreditNoteIds: ['missing-credit-note'], sourceCreditNoteAllocations: [{ creditNoteId: 'missing-credit-note', amountUsd: 10, bookValueBs: 900 }], treasuryAccountCode: '1.1.1.03',
     journalEntryId: 'missing-journal', createdAt: '2026-10-30T10:00:00.000Z'
   };
   assert.throws(() => validateAccountingSnapshot(
@@ -737,7 +737,7 @@ test('SQLite rejects supplier advance settlements with an unbalanced linked jour
     id: 'advance-settlement-2', companyId: 'company-1', supplierRif: 'J-12345678-9',
     kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 10, amountBs: 900,
     advanceBookValueBs: 900, cashReceivedBs: 1000, bcvRate: 100,
-    sourceCreditNoteIds: [source.id], treasuryAccountCode: '1.1.1.03',
+    sourceCreditNoteIds: [source.id], sourceCreditNoteAllocations: [{ creditNoteId: source.id, amountUsd: 10, bookValueBs: 900 }], treasuryAccountCode: '1.1.1.03',
     journalEntryId: 'advance-journal', createdAt: '2026-10-30T10:00:00.000Z'
   };
   const adjustedNext = {
