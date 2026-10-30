@@ -105,7 +105,9 @@ export const ReversionFiscalView: React.FC = () => {
         item.documentId === linkedDocumentId && item.kind === linkedSettlementKind && !item.isReversed)
     : [];
   const reversalBlockReasons = [
-    ...(requiresInventoryReview ? [saleInventoryReadiness?.reason || 'Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
+    ...(requiresInventoryReview ? [linkedPurchase
+      ? 'Devolución a proveedor bloqueada: falta el flujo integral de nota de crédito que concilie líneas de compra, Kardex, CxP, IVA, retenciones e IGTF.'
+      : saleInventoryReadiness?.reason || 'Hay movimientos de Kardex relacionados que requieren una reversión coordinada de inventario y costo.'] : []),
     ...(linkedBankMovements.length && !bankReversalReadiness.ready ? [bankReversalReadiness.reason || 'No se pudo conciliar el movimiento bancario inverso.'] : []),
     ...(activeLinkedSettlements.length ? ['La factura tiene ' + activeLinkedSettlements.length + ' cobro(s)/pago(s) vigente(s) que deben reversarse antes.'] : [])
   ];
