@@ -75,7 +75,7 @@ interface AccountingContextType {
   addCreditSettlement: (draft: CreditSettlementDraft) => CreditSettlement;
   getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
   supplierAdvanceSettlements: SupplierAdvanceSettlement[];
-  addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => SupplierAdvanceSettlement;
+  addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
 
   // Compras
   purchases: PurchaseRecord[];
@@ -830,7 +830,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
     calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id);
 
-  const addSupplierAdvanceSettlement = (draft: SupplierAdvanceSettlementDraft): SupplierAdvanceSettlement => {
+  const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
     const rif = String(draft.supplierRif || '').trim().toUpperCase();
     const operationKey = [
@@ -922,13 +922,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
       });
     }
-    const entry = addJournalEntry({
-      entryNumber: 0, date: draft.date,
-      description: draft.kind === 'REFUND_RECEIVED' ? `Reembolso de anticipo de proveedor ${rif}` : `Aplicación de anticipo a factura ${target!.invoiceNumber}`,
-      type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate,
-      referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
-      items: [...debitItems, ...creditItems]
+    let resolvePersistence!: () => void;
+    let rejectPersistence!: (error: Error) => void;
+    const persistenceConfirmation = new Promise<void>((resolve, reject) => {
+      resolvePersistence = resolve;
+      rejectPersistence = reject;
     });
+    const persistenceWaiter = { resolve: resolvePersistence, reject: rejectPersistence };
+    if (window.sicovenStore) persistenceWaitersRef.current.push(persistenceWaiter);
+    let entry: JournalEntry;
+    try {
+      entry = addJournalEntry({
+        entryNumber: 0, date: draft.date,
+        description: draft.kind === 'REFUND_RECEIVED' ? `Reembolso de anticipo de proveedor ${rif}` : `Aplicación de anticipo a factura ${target!.invoiceNumber}`,
+        type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate,
+        referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
+        items: [...debitItems, ...creditItems]
+      });
+    } catch (cause) {
+      persistenceWaitersRef.current = persistenceWaitersRef.current.filter(waiter => waiter !== persistenceWaiter);
+      throw cause;
+    }
     const settlement: SupplierAdvanceSettlement = {
       ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || target?.supplierName || '',
       sourceCreditNoteIds: sourceNotes.map(item => item.id), id: `supplier-advance-${currentCompany.id}-${Date.now()}`,
@@ -937,6 +951,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       exchangeDifferenceBs: differenceBs, journalEntryId: entry.id, createdAt: new Date().toISOString()
     };
     setSupplierAdvanceSettlements(prev => [...prev, settlement]);
+    if (window.sicovenStore) await persistenceConfirmation;
     return settlement;
     } finally {
       supplierAdvanceSettlementInFlightRef.current.delete(operationKey);
