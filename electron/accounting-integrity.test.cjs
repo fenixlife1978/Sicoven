@@ -1022,5 +1022,5 @@ test('SQLite rejects supplier return movements with an invalid final stock balan
   const { prior, next } = supplierCreditFixture();
   const movement = next.movements.find(item => item.id === 'return-movement');
   movement.balanceQty = Number.NaN;
-  assert.throws(() => validateAccountingSnapshot(prior, next), /la existencia final del artículo no coincide/);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /la salida física no concilia con la entrada original/);
 });
