@@ -793,7 +793,7 @@ export async function exportComprasPdf(
       formatDate(p.invoiceDate),
       p.supplierRif,
       p.supplierName.slice(0, 32),
-      (p.documentType === '03' ? 'NC ' : p.documentType === '02' ? 'ND ' : '') + p.invoiceNumber,
+      (p.documentType === '03' ? 'NC ' : p.documentType === '02' ? 'ND ' : '') + p.invoiceNumber + (p.affectedInvoiceNumber ? ' / FAC ' + p.affectedInvoiceNumber : ''),
       p.controlNumber,
       formatNumberVe(sign * (p.totalAmountBs || 0)),
       Number(p.igtfAmountBs || 0) > 0 ? formatNumberVe(sign * Number(p.igtfAmountBs)) : '-',
