@@ -360,6 +360,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     priorPeriodAdjustment = false,
     retainedEarningsAccountCode?: string
   ): Promise<JournalEntry> => {
+    if (journalReversalInFlightRef.current) throw new Error('Ya hay una reversión contable en proceso. Espere a que SQLite confirme su resultado.');
+    journalReversalInFlightRef.current = true;
+    try {
     if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
     if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
@@ -483,6 +486,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     await persistenceConfirmation;
     return reversal;
+    } finally {
+      journalReversalInFlightRef.current = false;
+    }
   };
 
   // SQLite local es la persistencia operativa en la versión de escritorio.
@@ -492,6 +498,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   // no deben competir y permitir que una instantánea antigua sobrescriba una nueva.
   const saveQueueRef = useRef<Promise<void>>(Promise.resolve());
   const persistenceFaultRef = useRef(false);
+  const journalReversalInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
