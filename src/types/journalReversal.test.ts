@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import type { Account, JournalEntry, JournalEntryItem, PurchaseRecord, InventoryMovement } from './accounting';
-import { buildReversalItems, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from './journalReversal';
+import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validateSaleInventoryReturnReconciliation, validatePurchaseInventoryReconciliation } from './journalReversal';
 
 const accounts: Account[] = [
   { code:'1.1', name:'Banco', type:'ACTIVO', level:2, isMovement:true },
@@ -350,4 +350,59 @@ test('bloquea conciliación de compra si el asiento no reconoce el inventario en
   });
   assert.equal(result.ready, false);
   assert.equal(result.journalMatchesInvoice, false);
+});
+
+
+test('evaluación genérica permite un asiento sin efectos auxiliares y presenta su impacto balanceado', () => {
+  const result = assessJournalReversal({
+    companyId: 'c-1', source, accounts, sales: [], purchases: [],
+    movements: [], products: [], journalEntries: [source],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, true);
+  assert.equal(result.documentKind, 'GENERAL');
+  assert.equal(result.linkedInventoryMovementCount, 0);
+  assert.equal(result.linkedBankMovementCount, 0);
+  assert.equal(result.debitBs, result.creditBs);
+  assert.equal(result.debitUsd, result.creditUsd);
+});
+
+test('evaluación genérica bloquea una compra con líneas de inventario sin conciliación', () => {
+  const purchase: PurchaseRecord = {
+    id: 'purchase-1', companyId: 'c-1', opNumber: 1, invoiceDate: '2026-10-01',
+    supplierRif: 'J-12345678-9', supplierName: 'Proveedor', invoiceNumber: '100',
+    controlNumber: '00-100', documentType: '01', totalAmountBs: 200,
+    exemptAmountBs: 0, taxableBaseBs: 200, taxRate: 16, vatAmountBs: 32,
+    retentionRate: 75, vatWithheldBs: 24, bcvRate: 100,
+    totalAmountUsd: 2, taxableBaseUsd: 2, vatAmountUsd: 0.32, vatWithheldUsd: 0.24,
+    paymentTerm: 'CREDITO', inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: { ...source, type: 'COMPRA', referenceDoc: 'FAC-100' },
+    accounts, sales: [], purchases: [purchase], movements: [], products: [],
+    journalEntries: [source], bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.documentKind, 'PURCHASE');
+  assert.match(result.blockers.join(' '), /conciliación de compra no está aprobada/);
+});
+
+test('evaluación genérica detecta una liquidación vigente vinculada a la factura', () => {
+  const sale = {
+    id: 'sale-1', companyId: 'c-1', opNumber: 1, invoiceDate: '2026-10-01',
+    customerRif: 'J-12345678-9', customerName: 'Cliente', invoiceNumber: '100',
+    controlNumber: '00-100', documentType: '01', totalAmountBs: 2000,
+    exemptAmountBs: 0, taxableBaseBs: 2000, taxRate: 16, vatAmountBs: 0,
+    vatWithheldBs: 0, bcvRate: 100, totalAmountUsd: 20, taxableBaseUsd: 20,
+    vatAmountUsd: 0, vatWithheldUsd: 0, journalEntryId: source.id
+  } as import('./accounting').SaleRecord;
+  const result = assessJournalReversal({
+    companyId: 'c-1', source, accounts, sales: [sale], purchases: [],
+    movements: [], products: [], journalEntries: [source],
+    bankAccounts: [], bankStatementMovements: [],
+    creditSettlements: [{ companyId: 'c-1', documentId: sale.id, kind: 'SALE_COLLECTION', isReversed: false }]
+  });
+  assert.equal(result.ready, false);
+  assert.equal(result.activeSettlementCount, 1);
+  assert.match(result.blockers.join(' '), /cobro\(s\)\/pago\(s\) vigente/);
 });
