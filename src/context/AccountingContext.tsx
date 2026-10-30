@@ -1528,6 +1528,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!Array.isArray(request.lines) || request.lines.length === 0) {
       throw new Error('Agregue al menos un artículo a la nota de crédito.');
     }
+    const sourceMovementIds = request.lines.map(line => String(line.originalMovementId || ''));
+    if (sourceMovementIds.some(id => !id) || new Set(sourceMovementIds).size !== sourceMovementIds.length) {
+      throw new Error('Cada línea de devolución debe identificar una única entrada original de Kardex. Consolide las cantidades repetidas de una misma entrada.');
+    }
     const draftLines = request.lines.map(line => {
       const product = products.find(item => item.id === line.productId && item.companyId === currentCompany.id);
       const originalMovement = movements.find(item => item.id === line.originalMovementId && item.companyId === currentCompany.id);
@@ -1656,7 +1660,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const stampMovements = valuation.lines.map((returnedLine, index) => {
       const source = draftLines.find(item => item.product.id === returnedLine.productId)!;
       const product = source.product;
-      const newStock = product.currentStock - returnedLine.quantity;
+      const productReturnQuantity = valuation.lines
+        .filter(item => item.productId === product.id)
+        .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+      const newStock = Number(product.currentStock) - productReturnQuantity;
+      if (!Number.isFinite(newStock) || newStock < -0.000001) {
+        throw new Error('La devolución supera la existencia disponible del artículo ' + product.code + '.');
+      }
       const movementId = 'mov-purchase-credit-' + stamp + '-' + index + '-' + Math.floor(Math.random() * 10000);
       return {
         product, movementId, newStock,
@@ -1730,9 +1740,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setJournalEntries(prev => [...prev, journal]);
     setMovements(prev => [...prev, ...stampMovements.map(item => item.movement)]);
     setProducts(prev => prev.map(item => {
-      const returned = stampMovements.find(entry => entry.product.id === item.id);
-      if (!returned || item.companyId !== currentCompany.id) return item;
-      const newStock = Number(item.currentStock) - Number(returned.movement.quantity);
+      if (item.companyId !== currentCompany.id) return item;
+      const returnedQuantity = stampMovements
+        .filter(entry => entry.product.id === item.id)
+        .reduce((sum, entry) => sum + Number(entry.movement.quantity || 0), 0);
+      if (returnedQuantity <= 0) return item;
+      const newStock = Number(item.currentStock) - returnedQuantity;
       return { ...item, currentStock: newStock,
         avgCostBs: newStock > 0 ? item.avgCostBs : 0,
         avgCostUsd: newStock > 0 ? item.avgCostUsd : 0 };
