@@ -1,10 +1,3 @@
-const LEGACY_DEMO_COMPANIES = new Set(['comp-1', 'comp-2']);
-
-function isLegacyDemoRecord(record) {
-  return LEGACY_DEMO_COMPANIES.has(String(record?.companyId || '')) ||
-    String(record?.id || '') === 'entry-apertura-1';
-}
-
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -32,7 +25,6 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
     return copy;
   };
   for (const oldItem of oldItems) {
-    if (isLegacyDemoRecord(oldItem)) continue;
     const nextItem = newById.get(String(oldItem.id));
     if (!nextItem) {
       throw new Error('SQLite bloqueó la eliminación del registro histórico en ' + collectionName + ' (' + oldItem.id + '). Use una reversión o corrección trazable.');
@@ -178,7 +170,6 @@ function validateAccountingSnapshot(previousState, nextState) {
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   const nextBankRows = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
   for (const oldRow of asArray(priorState.bankStatementMovements)) {
-    if (isLegacyDemoRecord(oldRow)) continue;
     const nextRow = nextBankRows.get(String(oldRow.id));
     if (!nextRow) continue; // La validación append-only anterior ya rechazó su eliminación.
     const oldLinks = Array.isArray(oldRow.reconciledJournalEntryIds) ? oldRow.reconciledJournalEntryIds : [];
@@ -211,7 +202,6 @@ function validateAccountingSnapshot(previousState, nextState) {
     return immutable;
   };
   for (const prior of priorEntries) {
-    if (isLegacyDemoRecord(prior)) continue;
     const next = nextById.get(String(prior.id));
     if (!next) {
       throw new Error('SQLite bloqueó la eliminación del asiento histórico #' + prior.entryNumber + '. El Libro Diario es inmutable.');
