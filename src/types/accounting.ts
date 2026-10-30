@@ -299,6 +299,8 @@ export interface VatRetentionVoucher {
   /** No borrar el comprobante: requiere conciliación/rectificación fiscal posterior a una reversión. */
   requiresFiscalCorrection?: boolean;
   correctionEntryId?: string;
+  /** Todos los asientos correctivos asociados al comprobante; correctionEntryId conserva el último para compatibilidad. */
+  correctionEntryIds?: string[];
   correctionNote?: string;
 }
 
@@ -337,6 +339,8 @@ export interface IslrRetentionVoucher {
   withheldAmountUsd: number;
   requiresFiscalCorrection?: boolean;
   correctionEntryId?: string;
+  /** Todos los asientos correctivos asociados al comprobante; correctionEntryId conserva el último para compatibilidad. */
+  correctionEntryIds?: string[];
   correctionNote?: string;
 }
 
