@@ -36,6 +36,7 @@ import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../
 import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
+import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
 import { validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 
 export interface AccountingAuditEvent {
@@ -848,10 +849,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     // La descarga del anticipo se mide a su valor histórico en libros, no a la tasa del día.
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
-    const advanceBookValueBs = Math.round((balance.outstandingUsd > 0
-      ? balance.outstandingBs * amountUsd / balance.outstandingUsd
-      : 0) * 100) / 100;
-    if (advanceBookValueBs <= 0) throw new Error('El anticipo no tiene un valor histórico en Bs conciliable; no se registró la liquidación.');
 
     const advance = accounts.find(item => item.code === '1.1.2.03' && item.isMovement);
     const counterpartCode = draft.kind === 'REFUND_RECEIVED' ? draft.treasuryAccountCode! : '2.1.1.01';
@@ -866,10 +863,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
             : 0) * 100) / 100;
         })();
-    if (settlementValueBs <= 0) throw new Error('El importe en Bs de la operación no es conciliable.');
-
-    // Diferencial entre el valor de liquidación y el valor histórico del anticipo.
-    const differenceBs = Math.round((settlementValueBs - advanceBookValueBs) * 100) / 100;
+    const fxAmounts = calculateSupplierAdvanceFxSettlement(
+      balance.outstandingUsd, balance.outstandingBs, amountUsd, settlementValueBs
+    );
+    const advanceBookValueBs = fxAmounts.advanceBookValueBs;
+    // Positivo = ganancia; negativo = pérdida por diferencial cambiario.
+    const differenceBs = fxAmounts.exchangeDifferenceBs;
     const gain = accounts.find(item => item.code === '4.2.1.01' && item.isMovement);
     const loss = accounts.find(item => item.code === '6.1.1.08' && item.isMovement);
     if (Math.abs(differenceBs) >= 0.01 && !(gain && loss)) {
