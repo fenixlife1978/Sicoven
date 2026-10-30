@@ -43,6 +43,7 @@ export interface AccountingAuditEvent {
 
 interface AccountingContextType {
   getAuditEvents: (limit?: number) => Promise<AccountingAuditEvent[]>;
+  waitForPersistence: () => Promise<void>;
   companies: Company[];
   isStorageReady: boolean;
   storageError: string | null;
@@ -306,6 +307,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const updateCompany = (updated: Company) => {
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
+  };
+
+  const waitForPersistence = (): Promise<void> => {
+    if (window.sicovenStore && !storageReady) return Promise.reject(new Error('SQLite todavía no está lista.'));
+    return new Promise<void>((resolve, reject) => persistenceWaitersRef.current.push({ resolve, reject }));
   };
 
   const getAuditEvents = useCallback(async (limit = 100): Promise<AccountingAuditEvent[]> => {
@@ -3055,6 +3061,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       value={{
         companies,
         getAuditEvents,
+        waitForPersistence,
         isStorageReady: storageReady,
         storageError,
         currentCompany,
