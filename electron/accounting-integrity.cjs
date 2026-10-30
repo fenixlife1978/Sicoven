@@ -218,6 +218,22 @@ function validateAccountingSnapshot(previousState, nextState) {
   // esas cantidades y costos al Kardex dentro del mismo snapshot SQLite.
   // El guardado completo ocurre dentro de una única transacción SQLite; no basta
   // con que el formulario haya intentado agregar los movimientos.
+  // No permitir que una importación de respaldo o una escritura directa del
+  // snapshot salte las guardias del formulario/contexto para notas de crédito.
+  const priorMovementIdSet = new Set(asArray(priorState.movements).map(item => String(item.id)));
+  for (const movement of asArray(nextState.movements)) {
+    if (!priorMovementIdSet.has(String(movement.id)) &&
+        movement.type === 'SALIDA' && movement.concept === 'DEVOLUCION_COMPRA') {
+      throw new Error('SQLite bloqueó la devolución a proveedor: falta una nota de crédito conciliada y contabilizada mediante el flujo integral autorizado.');
+    }
+  }
+  const priorPurchaseIdSet = new Set(asArray(priorState.purchases).map(item => String(item.id)));
+  for (const purchase of asArray(nextState.purchases)) {
+    if (!priorPurchaseIdSet.has(String(purchase.id)) && purchase.documentType && purchase.documentType !== '01') {
+      throw new Error('SQLite bloqueó una nota de débito/crédito de proveedor: el flujo fiscal integral aún no está habilitado.');
+    }
+  }
+
   const priorPurchaseIds = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   const priorMovementIds = new Set(asArray(priorState.movements).map(item => String(item.id)));
   const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
