@@ -22,6 +22,17 @@ export interface PurchaseCreditNoteAmounts {
   netPayableReductionUsd: number;
 }
 
+export interface PurchaseCreditNoteRequest {
+  purchaseId: string;
+  productId: string;
+  originalMovementId: string;
+  quantity: number;
+  returnDate: string;
+  creditNoteNumber: string;
+  controlNumber: string;
+  reason: string;
+}
+
 export interface PurchaseCreditNoteDraft {
   purchase: PurchaseRecord;
   product: InventoryProduct;
