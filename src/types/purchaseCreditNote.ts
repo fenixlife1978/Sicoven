@@ -1,0 +1,124 @@
+import type { InventoryMovement, InventoryProduct, PurchaseRecord } from './accounting';
+
+export interface PurchaseCreditNoteAmounts {
+  inventoryCostBs: number;
+  taxableBaseBs: number;
+  exemptAmountBs: number;
+  vatAmountBs: number;
+  vatWithheldBs: number;
+  islrWithheldBs: number;
+  igtfAmountBs: number;
+  totalAmountBs: number;
+  netPayableReductionBs: number;
+  bcvRate: number;
+  inventoryCostUsd: number;
+  taxableBaseUsd: number;
+  exemptAmountUsd: number;
+  vatAmountUsd: number;
+  vatWithheldUsd: number;
+  islrWithheldUsd: number;
+  igtfAmountUsd: number;
+  totalAmountUsd: number;
+  netPayableReductionUsd: number;
+}
+
+export interface PurchaseCreditNoteDraft {
+  purchase: PurchaseRecord;
+  product: InventoryProduct;
+  originalMovement: InventoryMovement;
+  quantity: number;
+  previouslyReturnedQuantity: number;
+  returnDate: string;
+  creditNoteNumber: string;
+  controlNumber: string;
+  reason: string;
+  currentStock: number;
+  currentAverageCostBs: number;
+  closedThroughDate?: string;
+}
+
+const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+
+export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): PurchaseCreditNoteAmounts {
+  const { purchase, product, originalMovement } = draft;
+  const quantity = Number(draft.quantity);
+  const rate = Number(purchase.bcvRate);
+  if (purchase.documentType !== '01' || purchase.isCancelled) throw new Error('La factura original no está vigente o no es una factura ordinaria.');
+  if (purchase.paymentTerm !== 'CREDITO') throw new Error('Por ahora solo se admiten devoluciones de facturas a crédito; contado requiere conciliación de caja/bancos o saldo a favor.');
+  if (!purchase.inventoryLines?.length) throw new Error('La factura no conserva líneas de inventario estructuradas.');
+  if (originalMovement.companyId !== purchase.companyId || originalMovement.productId !== product.id ||
+      originalMovement.type !== 'ENTRADA' || originalMovement.concept !== 'COMPRA' ||
+      normalize(originalMovement.documentRef) !== normalize('FAC-' + purchase.invoiceNumber)) {
+    throw new Error('La entrada de Kardex no pertenece a la factura y al artículo seleccionados.');
+  }
+  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(draft.returnDate) || draft.returnDate < originalMovement.date) {
+    throw new Error('La fecha de la nota de crédito no puede ser anterior a la entrada original.');
+  }
+  if (draft.closedThroughDate && draft.returnDate <= draft.closedThroughDate) {
+    throw new Error('La fecha de la nota pertenece a un período contable cerrado.');
+  }
+  if (!draft.creditNoteNumber.trim() || !draft.controlNumber.trim() || draft.reason.trim().length < 10) {
+    throw new Error('La nota requiere número, control y una justificación de al menos 10 caracteres.');
+  }
+  if (!Number.isFinite(rate) || rate <= 0) throw new Error('La factura no conserva una tasa BCV válida.');
+  if (!Number.isFinite(quantity) || quantity <= 0 ||
+      !Number.isFinite(draft.previouslyReturnedQuantity) || draft.previouslyReturnedQuantity < 0) {
+    throw new Error('La cantidad de devolución no es válida.');
+  }
+  const line = purchase.inventoryLines.find(item => item.productId === product.id);
+  if (!line || Math.abs(Number(line.quantity) - Number(originalMovement.quantity)) > 0.000001 ||
+      Math.abs(Number(line.unitCostBs) - Number(originalMovement.unitCostBs)) > 0.02) {
+    throw new Error('La línea de factura no concilia con la entrada original del Kardex.');
+  }
+  if (draft.previouslyReturnedQuantity + quantity > Number(line.quantity) + 0.000001) {
+    throw new Error('La cantidad acumulada de devoluciones supera la cantidad facturada.');
+  }
+  if (quantity > draft.currentStock + 0.000001) throw new Error('La existencia actual no alcanza para devolver esa cantidad al proveedor.');
+  if (product.costingMethod === 'PEPS') throw new Error('PEPS requiere identificación y descarga del lote original; esta devolución no se puede automatizar.');
+  if (!Number.isFinite(draft.currentAverageCostBs) ||
+      Math.abs(draft.currentAverageCostBs - Number(line.unitCostBs)) > 0.01) {
+    throw new Error('El costo promedio actual difiere del costo original. Se requiere una conciliación de costo antes de devolver.');
+  }
+
+  const lines = purchase.inventoryLines;
+  let taxableLines = 0;
+  let exemptLines = 0;
+  for (const item of lines) {
+    const matchingProduct = item.productId === product.id ? product : undefined;
+    if (!matchingProduct) throw new Error('No se puede certificar el tratamiento fiscal de todas las líneas de la factura.');
+    const value = Number(item.quantity) * Number(item.unitCostBs);
+    if (matchingProduct.vatTreatment === 'EXENTO' || matchingProduct.vatTreatment === 'EXONERADO') exemptLines += value;
+    else taxableLines += value;
+  }
+  if (Math.abs(money(taxableLines) - money(purchase.taxableBaseBs)) > 0.02 ||
+      Math.abs(money(exemptLines) - money(purchase.exemptAmountBs)) > 0.02) {
+    throw new Error('La clasificación fiscal de los artículos no concilia con la base imponible y el exento de la factura.');
+  }
+  const lineValue = money(quantity * Number(line.unitCostBs));
+  const isExempt = product.vatTreatment === 'EXENTO' || product.vatTreatment === 'EXONERADO';
+  const taxableBaseBs = isExempt ? 0 : lineValue;
+  const exemptAmountBs = isExempt ? lineValue : 0;
+  const inventoryCostBs = lineValue;
+  const vatAmountBs = taxableBaseBs > 0 ? money(taxableBaseBs * Number(purchase.taxRate) / 100) : 0;
+  const vatWithheldBs = Number(purchase.vatAmountBs) > 0
+    ? money(Number(purchase.vatWithheldBs || 0) * vatAmountBs / Number(purchase.vatAmountBs)) : 0;
+  const islrWithheldBs = Number(purchase.taxableBaseBs) > 0
+    ? money(Number(purchase.islrWithheldBs || 0) * taxableBaseBs / Number(purchase.taxableBaseBs)) : 0;
+  const originalIgtfBase = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs) + Number(purchase.vatAmountBs);
+  const igtfAmountBs = originalIgtfBase > 0
+    ? money(Number(purchase.igtfAmountBs || 0) * (taxableBaseBs + exemptAmountBs + vatAmountBs) / originalIgtfBase) : 0;
+  const totalAmountBs = money(inventoryCostBs + vatAmountBs + igtfAmountBs);
+  const netPayableReductionBs = money(totalAmountBs - vatWithheldBs - islrWithheldBs);
+  if (netPayableReductionBs <= 0) throw new Error('El efecto neto de la nota no reduce CxP; requiere tratamiento fiscal especial.');
+  const toUsd = (value: number) => Math.round((value / rate + Number.EPSILON) * 1000000) / 1000000;
+  return {
+    inventoryCostBs, taxableBaseBs, exemptAmountBs, vatAmountBs, vatWithheldBs,
+    islrWithheldBs, igtfAmountBs, totalAmountBs, netPayableReductionBs, bcvRate: rate,
+    inventoryCostUsd: toUsd(inventoryCostBs), taxableBaseUsd: toUsd(taxableBaseBs),
+    exemptAmountUsd: toUsd(exemptAmountBs), vatAmountUsd: toUsd(vatAmountBs),
+    vatWithheldUsd: toUsd(vatWithheldBs), islrWithheldUsd: toUsd(islrWithheldBs),
+    igtfAmountUsd: toUsd(igtfAmountBs), totalAmountUsd: toUsd(totalAmountBs),
+    netPayableReductionUsd: toUsd(netPayableReductionBs)
+  };
+}
