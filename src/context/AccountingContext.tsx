@@ -1299,6 +1299,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       String(item.creditNoteNumber || item.invoiceNumber).trim().toUpperCase() === request.creditNoteNumber.trim().toUpperCase())) {
       throw new Error('El número de nota de crédito ya está registrado en esta empresa.');
     }
+    const readiness = validatePurchaseInventoryReconciliation({
+      companyId: currentCompany.id, purchase, movements, journalEntries
+    });
+    if (!readiness.ready) throw new Error('La factura original no está conciliada: ' + (readiness.reason || 'revise factura, Kardex y asiento.'));
     const product = products.find(item => item.id === request.productId && item.companyId === currentCompany.id);
     const originalMovement = movements.find(item => item.id === request.originalMovementId && item.companyId === currentCompany.id);
     if (!product || !originalMovement) throw new Error('No se encontró el artículo o la entrada original de Kardex.');
@@ -1306,6 +1310,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .filter(item => item.companyId === currentCompany.id && item.correctionForMovementId === originalMovement.id &&
         item.type === 'SALIDA' && item.concept === 'DEVOLUCION_COMPRA')
       .reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    const latestMovementDate = movements.filter(item => item.companyId === currentCompany.id && item.productId === product.id)
+      .reduce((latest, item) => item.date > latest ? item.date : latest, '');
+    if (latestMovementDate && request.returnDate < latestMovementDate) {
+      throw new Error('La devolución debe registrarse después del último movimiento del Kardex del artículo (' + latestMovementDate + ').');
+    }
     const valuation = calculatePurchaseCreditNote({
       purchase, product, products: products.filter(item => item.companyId === currentCompany.id),
       originalMovement, quantity: request.quantity, previouslyReturnedQuantity: priorReturned,
