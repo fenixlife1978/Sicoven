@@ -1,4 +1,4 @@
-import type { Account, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem } from './accounting';
+import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem } from './accounting';
 
 /**
  * Builds an immutable contra-entry by swapping debit/credit in both currencies.
@@ -161,4 +161,95 @@ export function validateSaleInventoryReturnReconciliation(input: {
     returnedMovementCount += corrections.length;
   }
   return { ready: true, originalMovementCount: originals.length, returnedMovementCount };
+}
+
+
+export interface BankStatementReversalPair {
+  originalStatementId: string;
+  reversalStatementId: string;
+  bankAccountId: string;
+}
+
+export interface BankStatementReversalReadiness {
+  ready: boolean;
+  reason?: string;
+  pairs: BankStatementReversalPair[];
+}
+
+/**
+ * A previously reconciled bank line can only be reversed when the imported bank
+ * statement also contains its exact opposite transaction. The caller links the
+ * contra-entry and both statement rows in the same SQLite snapshot.
+ */
+export function validateBankStatementReversal(input: {
+  companyId: string;
+  source: JournalEntry;
+  reversalItems: JournalEntryItem[];
+  bankAccounts: BankAccount[];
+  statementMovements: BankStatementMovement[];
+}): BankStatementReversalReadiness {
+  const { companyId, source, reversalItems, bankAccounts, statementMovements } = input;
+  const originalRows = statementMovements.filter(row =>
+    row.companyId === companyId &&
+    (row.reconciledWithJournalEntryId === source.id ||
+      row.reconciledJournalEntryIds?.includes(source.id))
+  );
+  if (!originalRows.length) return { ready: true, pairs: [] };
+  const pairs: BankStatementReversalPair[] = [];
+  const usedOppositeIds = new Set<string>();
+  for (const original of originalRows) {
+    const bank = bankAccounts.find(item => item.id === original.bankAccountId && item.companyId === companyId);
+    if (!bank) return { ready: false, reason: 'No se encuentra la cuenta bancaria del movimiento histórico ' + original.id + '.', pairs: [] };
+    const isUsd = bank.currency === 'USD';
+    const originalAmount = isUsd ? Number(original.amountUsd) : Number(original.amountBs);
+    const tolerance = isUsd ? 0.000001 : 0.05;
+    const sourceDebit = source.items.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.debitUsd : item.debitBs), 0);
+    const sourceCredit = source.items.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.creditUsd : item.creditBs), 0);
+    const originalMatches = original.type === 'CREDIT'
+      ? Math.abs(sourceDebit - originalAmount) < tolerance && sourceCredit < tolerance
+      : Math.abs(sourceCredit - originalAmount) < tolerance && sourceDebit < tolerance;
+    if (!originalMatches) {
+      return { ready: false, reason: 'El asiento original ya no coincide con el importe/naturaleza del extracto bancario ' + original.reference + '.', pairs: [] };
+    }
+    const oppositeType = original.type === 'CREDIT' ? 'DEBIT' : 'CREDIT';
+    const candidates = statementMovements.filter(row => {
+      if (row.id === original.id || usedOppositeIds.has(row.id) ||
+          row.companyId !== companyId || row.bankAccountId !== original.bankAccountId ||
+          row.type !== oppositeType || row.date < original.date ||
+          row.isReconciled || row.reconciledWithJournalEntryId ||
+          (row.reconciledJournalEntryIds?.length || 0) > 0) return false;
+      const amount = isUsd ? Number(row.amountUsd) : Number(row.amountBs);
+      return Math.abs(amount - originalAmount) < tolerance;
+    });
+    if (candidates.length !== 1) {
+      return {
+        ready: false,
+        reason: candidates.length === 0
+          ? 'Falta importar el movimiento bancario inverso exacto para la referencia ' + original.reference + '.'
+          : 'Hay más de un posible movimiento bancario inverso para ' + original.reference + '; desambigüe el extracto antes de reversar.',
+        pairs: []
+      };
+    }
+    const opposite = candidates[0];
+    const expectsDebit = opposite.type === 'CREDIT';
+    const reversalDebit = reversalItems.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.debitUsd : item.debitBs), 0);
+    const reversalCredit = reversalItems.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.creditUsd : item.creditBs), 0);
+    const reversalMatches = expectsDebit
+      ? Math.abs(reversalDebit - originalAmount) < tolerance && reversalCredit < tolerance
+      : Math.abs(reversalCredit - originalAmount) < tolerance && reversalDebit < tolerance;
+    if (!reversalMatches) {
+      return { ready: false, reason: 'El contra-asiento propuesto no compensa exactamente la línea de la cuenta bancaria ' + bank.name + '.', pairs: [] };
+    }
+    usedOppositeIds.add(opposite.id);
+    pairs.push({
+      originalStatementId: original.id,
+      reversalStatementId: opposite.id,
+      bankAccountId: original.bankAccountId
+    });
+  }
+  return { ready: true, pairs };
 }
