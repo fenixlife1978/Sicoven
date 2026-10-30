@@ -331,7 +331,7 @@ export const ReversionFiscalView: React.FC = () => {
                 {(linkedSale || linkedPurchase) && <div className="font-semibold text-amber-800">Documento vinculado: {linkedSale ? 'Venta '+linkedSale.invoiceNumber+' · '+linkedSale.customerName : 'Compra '+linkedPurchase!.invoiceNumber+' · '+linkedPurchase!.supplierName}</div>}
                 {reversalAssessment && <div className="mt-3 rounded-xl border border-slate-200 bg-white p-3 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2"><strong className="text-slate-900">Evaluación integral de reversión</strong><span className={reversalAssessment.ready?'rounded-full bg-emerald-100 px-2 py-1 text-xs font-bold text-emerald-800':'rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900'}>{reversalAssessment.ready?'PREVALIDACIÓN CONTABLE OK':'BLOQUEOS DETECTADOS'}</span></div>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs">
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Documento</span><strong>{reversalAssessment.documentKind==='SALE'?'Venta':reversalAssessment.documentKind==='PURCHASE'?'Compra':'Asiento general'}</strong></div>
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Kardex vinculado</span><strong>{reversalAssessment.linkedInventoryMovementCount} movimiento(s)</strong></div>
                     <div className="rounded-lg bg-slate-50 p-2"><span className="block text-slate-500">Notas de crédito proveedor</span><strong>{reversalAssessment.linkedCreditNoteCount}</strong></div>
