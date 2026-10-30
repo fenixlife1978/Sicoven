@@ -367,6 +367,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         (linkedPurchase && (movement.documentRef.trim().toUpperCase() === linkedPurchase.invoiceNumber.trim().toUpperCase() ||
           movement.documentRef.trim().toUpperCase() === ('FAC-' + linkedPurchase.invoiceNumber).toUpperCase())))
     );
+    // Una factura que declara líneas de inventario no puede reversarse solo
+    // porque falten movimientos de Kardex: esa ausencia es una inconsistencia,
+    // no evidencia de que la mercancía nunca ingresó.
+    if (linkedPurchase?.inventoryLines?.length) {
+      throw new Error('Reversión de compra bloqueada: la factura contiene líneas de inventario. Primero debe conciliarse cada línea con sus entradas de Kardex y el asiento de inventario; después se requiere el flujo integral de nota de crédito para CxP, IVA, retenciones e IGTF. No se registró ningún contra-asiento.');
+    }
     if (linkedInventoryMovements.length > 0) {
       if (!linkedSale || linkedPurchase) {
         const movementTypes = [...new Set(linkedInventoryMovements.map(movement => movement.concept))].join(', ');
