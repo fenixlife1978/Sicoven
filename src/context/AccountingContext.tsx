@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from 'react';
 import {
   Company,
   Account,
@@ -293,7 +293,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setCompanies(prev => prev.map(c => (c.id === updated.id ? updated : c)));
   };
 
-  const getAuditEvents = async (limit = 100): Promise<AccountingAuditEvent[]> => {
+  const getAuditEvents = useCallback(async (limit = 100): Promise<AccountingAuditEvent[]> => {
     const localStore = window.sicovenStore;
     if (!localStore?.listAuditEvents) {
       throw new Error('El historial de auditoría está disponible en la edición de escritorio con SQLite local.');
@@ -301,7 +301,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const result = await localStore.listAuditEvents(token, limit);
     if (!result.ok) throw new Error(result.message || 'No se pudo consultar el historial de auditoría local.');
     return result.events || [];
-  };
+  }, [token]);
 
   const closeAccountingPeriod = (closedThroughDate: string) => {
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
