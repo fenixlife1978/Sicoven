@@ -276,7 +276,9 @@ export function validatePurchaseInventoryReconciliation(input: {
       Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
   }) && Math.abs(movementTotal - lineTotal) <= 0.02;
   const journalMatchesInvoice = Boolean(purchaseJournal && purchaseJournal.type === 'COMPRA' &&
-    purchaseJournal.companyId === companyId && normalize(purchaseJournal.referenceDoc) === expectedReference && validRate &&
+    purchaseJournal.companyId === companyId && purchaseJournal.date === purchase.invoiceDate &&
+    normalize(purchaseJournal.referenceDoc) === expectedReference && validRate &&
+    Math.abs(Number(purchaseJournal.bcvRate) - rate) <= 0.000001 &&
     Math.abs(journalInventoryDebit - lineTotal) <= 0.02 &&
     Number.isFinite(journalInventoryDebitUsd) &&
     Math.abs(journalInventoryDebitUsd - lineTotal / rate) <= 0.0001);
