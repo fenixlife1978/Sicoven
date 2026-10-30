@@ -257,6 +257,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
+  const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
@@ -832,6 +833,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addSupplierAdvanceSettlement = (draft: SupplierAdvanceSettlementDraft): SupplierAdvanceSettlement => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
     const rif = String(draft.supplierRif || '').trim().toUpperCase();
+    const operationKey = [
+      currentCompany.id, rif, draft.kind, draft.date, Math.round(Number(draft.amountUsd) * 100),
+      Math.round(Number(draft.amountBs) * 100), draft.treasuryAccountCode || '',
+      draft.targetPurchaseId || '', String(draft.reference || '').trim().toUpperCase()
+    ].join('|');
+    if (supplierAdvanceSettlementInFlightRef.current.has(operationKey)) {
+      throw new Error('Esta liquidación ya está en proceso. Espere antes de volver a intentarlo.');
+    }
+    const duplicate = supplierAdvanceSettlements.some(item =>
+      item.companyId === currentCompany.id && !item.isReversed &&
+      String(item.supplierRif || '').trim().toUpperCase() === rif &&
+      item.kind === draft.kind && item.date === draft.date &&
+      Math.round(Number(item.amountUsd) * 100) === Math.round(Number(draft.amountUsd) * 100) &&
+      (draft.reference?.trim()
+        ? String(item.reference || '').trim().toUpperCase() === draft.reference.trim().toUpperCase()
+        : !item.reference?.trim() && Math.round(Number(item.amountBs) * 100) === Math.round(Number(draft.amountBs) * 100) &&
+          (item.targetPurchaseId || '') === (draft.targetPurchaseId || '') &&
+          (item.treasuryAccountCode || '') === (draft.treasuryAccountCode || ''))
+    );
+    if (duplicate) throw new Error('Posible liquidación duplicada. Revise el historial del proveedor antes de registrar nuevamente.');
+    supplierAdvanceSettlementInFlightRef.current.add(operationKey);
+    try {
+
     const sourceNotes = purchases.filter(item => item.companyId === currentCompany.id && item.documentType === '03' &&
       !item.isCancelled && String(item.supplierRif || '').trim().toUpperCase() === rif && Number(item.supplierAdvanceUsd || 0) > 0);
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
@@ -914,6 +938,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     };
     setSupplierAdvanceSettlements(prev => [...prev, settlement]);
     return settlement;
+    } finally {
+      supplierAdvanceSettlementInFlightRef.current.delete(operationKey);
+    }
   };
 
   const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
