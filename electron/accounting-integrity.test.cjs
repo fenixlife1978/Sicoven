@@ -530,7 +530,7 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
 test('SQLite rejects a retention correction flag linked to an unrelated entry', () => {
   const { prior, next } = supplierCreditFixture();
   next.vatVouchers[0].correctionEntryId = 'unrelated-entry';
-  assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /falta enlazar los comprobantes de retención IVA\/ISLR afectados/);
 });
 
 test('SQLite rejects impossible calendar dates on supplier credit notes', () => {
