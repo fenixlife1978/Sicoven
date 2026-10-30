@@ -703,7 +703,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     });
     if (!journalLinesValid ||
         Math.abs(debitsBs - creditsBs) > 0.02 || Math.abs(debitsUsd - creditsUsd) > 0.0001 ||
-        Math.abs(totalInventoryCost - Number(note.taxableBaseBs) - Number(note.exemptAmountBs)) > 0.02 ||
+        Math.abs(totalInventoryCost - Number(note.taxableBaseBs || 0) - Number(note.exemptAmountBs || 0)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Bs') - Number(note.netPayableReductionBs)) > 0.02 ||
         Math.abs(accountSum(sourcePayableAccountCode, 'debit', 'Usd') - Number(note.netPayableReductionUsd)) > 0.0001 ||
         accountSum(sourcePayableAccountCode, 'credit', 'Bs') > 0.02 || accountSum(sourcePayableAccountCode, 'credit', 'Usd') > 0.0001 ||
