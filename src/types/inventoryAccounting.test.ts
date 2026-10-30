@@ -39,6 +39,22 @@ describe('motor de inventario contable', () => {
     ], 3), /Existencia insuficiente/);
   });
 
+  it('preserves six decimal places in the USD valuation of FIFO layers', () => {
+    const result = calculateFifoIssue([
+      { quantity: 1, unitCostBs: 10, unitCostUsd: 0.123456, date: '2026-01-01' },
+      { quantity: 1, unitCostBs: 20, unitCostUsd: 0.234567, date: '2026-01-02' }
+    ], 2);
+    assert.equal(result.totalCostUsd, 0.358023);
+    assert.equal(result.unitCostUsd, 0.1790115);
+  });
+
+  it('rejects malformed FIFO layers instead of silently dropping them', () => {
+    assert.throws(() => calculateFifoIssue([
+      { quantity: 2, unitCostBs: 10, unitCostUsd: 1, date: '2026-01-01' },
+      { quantity: 1, unitCostBs: Number.NaN, unitCostUsd: 1, date: '2026-01-02' }
+    ], 1), /Una capa PEPS contiene/);
+  });
+
   it('rechaza salidas superiores a la existencia', () => {
     assert.match(validateInventoryMovement({
       date: '2026-10-25', quantity: 3, bcvRate: 100, unitCostBs: 20,

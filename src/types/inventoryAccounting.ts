@@ -52,11 +52,20 @@ export function calculateWeightedAverageCost(
 /** Calcula una salida PEPS consumiendo las capas más antiguas primero. */
 export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: number): InventoryCostResult {
   if (!validPositive(quantityToIssue)) throw new Error('La cantidad de salida debe ser mayor que cero.');
-  const layers = layersInput
-    .map(layer => ({ ...layer }))
-    .filter(layer => validPositive(layer.quantity) && validNonNegative(layer.unitCostBs) && validNonNegative(layer.unitCostUsd))
+  if (!Array.isArray(layersInput)) throw new Error('El Kardex PEPS no contiene capas de costo válidas.');
+  const layers = layersInput.map(layer => {
+    const quantity = Number(layer?.quantity);
+    const unitCostBs = Number(layer?.unitCostBs);
+    const unitCostUsd = Number(layer?.unitCostUsd);
+    if (!validNonNegative(quantity) || !validNonNegative(unitCostBs) || !validNonNegative(unitCostUsd) ||
+        (layer.date != null && typeof layer.date !== 'string')) {
+      throw new Error('Una capa PEPS contiene cantidad, costo o fecha no válida; no se puede descartar silenciosamente.');
+    }
+    return { ...layer, quantity, unitCostBs, unitCostUsd };
+  }).filter(layer => layer.quantity > 0)
     .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
   const available = layers.reduce((sum, layer) => sum + layer.quantity, 0);
+  if (!Number.isFinite(available)) throw new Error('La existencia acumulada de las capas PEPS no es finita.');
   if (quantityToIssue - available > 1e-8) {
     throw new Error(`Existencia insuficiente para PEPS: disponibles ${available}, solicitadas ${quantityToIssue}.`);
   }
@@ -70,8 +79,11 @@ export function calculateFifoIssue(layersInput: CostLayer[], quantityToIssue: nu
     totalUsd += consumed * layer.unitCostUsd;
     remaining -= consumed;
   }
+  if (remaining > 1e-8 || !Number.isFinite(totalBs) || !Number.isFinite(totalUsd)) {
+    throw new Error('No se pudo conciliar el consumo PEPS con las capas disponibles.');
+  }
   const totalCostBs = cents(totalBs);
-  const totalCostUsd = cents(totalUsd);
+  const totalCostUsd = usdPrecision(totalUsd);
   return {
     quantity: quantityToIssue,
     totalCostBs,
