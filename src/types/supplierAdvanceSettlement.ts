@@ -10,6 +10,11 @@ export interface SupplierAdvanceSettlement {
   date: string;
   amountUsd: number;
   amountBs: number;
+  /** Historical carrying amount removed from supplier advances in Bs. */
+  advanceBookValueBs?: number;
+  /** Actual Bs received in the bank/cash account; differs from book value by FX. */
+  cashReceivedBs?: number;
+  exchangeDifferenceBs?: number;
   bcvRate: number;
   /** Required for a refund; identifies the real treasury ledger account. */
   treasuryAccountCode?: string;
@@ -28,6 +33,8 @@ export interface SupplierAdvanceSettlementDraft {
   date: string;
   amountUsd: number;
   amountBs: number;
+  /** For refunds: actual Bs received. For applications: informational target settlement value. */
+  cashReceivedBs?: number;
   bcvRate: number;
   treasuryAccountCode?: string;
   targetPurchaseId?: string;
@@ -53,9 +60,7 @@ export function validateSupplierAdvanceSettlementDraft(
     return 'Importes, saldo y tasa deben ser válidos y mayores que cero.';
   }
   if (draft.amountUsd > availableUsd + 0.005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
-  if (Math.abs(Math.round(draft.amountBs * 100) / 100 - Math.round(draft.amountUsd * draft.bcvRate * 100) / 100) >= 0.01) {
-    return 'El importe en Bs no coincide con el equivalente a la tasa BCV de liquidación.';
-  }
+  if (draft.kind === 'REFUND_RECEIVED' && (!Number.isFinite(draft.cashReceivedBs ?? draft.amountBs) || (draft.cashReceivedBs ?? draft.amountBs) <= 0)) return 'El importe efectivamente recibido en Bs debe ser válido.';
   if (draft.kind === 'REFUND_RECEIVED') {
     if (!draft.treasuryAccountCode || !validTreasuryAccountCodes.includes(draft.treasuryAccountCode)) {
       return 'Seleccione una cuenta real de caja o banco para recibir el reembolso.';
