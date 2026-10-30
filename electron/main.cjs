@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, safeStorage } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, safeStorage, dialog } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 const crypto = require('node:crypto');
@@ -24,6 +24,7 @@ const verifyPassword = (password, salt, expected) => {
 const normalizeUsername = value => String(value || '').trim().toLowerCase();
 const Database = require('better-sqlite3');
 const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { assertSqliteIntegrity } = require('./sqlite-integrity.cjs');
 
 let db;
 function openDatabase() {
@@ -33,6 +34,9 @@ function openDatabase() {
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
+  // Comprobar la base existente antes de ejecutar DDL o migraciones. Nunca se
+  // intenta reparar, borrar ni sustituir automáticamente una base inconsistente.
+  assertSqliteIntegrity(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_state (
       state_key TEXT PRIMARY KEY,
@@ -272,7 +276,17 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
-  openDatabase();
+  try {
+    openDatabase();
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    try {
+      fs.appendFileSync(path.join(app.getPath('userData'), 'sicoven-startup.log'), `[${new Date().toISOString()}] sqlite-integrity: ${detail}\\n`, 'utf8');
+    } catch {}
+    dialog.showErrorBox('SICOVEN protegió la base de datos', `${detail}\\n\\nNo se borró ni se reemplazó ningún dato. Conserva el archivo sicoven.sqlite y solicita revisión técnica antes de continuar.`);
+    app.quit();
+    return;
+  }
 
   ipcMain.handle('sicoven:license-status', () => licenseView());
   ipcMain.handle('sicoven:license-activate', async (_event, key) => activateLicense(key));
