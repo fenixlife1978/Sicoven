@@ -571,6 +571,15 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
+test('SQLite rejects duplicate references to the same original stock movement in one supplier credit note', () => {
+  const { prior, next } = supplierCreditFixture();
+  const note = next.purchases.find(item => item.id === 'purchase-credit-note');
+  const returnMovement = next.movements.find(item => item.id === 'return-movement');
+  note.creditNoteLines.push({ ...note.creditNoteLines[0], movementId: 'return-movement-duplicate' });
+  next.movements.push({ ...returnMovement, id: 'return-movement-duplicate' });
+  assert.throws(() => validateAccountingSnapshot(prior, next), /salida física no concilia|línea de nota de crédito/i);
+});
+
 test('SQLite reconciles supplier credit note against the payable auxiliary used by the original purchase', () => {
   const { prior, next } = supplierCreditFixture();
   const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
