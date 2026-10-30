@@ -33,6 +33,9 @@ export interface CreditBalance {
   outstandingUsd: number;
   outstandingBsAtInvoiceRate: number;
   settlementCount: number;
+  /** Reducción documental por notas de crédito; no se considera pago de efectivo. */
+  creditedByNotesUsd?: number;
+  creditedByNotesBs?: number;
 }
 
 export interface CreditSettlementDraft {
