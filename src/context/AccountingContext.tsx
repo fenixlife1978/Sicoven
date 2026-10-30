@@ -845,26 +845,73 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT');
       if (draft.amountUsd > payable.outstandingUsd + 0.005) throw new Error('La aplicación supera el saldo pendiente de la factura destino.');
     }
+
+    // La descarga del anticipo se mide a su valor histórico en libros, no a la tasa del día.
+    const amountUsd = Math.round(draft.amountUsd * 100) / 100;
+    const advanceBookValueBs = Math.round((balance.outstandingUsd > 0
+      ? balance.outstandingBs * amountUsd / balance.outstandingUsd
+      : 0) * 100) / 100;
+    if (advanceBookValueBs <= 0) throw new Error('El anticipo no tiene un valor histórico en Bs conciliable; no se registró la liquidación.');
+
     const advance = accounts.find(item => item.code === '1.1.2.03' && item.isMovement);
     const counterpartCode = draft.kind === 'REFUND_RECEIVED' ? draft.treasuryAccountCode! : '2.1.1.01';
     const counterpart = accounts.find(item => item.code === counterpartCode && item.isMovement);
     if (!advance || !counterpart) throw new Error('Falta una cuenta de movimiento válida para contabilizar la operación.');
-    const amountBs = Math.round(draft.amountBs * 100) / 100;
-    const amountUsd = Math.round(draft.amountUsd * 100) / 100;
+
+    const settlementValueBs = draft.kind === 'REFUND_RECEIVED'
+      ? Math.round((draft.cashReceivedBs ?? draft.amountBs) * 100) / 100
+      : (() => {
+          const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT');
+          return Math.round((payable.outstandingUsd > 0
+            ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
+            : 0) * 100) / 100;
+        })();
+    if (settlementValueBs <= 0) throw new Error('El importe en Bs de la operación no es conciliable.');
+
+    // Diferencial entre el valor de liquidación y el valor histórico del anticipo.
+    const differenceBs = Math.round((settlementValueBs - advanceBookValueBs) * 100) / 100;
+    const gain = accounts.find(item => item.code === '4.2.1.01' && item.isMovement);
+    const loss = accounts.find(item => item.code === '6.1.1.08' && item.isMovement);
+    if (Math.abs(differenceBs) >= 0.01 && !(gain && loss)) {
+      throw new Error('Faltan las cuentas de ganancia/pérdida por diferencial cambiario. No se registró la liquidación.');
+    }
+
+    const debitItems: JournalEntryItem[] = [{
+      accountCode: counterpart.code, accountName: counterpart.name,
+      debitBs: settlementValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0,
+      description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso recibido del proveedor' : 'Aplicación a cuenta por pagar'
+    }];
+    const creditItems: JournalEntryItem[] = [{
+      accountCode: advance.code, accountName: advance.name,
+      debitBs: 0, creditBs: advanceBookValueBs, debitUsd: 0, creditUsd: amountUsd,
+      description: 'Descarga del anticipo a su valor histórico'
+    }];
+    if (differenceBs > 0.009) {
+      creditItems.push({
+        accountCode: gain!.code, accountName: gain!.name,
+        debitBs: 0, creditBs: differenceBs, debitUsd: 0, creditUsd: 0,
+        description: 'Ganancia por diferencial cambiario en liquidación de anticipo'
+      });
+    } else if (differenceBs < -0.009) {
+      debitItems.push({
+        accountCode: loss!.code, accountName: loss!.name,
+        debitBs: Math.abs(differenceBs), creditBs: 0, debitUsd: 0, creditUsd: 0,
+        description: 'Pérdida por diferencial cambiario en liquidación de anticipo'
+      });
+    }
     const entry = addJournalEntry({
       entryNumber: 0, date: draft.date,
       description: draft.kind === 'REFUND_RECEIVED' ? `Reembolso de anticipo de proveedor ${rif}` : `Aplicación de anticipo a factura ${target!.invoiceNumber}`,
       type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate,
       referenceDoc: draft.reference?.trim() || target?.invoiceNumber,
-      items: [
-        { accountCode: counterpart.code, accountName: counterpart.name, debitBs: amountBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: draft.kind === 'REFUND_RECEIVED' ? 'Reembolso recibido del proveedor' : 'Aplicación a cuenta por pagar' },
-        { accountCode: advance.code, accountName: advance.name, debitBs: 0, creditBs: amountBs, debitUsd: 0, creditUsd: amountUsd, description: 'Disminución del anticipo a favor del proveedor' }
-      ]
+      items: [...debitItems, ...creditItems]
     });
     const settlement: SupplierAdvanceSettlement = {
       ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || target?.supplierName || '',
       sourceCreditNoteIds: sourceNotes.map(item => item.id), id: `supplier-advance-${currentCompany.id}-${Date.now()}`,
-      companyId: currentCompany.id, amountBs, amountUsd, journalEntryId: entry.id, createdAt: new Date().toISOString()
+      companyId: currentCompany.id, amountUsd, amountBs: advanceBookValueBs, advanceBookValueBs,
+      cashReceivedBs: draft.kind === 'REFUND_RECEIVED' ? settlementValueBs : undefined,
+      exchangeDifferenceBs: differenceBs, journalEntryId: entry.id, createdAt: new Date().toISOString()
     };
     setSupplierAdvanceSettlements(prev => [...prev, settlement]);
     return settlement;
