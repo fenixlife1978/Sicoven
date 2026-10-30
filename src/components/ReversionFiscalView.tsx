@@ -85,7 +85,7 @@ export const ReversionFiscalView: React.FC = () => {
         source, movements, products, journalEntries
       })
     : null;
-  const requiresInventoryReview = linkedInventoryMovements.length > 0 &&
+  const requiresInventoryReview = (linkedInventoryMovements.length > 0 || Boolean(linkedPurchase?.inventoryLines?.length)) &&
     (!linkedSale || Boolean(linkedPurchase) || !saleInventoryReadiness?.ready);
   const linkedBankMovements = source
     ? bankStatementMovements.filter(movement => movement.companyId === currentCompany.id &&
