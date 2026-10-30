@@ -44,6 +44,19 @@ const draft = (options: {
   closedThroughDate: options.closedThroughDate
 });
 
+test('rechaza una entrada de Kardex de otro proveedor aunque coincida factura y artículo', () => {
+  const foreignSupplierMovement = {
+    ...originalMovement, counterpartyRif: 'J-99999999-9'
+  };
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft(),
+    lines: [{
+      product, originalMovement: foreignSupplierMovement, quantity: 1,
+      previouslyReturnedQuantity: 0, currentStock: 2, currentAverageCostBs: 100
+    }]
+  }), /no pertenece a la factura y al artículo seleccionados/);
+});
+
 test('calcula nota de crédito parcial y revierte proporcionalmente IVA, retenciones e IGTF', () => {
   const result = calculatePurchaseCreditNote(draft());
   assert.equal(result.inventoryCostBs, 100);
