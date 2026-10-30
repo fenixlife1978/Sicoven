@@ -476,7 +476,7 @@ test('SQLite rejects supplier credit note without the linked physical return', (
 test('SQLite rejects supplier credit note whose journal does not reverse VAT or AP correctly', () => {
   const { prior, next } = supplierCreditFixture();
   next.journalEntries[1].items[0].debitBs = 50;
-  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no está balanceado o no revierte CxP/);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no cuadra simultáneamente en Bs\\. y USD/);
 });
 
 test('SQLite rejects cumulative supplier returns above the original invoice quantity', () => {
@@ -484,14 +484,28 @@ test('SQLite rejects cumulative supplier returns above the original invoice quan
   const secondNote = {
     ...next.purchases[1], id: 'purchase-credit-note-2', invoiceNumber: 'NC-002',
     creditNoteNumber: 'NC-002', opNumber: 3, journalEntryId: 'credit-entry-2',
-    netPayableReductionBs: 106.48, netPayableReductionUsd: 1.0648,
-    creditNoteLines: [{ ...next.purchases[1].creditNoteLines[0], quantity: 1.5, movementId: 'return-movement-2' }]
+    totalAmountBs: 179.22, taxableBaseBs: 150, vatAmountBs: 24,
+    vatWithheldBs: 18, islrWithheldBs: 1.5, igtfAmountBs: 5.22,
+    totalAmountUsd: 1.7922, taxableBaseUsd: 1.5, vatAmountUsd: 0.24,
+    vatWithheldUsd: 0.18, islrWithheldUsd: 0.015, igtfAmountUsd: 0.0522,
+    netPayableReductionBs: 159.72, netPayableReductionUsd: 1.5972,
+    creditNoteLines: [{ ...next.purchases[1].creditNoteLines[0], quantity: 1.5, inventoryCostBs: 150, movementId: 'return-movement-2' }]
   };
   const secondMovement = { ...next.movements[1], id: 'return-movement-2', quantity: 1.5,
-    documentRef: 'NC-PROV-NC-002', correctionForMovementId: 'purchase-movement',
-    journalEntryId: 'credit-entry-2' };
-  const secondEntry = { ...next.journalEntries[1], id: 'credit-entry-2', entryNumber: 3,
-    referenceDoc: 'NC-PROV-NC-002' };
+    totalCostBs: 150, totalCostUsd: 1.5, documentRef: 'NC-PROV-NC-002',
+    correctionForMovementId: 'purchase-movement', journalEntryId: 'credit-entry-2' };
+  const secondEntry = {
+    ...next.journalEntries[1], id: 'credit-entry-2', entryNumber: 3,
+    referenceDoc: 'NC-PROV-NC-002',
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 159.72, creditBs: 0, debitUsd: 1.5972, creditUsd: 0 },
+      { accountCode: '2.1.2.03', debitBs: 18, creditBs: 0, debitUsd: 0.18, creditUsd: 0 },
+      { accountCode: '2.1.2.04', debitBs: 1.5, creditBs: 0, debitUsd: 0.015, creditUsd: 0 },
+      { accountCode: '1.1.4.01', debitBs: 0, creditBs: 150, debitUsd: 0, creditUsd: 1.5 },
+      { accountCode: '1.1.3.01', debitBs: 0, creditBs: 24, debitUsd: 0, creditUsd: 0.24 },
+      { accountCode: '6.1.1.11', debitBs: 0, creditBs: 5.22, debitUsd: 0, creditUsd: 0.0522 }
+    ]
+  };
   next.purchases.push(secondNote);
   next.movements.push(secondMovement);
   next.journalEntries.push(secondEntry);
