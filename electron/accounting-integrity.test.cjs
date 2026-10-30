@@ -167,7 +167,7 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(
     emptyState(),
-    { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] }
   ));
   for (const invalidMovement of [
     { ...movement, counterpartyRif: '' },
@@ -208,8 +208,32 @@ test('SQLite rejects a purchase when the inventory debit differs from its Kardex
   };
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
-    { ...emptyState([entry]), purchases: [purchase], movements: [movement] }
+    { ...emptyState([entry]), purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] }
   ), /asiento no reconoce en Bs\. y USD/);
+});
+
+
+test('SQLite reconciles purchase inventory across multiple product auxiliary accounts', () => {
+  const { prior, next } = supplierCreditFixture();
+  const product = next.products.find(item => item.id === 'p-1');
+  product.inventoryAccountCode = '1.1.4.07';
+  const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
+  originalEntry.items.find(item => item.accountCode === '1.1.4.01').accountCode = '1.1.4.07';
+  const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
+  noteEntry.items.find(item => item.accountCode === '1.1.4.01').accountCode = '1.1.4.07';
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+
+  const corrupted = structuredClone(next);
+  corrupted.journalEntries.find(item => item.id === 'purchase-entry')
+    .items.find(item => item.accountCode === '1.1.4.07').accountCode = '1.1.4.01';
+  assert.throws(() => validateAccountingSnapshot(prior, corrupted),
+    /asiento no reconoce en Bs\. y USD|factura original o el asiento fiscal no están conciliados/);
+});
+
+test('SQLite rejects purchase inventory lines whose product is absent from the company catalog', () => {
+  const { prior, next } = supplierCreditFixture();
+  next.products = [];
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no existe el artículo asociado/);
 });
 
 test('SQLite keeps inventory movements append-only', () => {
