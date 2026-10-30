@@ -464,6 +464,8 @@ export function assessJournalReversal(input: {
     item.companyId === companyId && item.documentId === documentId &&
     item.kind === kind && !item.isReversed) : [];
   const blockers: string[] = [];
+  if (source.companyId !== companyId) blockers.push('El asiento no pertenece a la empresa activa.');
+  if (source.isAdjusted && !source.reversedByEntryId) blockers.push('El asiento está marcado como ajustado, pero no conserva el enlace a su contra-asiento.');
   if (source.reversalOfEntryId) blockers.push('El asiento seleccionado ya es un contra-asiento.');
   if (source.reversedByEntryId || journalEntries.some(item =>
     item.companyId === companyId && item.reversalOfEntryId === source.id)) {
