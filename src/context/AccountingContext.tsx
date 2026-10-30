@@ -2143,12 +2143,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const originalJournal = purchase.journalEntryId
           ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === currentCompany.id)
           : undefined;
-        const journalInventory = originalJournal?.items
-          .filter(item => item.accountCode === '1.1.4.01')
-          .reduce((sum,item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
-        if (!linkedLine || !allLinesMatch || !originalJournal ||
-            !Number.isFinite(journalInventory) || Math.abs(Number(journalInventory) - expectedInventory) > 0.02) {
-          throw new Error('Devolución bloqueada: no coincide la factura original con todas sus líneas, entradas de Kardex y débito de inventario del asiento.');
+        const expectedInventoryByAccount = new Map<string, number>();
+        for (const line of lines) {
+          const lineProduct = products.find(item => item.id === line.productId && item.companyId === currentCompany.id);
+          if (!lineProduct) throw new Error('Devolución bloqueada: una línea de la factura no tiene artículo contable asociado.');
+          const accountCode = lineProduct.inventoryAccountCode || '1.1.4.01';
+          expectedInventoryByAccount.set(accountCode,
+            Math.round(((expectedInventoryByAccount.get(accountCode) || 0) +
+              Number(line.quantity) * Number(line.unitCostBs)) * 100) / 100);
+        }
+        const journalInventoryMatches = Boolean(originalJournal) && [...expectedInventoryByAccount.entries()].every(([accountCode, expected]) => {
+          const actual = originalJournal!.items
+            .filter(item => item.accountCode === accountCode)
+            .reduce((sum,item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+          return Number.isFinite(actual) && Math.abs(actual - expected) <= 0.02;
+        }) && originalJournal!.items
+          .filter(item => item.accountCode.startsWith('1.1.4.') && !expectedInventoryByAccount.has(item.accountCode))
+          .every(item => Math.abs(Number(item.debitBs || 0) - Number(item.creditBs || 0)) <= 0.02);
+        if (!linkedLine || !allLinesMatch || !originalJournal || !journalInventoryMatches ||
+            Math.abs(lineTotal - expectedInventory) > 0.02) {
+          throw new Error('Devolución bloqueada: no coincide la factura original con todas sus líneas, entradas de Kardex y débitos por cuenta auxiliar de inventario del asiento.');
         }
         if (Number(purchase.vatAmountBs || 0) > 0 || Number(purchase.vatWithheldBs || 0) > 0 ||
             Number(purchase.islrWithheldBs || 0) > 0 || Number(purchase.igtfAmountBs || 0) > 0) {
