@@ -411,6 +411,30 @@ test('evaluación genérica detecta una liquidación vigente vinculada a la fact
 });
 
 
+test('la reversión genérica bloquea el asiento propio de una nota de crédito de proveedor', () => {
+  const creditNoteJournal: JournalEntry = {
+    ...reconciledPurchaseJournal, id: 'supplier-credit-journal',
+    entryNumber: 31, type: 'AJUSTE', referenceDoc: 'NC-PROV-NC-200',
+    description: 'Nota de crédito proveedor NC-200'
+  };
+  const creditNote: PurchaseRecord = {
+    ...reconciledPurchase, id: 'supplier-credit-note', opNumber: 2,
+    invoiceNumber: 'NC-200', documentType: '03',
+    originalPurchaseId: reconciledPurchase.id,
+    affectedInvoiceNumber: reconciledPurchase.invoiceNumber,
+    creditNoteNumber: 'NC-200', inventoryLines: undefined,
+    journalEntryId: creditNoteJournal.id
+  };
+  const result = assessJournalReversal({
+    companyId: 'c-1', source: creditNoteJournal, accounts, sales: [],
+    purchases: [reconciledPurchase, creditNote], movements: [],
+    products: [], journalEntries: [reconciledPurchaseJournal, creditNoteJournal],
+    bankAccounts: [], bankStatementMovements: [], creditSettlements: []
+  });
+  assert.equal(result.ready, false);
+  assert.match(result.blockers.join(' '), /nota de crédito de proveedor/);
+});
+
 test('la evaluación genérica detecta notas de crédito fiscales relacionadas con la factura original', () => {
   const creditNote: PurchaseRecord = {
     ...reconciledPurchase,
