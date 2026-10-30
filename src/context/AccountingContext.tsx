@@ -35,6 +35,7 @@ import { isValidIsoDate } from '../types/migrationParsing';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
+import { validateSaleSettlementMode } from '../types/saleSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
@@ -1813,6 +1814,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar venta y generar asiento contable
   const addSale = (saleData: Omit<SaleRecord, 'id' | 'companyId' | 'opNumber'>): SaleRecord => {
+    const settlementModeError = validateSaleSettlementMode(saleData.paymentTerm);
+    if (settlementModeError) throw new Error(settlementModeError);
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la venta.');
     const rate = Number(saleData.bcvRate);
     const saleAmounts = [
