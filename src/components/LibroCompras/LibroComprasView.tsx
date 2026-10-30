@@ -317,7 +317,7 @@ export const LibroComprasView: React.FC = () => {
             </tbody>
             <tfoot>
               <tr className="bg-slate-900 text-white font-bold border-t border-slate-800 whitespace-nowrap">
-                <td colSpan={7} className="py-3 px-3 text-right text-slate-300">
+                <td colSpan={8} className="py-3 px-3 text-right text-slate-300">
                   TOTALES LIBRO DE COMPRAS (SENIAT):
                 </td>
                 <td className="py-3 px-3 text-right font-mono text-emerald-400">
