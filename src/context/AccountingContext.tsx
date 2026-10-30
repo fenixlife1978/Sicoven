@@ -877,7 +877,27 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const amountUsd = Math.round(draft.amountUsd * 100) / 100;
 
     const advance = accounts.find(item => item.code === '1.1.2.03' && item.isMovement);
-    const counterpartCode = draft.kind === 'REFUND_RECEIVED' ? draft.treasuryAccountCode! : '2.1.1.01';
+    let counterpartCode = draft.treasuryAccountCode!;
+    if (draft.kind === 'APPLIED_TO_PURCHASE') {
+      const originalPurchaseEntry = target?.journalEntryId
+        ? journalEntries.find(item => item.id === target.journalEntryId && item.companyId === currentCompany.id)
+        : undefined;
+      if (!originalPurchaseEntry || originalPurchaseEntry.type !== 'COMPRA') {
+        throw new Error('La factura destino no tiene un asiento original de compra verificable; no se aplicó el anticipo.');
+      }
+      const payableCandidates = originalPurchaseEntry.items.filter(line => {
+        const account = accounts.find(item => item.code === line.accountCode && item.isMovement);
+        const label = `${account?.name || ''} ${line.description || ''}`.toLocaleLowerCase();
+        return Boolean(account && Number(line.creditBs) > 0 &&
+          account.code.startsWith('2.1.1.') &&
+          /(proveedor|cuentas por pagar|neto a pagar)/i.test(label));
+      });
+      const payableCodes = [...new Set(payableCandidates.map(line => line.accountCode))];
+      if (payableCodes.length !== 1) {
+        throw new Error('No se pudo identificar una única cuenta auxiliar de CxP en el asiento original. Concíliela antes de aplicar el anticipo.');
+      }
+      counterpartCode = payableCodes[0];
+    }
     const counterpart = accounts.find(item => item.code === counterpartCode && item.isMovement);
     if (!advance || !counterpart) throw new Error('Falta una cuenta de movimiento válida para contabilizar la operación.');
 
