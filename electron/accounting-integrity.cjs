@@ -418,8 +418,10 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó la nota de crédito: la factura original o el asiento fiscal no están conciliados.');
     }
     const linkedCreditNoteCorrection = voucher => {
-      if (!voucher?.requiresFiscalCorrection || !voucher.correctionEntryId) return false;
-      const correction = nextById.get(String(voucher.correctionEntryId));
+      if (!voucher?.requiresFiscalCorrection) return false;
+      const correctionIds = Array.isArray(voucher.correctionEntryIds) ? voucher.correctionEntryIds : (voucher.correctionEntryId ? [voucher.correctionEntryId] : []);
+      if (!correctionIds.includes(journal.id)) return false;
+      const correction = nextById.get(String(journal.id));
       return Boolean(correction && asArray(nextState.purchases).some(candidate =>
         candidate.companyId === original.companyId && candidate.documentType === '03' &&
         candidate.originalPurchaseId === original.id && candidate.journalEntryId === correction.id &&
@@ -561,8 +563,9 @@ function validateAccountingSnapshot(previousState, nextState) {
   for (const voucher of asArray(nextState.vatVouchers)) {
     if (!voucher.requiresFiscalCorrection) continue;
     const purchase = purchaseById.get(String(voucher.purchaseRecordId));
-    const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
-    if (!purchase || purchase.companyId !== voucher.companyId || !hasValidFiscalCorrection(purchase, correction)) {
+    const correctionIds = Array.isArray(voucher.correctionEntryIds) ? voucher.correctionEntryIds : (voucher.correctionEntryId ? [voucher.correctionEntryId] : []);
+    const correctionsValid = correctionIds.length > 0 && correctionIds.every(id => hasValidFiscalCorrection(purchase, nextById.get(String(id))));
+    if (!purchase || purchase.companyId !== voucher.companyId || !correctionsValid) {
       throw new Error('SQLite rechazó una marca de corrección de retención IVA sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
@@ -571,8 +574,9 @@ function validateAccountingSnapshot(previousState, nextState) {
     const purchase = asArray(nextState.purchases).find(item =>
       item.companyId === voucher.companyId && item.invoiceNumber === voucher.invoiceNumber &&
       item.supplierRif === voucher.supplierRif && item.documentType === '01');
-    const correction = voucher.correctionEntryId ? nextById.get(String(voucher.correctionEntryId)) : undefined;
-    if (!hasValidFiscalCorrection(purchase, correction)) {
+    const correctionIds = Array.isArray(voucher.correctionEntryIds) ? voucher.correctionEntryIds : (voucher.correctionEntryId ? [voucher.correctionEntryId] : []);
+    const correctionsValid = correctionIds.length > 0 && correctionIds.every(id => hasValidFiscalCorrection(purchase, nextById.get(String(id))));
+    if (!correctionsValid) {
       throw new Error('SQLite rechazó una marca de corrección de retención ISLR sin factura, nota de crédito o contra-asiento conciliados.');
     }
   }
