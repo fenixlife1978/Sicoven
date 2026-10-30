@@ -1160,7 +1160,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
-    const rate = Number(purchaseData.bcvRate || currentCompany.bcvRate);
+    const rate = Number(purchaseData.bcvRate);
     if (!Number.isFinite(rate) || rate <= 0) throw new Error('La tasa BCV manual debe ser mayor que cero.');
     const amounts = [
       purchaseData.totalAmountBs, purchaseData.taxableBaseBs, purchaseData.exemptAmountBs,
