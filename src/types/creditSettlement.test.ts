@@ -65,6 +65,11 @@ describe('credit settlement balances and validation', () => {
     assert.equal(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD', bankAccountId: 'bank-usd-1', reference: 'TRX-002' }, 100), null);
   });
 
+  it('requires a transfer reference even when a bank auxiliary is selected', () => {
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-bs-1' }, 100) || '', /referencia o comprobante/i);
+    assert.equal(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-bs-1', reference: 'TRX-003' }, 100), null);
+  });
+
   it('blocks unspecified treasury methods', () => {
     assert.match(validateCreditSettlement({ ...draft, method: 'OTHER' }, 100) || '', /no identifica una cuenta de tesorería/i);
   });
