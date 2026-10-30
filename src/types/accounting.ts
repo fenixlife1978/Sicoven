@@ -95,6 +95,9 @@ export interface PurchaseRecord {
   creditNoteLines?: PurchaseCreditNoteLine[];
   netPayableReductionBs?: number;
   netPayableReductionUsd?: number;
+  /** Excedente de nota de crédito contabilizado como anticipo/saldo a favor del proveedor. */
+  supplierAdvanceBs?: number;
+  supplierAdvanceUsd?: number;
   id: string;
   companyId: string;
   opNumber: number;
