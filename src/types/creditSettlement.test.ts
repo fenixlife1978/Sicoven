@@ -54,9 +54,14 @@ describe('credit settlement balances and validation', () => {
     assert.equal(validateCreditSettlement(draft, 100), null);
   });
 
-  it('blocks bank transfers until a specific bank account can be linked and reconciled', () => {
-    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS' }, 100) || '', /Transferencias temporalmente bloqueadas/i);
-    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD' }, 100) || '', /Transferencias temporalmente bloqueadas/i);
+  it('requires a specific bank auxiliary for bank transfers', () => {
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS' }, 100) || '', /Seleccione la cuenta bancaria auxiliar/i);
+    assert.match(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD' }, 100) || '', /Seleccione la cuenta bancaria auxiliar/i);
+  });
+
+  it('accepts a transfer draft only when a bank auxiliary is selected', () => {
+    assert.equal(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_BS', bankAccountId: 'bank-bs-1', reference: 'TRX-001' }, 100), null);
+    assert.equal(validateCreditSettlement({ ...draft, method: 'BANK_TRANSFER_USD', bankAccountId: 'bank-usd-1', reference: 'TRX-002' }, 100), null);
   });
 
   it('blocks unspecified treasury methods', () => {
