@@ -939,3 +939,35 @@ test('SQLite rejects supplier advance settlements with an unbalanced linked jour
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
     /asiento de anticipo descuadrado|no cuadra simultáneamente en Bs\. y USD/);
 });
+
+
+test('SQLite rejects supplier advance refunds posted to an unrelated account instead of the exact FX gain account', () => {
+  const { prior, next, note } = supplierCreditFixture();
+  applySupplierAdvanceToFixture(next, note, 10);
+  const journal = {
+    id: 'advance-fx-journal', companyId: 'company-1', entryNumber: 3, date: '2026-10-30',
+    description: 'Reembolso anticipo con ganancia cambiaria', type: 'ANTICIPO_PROVEEDOR', bcvRate: 100,
+    items: [
+      { accountCode: '1.1.1.03', debitBs: 10, creditBs: 0, debitUsd: 0.1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 9, debitUsd: 0, creditUsd: 0.1 },
+      { accountCode: '4.2.1.99', debitBs: 0, creditBs: 1, debitUsd: 0, creditUsd: 0 }
+    ],
+    createdAt: '2026-10-30T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'advance-fx-settlement', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    kind: 'REFUND_RECEIVED', date: '2026-10-30', amountUsd: 0.1, amountBs: 9,
+    advanceBookValueBs: 9, cashReceivedBs: 10, bcvRate: 100,
+    sourceCreditNoteIds: [note.id],
+    sourceCreditNoteAllocations: [{ creditNoteId: note.id, amountUsd: 0.1, bookValueBs: 9 }],
+    treasuryAccountCode: '1.1.1.03', journalEntryId: journal.id,
+    createdAt: '2026-10-30T10:00:00.000Z'
+  };
+  const adjustedNext = {
+    ...next, journalEntries: [...next.journalEntries, journal],
+    supplierAdvanceSettlements: [settlement],
+    bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
+  };
+  assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
+    /cuenta de tesorería, efectivo recibido o diferencial cambiario no concilian exactamente/);
+});
