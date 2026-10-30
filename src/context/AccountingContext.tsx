@@ -35,6 +35,7 @@ import { isValidIsoDate } from '../types/migrationParsing';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
 import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
+import { calculateSupplierAdvanceBalance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 
 export interface AccountingAuditEvent {
   id: number;
@@ -70,6 +71,7 @@ interface AccountingContextType {
   creditSettlements: CreditSettlement[];
   getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => CreditBalance;
   addCreditSettlement: (draft: CreditSettlementDraft) => CreditSettlement;
+  getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
 
   // Compras
   purchases: PurchaseRecord[];
@@ -797,7 +799,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       creditSettlements.filter(item => item.companyId === currentCompany.id && item.kind === kind && !item.isReversed)
     );
     const creditNotes = kind === 'PURCHASE_PAYMENT'
-      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03')
+      ? purchases.filter(item => item.companyId === currentCompany.id && item.originalPurchaseId === documentId && item.documentType === '03' && !item.isCancelled)
       : [];
     const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
     const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionBs || 0), 0);
@@ -811,6 +813,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ? principal.originalAmountBs / principal.originalAmountUsd : 0) * 100) / 100
     };
   };
+
+  const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
+    calculateSupplierAdvanceBalance(supplierRif, purchases.filter(item => item.companyId === currentCompany.id));
 
   const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
     const kind = draft.kind;
@@ -3143,6 +3148,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         creditSettlements: creditSettlements.filter(s => s.companyId === currentCompany.id),
         getCreditBalance,
         addCreditSettlement,
+        getSupplierAdvanceBalance,
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
