@@ -31,12 +31,12 @@ function openDatabase() {
   const dataDir = app.getPath('userData');
   fs.mkdirSync(dataDir, { recursive: true });
   db = new Database(path.join(dataDir, 'sicoven.sqlite'));
+  // Comprobar la base existente antes de cambiar pragmas persistentes, ejecutar
+  // DDL o migraciones. Nunca se repara, borra ni sustituye automáticamente.
+  assertSqliteIntegrity(db);
   db.pragma('journal_mode = WAL');
   db.pragma('foreign_keys = ON');
   db.pragma('synchronous = FULL');
-  // Comprobar la base existente antes de ejecutar DDL o migraciones. Nunca se
-  // intenta reparar, borrar ni sustituir automáticamente una base inconsistente.
-  assertSqliteIntegrity(db);
   db.exec(`
     CREATE TABLE IF NOT EXISTS app_state (
       state_key TEXT PRIMARY KEY,
