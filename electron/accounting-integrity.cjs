@@ -236,7 +236,7 @@ function validateAccountingSnapshot(previousState, nextState) {
 
   const priorPurchaseIds = new Set(asArray(priorState.purchases).map(item => String(item.id)));
   const priorMovementIds = new Set(asArray(priorState.movements).map(item => String(item.id)));
-  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\\s+/g, '');
+  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
   const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const money = value => Math.round((Number(value) + Number.EPSILON) * 100) / 100;
   for (const purchase of asArray(nextState.purchases)) {
