@@ -2606,6 +2606,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               isReconciled: true,
               matchedBy: 'MANUAL',
               reconciledWithJournalEntryId: adjustingEntry.id,
+              reconciledJournalEntryIds: [...new Set([...(m.reconciledJournalEntryIds || []), adjustingEntry.id])],
               reconciledAt: new Date().toISOString()
             }
           : m
