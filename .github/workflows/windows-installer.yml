@@ -57,6 +57,38 @@ jobs:
           }
           $installer | Select-Object Name, Length, LastWriteTime | Format-Table
 
+      - name: Install and launch smoke test
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
+          if (-not $installer) {
+            throw "No se encontró el instalador para la prueba de instalación."
+          }
+          $installDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Smoke"
+          if (Test-Path $installDir) {
+            Remove-Item -Path $installDir -Recurse -Force
+          }
+          $install = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -Wait -PassThru
+          if ($install.ExitCode -ne 0) {
+            throw "El instalador NSIS terminó con código $($install.ExitCode)."
+          }
+          $app = Join-Path $installDir "SICOVEN.exe"
+          $asar = Join-Path $installDir "resources\app.asar"
+          $sqliteNative = Join-Path $installDir "resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node"
+          foreach ($required in @($app, $asar, $sqliteNative)) {
+            if (-not (Test-Path $required -PathType Leaf)) {
+              throw "Falta un archivo esencial después de instalar: $required"
+            }
+          }
+          $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
+          Start-Sleep -Seconds 12
+          $application.Refresh()
+          if ($application.HasExited) {
+            throw "SICOVEN se cerró durante el arranque de prueba. Código: $($application.ExitCode)"
+          }
+          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          Write-Host "Instalación NSIS, app.asar, SQLite nativo y arranque de SICOVEN verificados."
+          Get-Item $installer.FullName | Select-Object Name, Length
       - name: Upload Windows installer artifact
         uses: actions/upload-artifact@v4
         with:
