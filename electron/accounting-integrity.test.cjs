@@ -589,6 +589,23 @@ test('SQLite rejects a retention correction flag linked to an unrelated entry', 
   assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
 });
 
+test('SQLite reconciles the portion of a supplier credit note applied to AP and the excess recorded as an advance', () => {
+  const { prior, next } = supplierCreditFixture();
+  const note = next.purchases[1];
+  const entry = next.journalEntries.find(item => item.id === note.journalEntryId);
+  note.netPayableReductionBs = 96.48;
+  note.netPayableReductionUsd = 0.9648;
+  note.supplierAdvanceBs = 10;
+  note.supplierAdvanceUsd = 0.1;
+  const payable = entry.items.find(item => item.accountCode === '2.1.1.01');
+  payable.debitBs = 96.48;
+  payable.debitUsd = 0.9648;
+  entry.items.push({ accountCode: '1.1.2.03', debitBs: 10, creditBs: 0, debitUsd: 0.1, creditUsd: 0 });
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+  note.supplierAdvanceBs = 9;
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no revierte CxP, inventario, IVA, retenciones e IGTF/);
+});
+
 test('SQLite rejects impossible calendar dates on supplier credit notes', () => {
   const { prior, next } = supplierCreditFixture();
   next.purchases[1].invoiceDate = '2026-02-30';
