@@ -251,7 +251,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // React setters are queued synchronously; capture every collection touched by
     // addSale/addPurchase and restore the complete batch if any operation throws.
     const before = {
-      journalEntries, purchases, sales, vatVouchers, islrVouchers,
+      journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers,
       saleSequence: { ...saleSequenceRef.current },
       purchaseSequence: { ...purchaseSequenceRef.current },
       journalSequence: { ...journalSequenceRef.current },
@@ -264,6 +264,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setJournalEntries(before.journalEntries);
       setPurchases(before.purchases);
       setSales(before.sales);
+      setProducts(before.products);
+      setMovements(before.movements);
       setVatVouchers(before.vatVouchers);
       setIslrVouchers(before.islrVouchers);
       saleSequenceRef.current = before.saleSequence;
