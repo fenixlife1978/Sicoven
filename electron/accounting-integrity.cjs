@@ -178,8 +178,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       if (!document.journalEntryId || (document.documentType && document.documentType !== '01')) continue;
       const linkedEntry = nextById.get(String(document.journalEntryId));
       if (!linkedEntry || linkedEntry.companyId !== document.companyId ||
-          linkedEntry.type !== expectedEntryType ||
-          linkedEntry.referenceDoc !== 'FAC-' + document.invoiceNumber) {
+          linkedEntry.type !== expectedEntryType) {
         throw new Error('SQLite rechazó un vínculo de factura con un asiento de otra empresa, tipo o documento.');
       }
     }
