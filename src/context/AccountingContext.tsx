@@ -1043,8 +1043,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       return sameReference ||
         (!normalizedReference && !item.reference?.trim() && sameDate && sameAmount && sameMethod && sameRate);
     });
-    if (duplicate) {
-      throw new Error('Posible liquidación duplicada: revise la referencia, fecha, importe, medio y tasa antes de registrar nuevamente.');
+    const duplicateBankReference = Boolean(settlementBank && normalizedReference && creditSettlements.some(item =>
+      item.companyId === currentCompany.id &&
+      item.bankAccountId === settlementBank.id &&
+      !item.isReversed &&
+      item.reference?.trim().toLocaleLowerCase() === normalizedReference
+    ));
+    if (duplicate || duplicateBankReference) {
+      throw new Error('Posible liquidación duplicada: revise la referencia, fecha, importe, medio, cuenta bancaria y tasa antes de registrar nuevamente.');
     }
     // La deuda en USD conserva el principal de la factura. En Bs, la cuenta
     // por cobrar/pagar se cancela al valor contable de la tasa de emisión y la
@@ -3043,8 +3049,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const credit = isUsdAccount ? item.creditUsd : item.creditBs;
         const tolerance = isUsdAccount ? 0.000001 : 0.05;
         return stmt.type === 'CREDIT'
-          ? Math.abs(debit - amount) < tolerance
-          : Math.abs(credit - amount) < tolerance;
+          ? Math.abs(debit - amount) < tolerance && credit === 0
+          : Math.abs(credit - amount) < tolerance && debit === 0;
       });
 
     for (const stmt of statementRows) {
