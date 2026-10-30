@@ -10,7 +10,8 @@ import {
   FileSpreadsheet,
   Calendar,
   CheckCircle2,
-  AlertTriangle
+  AlertTriangle,
+  RotateCcw
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { NewPurchaseModal } from './NewPurchaseModal';
@@ -18,16 +19,24 @@ import { CreditSettlementModal } from '../shared/CreditSettlementModal';
 import { generateSeniatIvaTxt, downloadFile } from '../../utils/seniatGenerators';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
+import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
+import type { PurchaseRecord } from '../../types/accounting';
 
 export const LibroComprasView: React.FC = () => {
   const {
     currentCompany,
     purchases,
     vatVouchers,
+    products,
+    movements,
+    addPurchaseCreditNote,
+    isStorageReady,
+    storageError,
     displayCurrency
   } = useAccounting();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [creditNoteTarget, setCreditNoteTarget] = useState<PurchaseRecord | null>(null);
   const [settlementTarget, setSettlementTarget] = useState<{id:string; number:string; party:string} | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [monthFilter, setMonthFilter] = useState('');
@@ -62,18 +71,20 @@ export const LibroComprasView: React.FC = () => {
     .sort((a, b) => a.opNumber - b.opNumber);
 
   // Totals for SENIAT Forma 30
-  const totalComprasConIvaBs = filteredPurchases.reduce((s, p) => s + p.totalAmountBs, 0);
-  const totalIgtfBs = filteredPurchases.reduce((s, p) => s + Number(p.igtfAmountBs || 0), 0);
-  const totalExentoBs = filteredPurchases.reduce((s, p) => s + (p.exemptAmountBs || 0), 0);
-  const totalBaseBs = filteredPurchases.reduce((s, p) => s + p.taxableBaseBs, 0);
-  const totalIvaCreditoBs = filteredPurchases.reduce((s, p) => s + p.vatAmountBs, 0);
-  const totalIvaRetenidoBs = filteredPurchases.reduce((s, p) => s + (p.vatWithheldBs || 0), 0);
-  const totalIslrRetenidoBs = filteredPurchases.reduce((s, p) => s + (p.islrWithheldBs || 0), 0);
+  const sign = (purchase: PurchaseRecord) => purchase.documentType === '03' ? -1 : 1;
+  const signed = (purchase: PurchaseRecord, amount: number) => sign(purchase) * Number(amount || 0);
+  const totalComprasConIvaBs = filteredPurchases.reduce((s, p) => s + signed(p, p.totalAmountBs), 0);
+  const totalIgtfBs = filteredPurchases.reduce((s, p) => s + signed(p, p.igtfAmountBs || 0), 0);
+  const totalExentoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.exemptAmountBs || 0), 0);
+  const totalBaseBs = filteredPurchases.reduce((s, p) => s + signed(p, p.taxableBaseBs), 0);
+  const totalIvaCreditoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.vatAmountBs), 0);
+  const totalIvaRetenidoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.vatWithheldBs || 0), 0);
+  const totalIslrRetenidoBs = filteredPurchases.reduce((s, p) => s + signed(p, p.islrWithheldBs || 0), 0);
 
-  const totalComprasConIvaUsd = filteredPurchases.reduce((s, p) => s + p.totalAmountUsd, 0);
-  const totalBaseUsd = filteredPurchases.reduce((s, p) => s + p.taxableBaseUsd, 0);
-  const totalIvaCreditoUsd = filteredPurchases.reduce((s, p) => s + p.vatAmountUsd, 0);
-  const totalIvaRetenidoUsd = filteredPurchases.reduce((s, p) => s + (p.vatWithheldUsd || 0), 0);
+  const totalComprasConIvaUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.totalAmountUsd), 0);
+  const totalBaseUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.taxableBaseUsd), 0);
+  const totalIvaCreditoUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.vatAmountUsd), 0);
+  const totalIvaRetenidoUsd = filteredPurchases.reduce((s, p) => s + signed(p, p.vatWithheldUsd || 0), 0);
 
   const handleDownloadTxt = () => {
     const periodVouchers = vatVouchers.filter(v => v.companyId === currentCompany.id);
@@ -200,7 +211,7 @@ export const LibroComprasView: React.FC = () => {
             <tbody className="divide-y divide-slate-100">
               {filteredPurchases.length === 0 ? (
                 <tr>
-                  <td colSpan={16} className="py-12 text-center text-slate-400">
+                  <td colSpan={17} className="py-12 text-center text-slate-400">
                     <ShoppingCart className="w-8 h-8 mx-auto mb-2 opacity-40" />
                     No hay facturas de compras registradas en este período.
                   </td>
@@ -226,7 +237,9 @@ export const LibroComprasView: React.FC = () => {
                       {p.supplierName}
                     </td>
                     <td className="py-2 px-3 font-mono font-semibold text-slate-800 whitespace-nowrap">
-                      {p.invoiceNumber}
+                      {p.documentType === '03' ? 'NC · ' : p.documentType === '02' ? 'ND · ' : ''}{p.invoiceNumber}
+                      {p.documentType === '03' && <span className="ml-1 inline-flex rounded bg-indigo-100 px-1.5 py-0.5 text-[9px] font-bold text-indigo-800">NOTA CRÉDITO</span>}
+                      {p.affectedInvoiceNumber && <span className="block text-[10px] text-slate-500">Afecta: {p.affectedInvoiceNumber}</span>}
                       {p.isCancelled && <span title={p.cancellationNote || 'Pendiente regularización fiscal'} className="ml-1 inline-flex rounded bg-amber-100 px-1.5 py-0.5 text-[9px] font-bold text-amber-800">REVERSADA CONTABLE</span>}
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
@@ -236,7 +249,7 @@ export const LibroComprasView: React.FC = () => {
                       {p.voucherNumber || '-'}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-slate-900 whitespace-nowrap">
-                      {formatBs(p.totalAmountBs)}
+                      {formatBs(signed(p, p.totalAmountBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
                           {formatUsd(p.totalAmountUsd)}
@@ -244,17 +257,17 @@ export const LibroComprasView: React.FC = () => {
                       )}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-amber-700 whitespace-nowrap">
-                      {Number(p.igtfAmountBs || 0) > 0 ? formatBs(Number(p.igtfAmountBs)) : '-'}
+                      {Number(p.igtfAmountBs || 0) > 0 ? formatBs(signed(p, Number(p.igtfAmountBs))) : '-'}
                       {p.paymentMethod && <div className="text-[10px] text-slate-400 font-normal">{({BS:'Bs./nacional',FOREIGN_CASH:'Divisas efectivo',ZELLE:'Zelle',INTERNATIONAL_TRANSFER:'Transferencia intl.',CRYPTO:'Cripto'} as Record<string,string>)[p.paymentMethod] || p.paymentMethod}</div>}
                     </td>
                     <td className="py-2 px-3 text-right font-mono text-slate-600 whitespace-nowrap">
-                      {p.exemptAmountBs > 0 ? formatBs(p.exemptAmountBs) : '-'}
+                      {p.exemptAmountBs > 0 ? formatBs(signed(p, p.exemptAmountBs)) : '-'}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-semibold text-slate-800 whitespace-nowrap">
-                      {formatBs(p.taxableBaseBs)}
+                      {formatBs(signed(p, p.taxableBaseBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-slate-400 font-normal">
-                          {formatUsd(p.taxableBaseUsd)}
+                          {formatUsd(signed(p, p.taxableBaseUsd))}
                         </div>
                       )}
                     </td>
@@ -262,17 +275,17 @@ export const LibroComprasView: React.FC = () => {
                       {p.taxRate}%
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-emerald-700 whitespace-nowrap bg-emerald-50/30">
-                      {formatBs(p.vatAmountBs)}
+                      {formatBs(signed(p, p.vatAmountBs))}
                       {displayCurrency !== 'BS' && (
                         <div className="text-[10px] text-emerald-600/70 font-normal">
-                          {formatUsd(p.vatAmountUsd)}
+                          {formatUsd(signed(p, p.vatAmountUsd))}
                         </div>
                       )}
                     </td>
                     <td className="py-2 px-3 text-right font-mono font-bold text-purple-700 whitespace-nowrap bg-purple-50/30">
                       {p.vatWithheldBs > 0 ? (
                         <>
-                          {formatBs(p.vatWithheldBs)}
+                          {formatBs(signed(p, p.vatWithheldBs))}
                           <span className="text-[10px] block text-purple-500 font-normal">({p.retentionRate}%)</span>
                         </>
                       ) : '-'}
@@ -280,14 +293,20 @@ export const LibroComprasView: React.FC = () => {
                     <td className="py-2 px-3 text-right font-mono font-medium text-indigo-700 whitespace-nowrap">
                       {p.islrWithheldBs && p.islrWithheldBs > 0 ? (
                         <>
-                          {formatBs(p.islrWithheldBs)}
+                          {formatBs(signed(p, p.islrWithheldBs))}
                           <span className="text-[10px] block text-indigo-400">({p.islrRate}%)</span>
                         </>
                       ) : '-'}
                     </td>
                     <td className="py-2 px-2 text-center no-print">
-                      {p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
-                      <button
+                      {p.documentType === '01' && p.paymentTerm === 'CREDITO' && <button onClick={() => setSettlementTarget({id:p.id, number:p.invoiceNumber, party:p.supplierName})} className="mr-1 rounded bg-emerald-50 px-2 py-1 text-[10px] font-semibold text-emerald-700 hover:bg-emerald-100" title="Registrar pago parcial o total">Pagar</button>}
+                      {p.documentType === '01' && !p.isCancelled && <button
+                        onClick={() => setCreditNoteTarget(p)}
+                        disabled={!isStorageReady || p.paymentTerm !== 'CREDITO' || !p.inventoryLines?.length}
+                        className="mr-1 inline-flex items-center gap-1 rounded bg-indigo-50 px-2 py-1 text-[10px] font-semibold text-indigo-700 hover:bg-indigo-100 disabled:cursor-not-allowed disabled:opacity-40"
+                        title={p.paymentTerm !== 'CREDITO' ? 'Compras de contado requieren conciliación de caja/bancos' : !p.inventoryLines?.length ? 'Factura sin líneas de inventario conciliables' : 'Registrar nota de crédito y devolución física'}
+                      ><RotateCcw className="h-3 w-3" />Devolver</button>}
+                      {p.documentType === '01' && <button
                         onClick={() => window.alert('Esta factura ya está contabilizada y no se puede eliminar físicamente. Para corregirla debe habilitarse el flujo de anulación con asiento reverso y ajuste de los libros fiscales.')}
                         className="p-1 text-slate-400 hover:text-amber-600 transition cursor-pointer"
                         title="Anulación con reversión contable pendiente"
@@ -391,6 +410,7 @@ export const LibroComprasView: React.FC = () => {
       </div>
 
       <NewPurchaseModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      {creditNoteTarget && <PurchaseCreditNoteModal purchase={creditNoteTarget} onClose={() => setCreditNoteTarget(null)} />}
       {settlementTarget && <CreditSettlementModal documentId={settlementTarget.id} documentNumber={settlementTarget.number} partyName={settlementTarget.party} kind="PURCHASE_PAYMENT" onClose={() => setSettlementTarget(null)} />}
     </div>
   );
