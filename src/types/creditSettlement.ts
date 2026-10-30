@@ -100,6 +100,7 @@ export function validateCreditSettlement(
   if (typeof draft.settlementDate !== 'string') return 'La fecha de liquidación no es válida.';
   if (!['CASH_BS', 'CASH_USD', 'BANK_TRANSFER_BS', 'BANK_TRANSFER_USD', 'OTHER'].includes(draft.method)) return 'Seleccione un medio de pago válido.';
   if ((draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD') && (typeof draft.bankAccountId !== 'string' || !draft.bankAccountId.trim())) return 'Seleccione la cuenta bancaria auxiliar de esta empresa para vincular el cobro o pago.';
+  if ((draft.method === 'BANK_TRANSFER_BS' || draft.method === 'BANK_TRANSFER_USD') && (typeof draft.reference !== 'string' || !draft.reference.trim())) return 'La referencia o comprobante de la transferencia es obligatorio.';
   if (draft.method === 'OTHER') return 'El medio «Otro» no está habilitado porque no identifica una cuenta de tesorería verificable.';
   if (draft.reference != null && (typeof draft.reference !== 'string' || draft.reference.length > 200)) return 'La referencia no puede superar 200 caracteres.';
   if (!draft.documentId.trim()) return 'Debe seleccionar la factura de crédito.';
