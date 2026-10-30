@@ -104,7 +104,7 @@ test('SQLite rejects supplier-return movements imported through a snapshot or ba
   assert.throws(() => validateAccountingSnapshot(
     emptyState(),
     { ...emptyState(), movements: [returnMovement] }
-  ), /cada nota de crédito debe tener exactamente su salida de Kardex asociada/);
+  ), /cada línea de nota de crédito debe tener exactamente su salida de Kardex asociada/);
 });
 
 test('SQLite rejects supplier debit/credit notes imported as new purchase records', () => {
@@ -482,7 +482,7 @@ test('SQLite accepts a supplier credit note only with linked stock return, balan
 test('SQLite rejects supplier credit note without the linked physical return', () => {
   const { prior, next } = supplierCreditFixture();
   next.movements = next.movements.filter(item => item.id !== 'return-movement');
-  assert.throws(() => validateAccountingSnapshot(prior, next), /cada nota de crédito debe tener exactamente su salida/);
+  assert.throws(() => validateAccountingSnapshot(prior, next), /cada línea de nota de crédito debe tener exactamente su salida/);
 });
 
 test('SQLite rejects supplier credit note whose journal does not reverse VAT or AP correctly', () => {
