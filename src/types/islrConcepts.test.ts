@@ -6,7 +6,8 @@ import {
   ISLR_FORMULA_FACTOR,
   getIslrUnitTaxValueForPeriod,
   calculateIslrRetention,
-  calculateIslrTariff2Ut
+  calculateIslrTariff2Ut,
+  calculateAnnualIslrTariff2Retention
 } from '../data/islrConcepts';
 
 const concept = (code: string) => {
@@ -145,4 +146,23 @@ test('ISLR T-2 is progressive rather than applying one flat rate to the whole ba
   assert.ok(Math.abs((aboveBoundary - atBoundary) - 0.34) < 1e-9);
   assert.throws(() => calculateIslrTariff2Ut(-1), /base anual/);
   assert.throws(() => calculateIslrTariff2Ut(Number.NaN), /base anual/);
+});
+
+
+test('annual T-2 calculator applies 90% base and returns the incremental annual withholding', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], 43, 90);
+  assert.equal(first.cumulativeTaxableBaseUt, 90000 / 43);
+  assert.equal(first.cumulativeWithheldBs, 90000 / 43 * 0.34 * 43 - 520 * 43 + 520 * 43);
+  const second = calculateAnnualIslrTariff2Retention(50000, [
+    { baseAmountBs: 100000, withheldAmountBs: first.cumulativeWithheldBs }
+  ], 43, 90);
+  assert.equal(second.withheldAmountBs, second.cumulativeWithheldBs - first.cumulativeWithheldBs);
+});
+
+test('annual T-2 calculator rejects unreconciled history and missing close-year UT', () => {
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], 0, 90), /Unidad Tributaria/);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [
+    { baseAmountBs: 10000, withheldAmountBs: 1 }
+  ], 43, 90), /no concilian/);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], 43, 101), /porcentaje/);
 });
