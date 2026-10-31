@@ -930,7 +930,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
       .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
-      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && !item.isCancelled)
+      ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && item.paymentTerm === 'CREDITO' && !item.isCancelled)
       : undefined;
     if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('La factura destino no existe, no es una factura original o está reversada.');
     if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
