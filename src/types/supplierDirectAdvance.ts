@@ -71,6 +71,7 @@ export function validateSupplierDirectAdvanceDraft(
     return 'El importe desembolsado no concilia con el anticipo y la tasa BCV.';
   }
   if (!String(draft.reference || '').trim()) return 'La referencia del desembolso es obligatoria.';
+  if (!String(draft.support || '').trim()) return 'Debe identificar el soporte o comprobante documental del desembolso.';
   const account = accounts.find(item => item.code === draft.treasuryAccountCode);
   if (!account || !account.isMovement || account.type !== 'ACTIVO' ||
       !/^1\.1\.1\./.test(account.code)) {
