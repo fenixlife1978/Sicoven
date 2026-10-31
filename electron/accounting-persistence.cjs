@@ -45,10 +45,13 @@ function persistAccountingSnapshot(db, state, actor = null) {
         }
         const duplicate = (Array.isArray(state.journalEntries) ? state.journalEntries : []).some(item =>
           String(item.id) !== String(entry.id) && String(item.companyId) === String(entry.companyId) &&
-          item.type === 'APERTURA' && item.exerciseLink &&
-          item.exerciseLink.priorPeriodStartDate === link.priorPeriodStartDate &&
-          item.exerciseLink.priorPeriodEndDate === link.priorPeriodEndDate &&
-          item.exerciseLink.nextPeriodStartDate === link.nextPeriodStartDate);
+          item.type === 'APERTURA' && (
+            item.date === link.nextPeriodStartDate ||
+            (item.exerciseLink &&
+              item.exerciseLink.priorPeriodStartDate === link.priorPeriodStartDate &&
+              item.exerciseLink.priorPeriodEndDate === link.priorPeriodEndDate &&
+              item.exerciseLink.nextPeriodStartDate === link.nextPeriodStartDate)
+          ));
         if (duplicate) throw new Error('Ya existe una apertura vinculada a este ejercicio anterior y no se permite duplicarla.');
         db.prepare(`INSERT INTO accounting_exercise_links
           (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id)
