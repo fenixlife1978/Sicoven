@@ -130,7 +130,7 @@ test('reconciles multiple partial ISLR source-event reversals against one credit
     createdAt: '2026-10-01T10:00:00.000Z'
   };
   const secondOriginal = {
-    ...original, id: 'e1', sequence: 2, kind: 'ACCOUNT_CREDIT',
+    ...original, id: 'e1', fiscalDate: '2026-10-02', sequence: 1, kind: 'PAYMENT',
     allocations: [{ purchaseId: 'p1', baseAmountBs: 600 }],
     withheldAmountBs: 60, journalEntryId: 'j1'
   };
