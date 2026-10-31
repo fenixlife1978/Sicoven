@@ -44,6 +44,7 @@
 | 2.2. Corrección de aperturas anuales y saldos históricos | [#29](https://github.com/fenixlife1978/Sicoven/pull/29) | `48e48bd6d4a1958125a8663759c8c244e361623d` | CI escritorio `41237562263` y Windows `41237562281` SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
 | 2.3. Estado de Cambios en el Patrimonio con trazabilidad | [#32](https://github.com/fenixlife1978/Sicoven/pull/32) | `2415abcd2a9645e44931343f0464c604190d9a60` | CI escritorio `41238252145` y Windows `41238252132` SUCCESS sobre SHA `f9a5f21dbd34334fe448b2428122cc1457a3839c`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
 | 2.4. Estado de Flujos de Efectivo — método directo | [#33](https://github.com/fenixlife1978/Sicoven/pull/33) | `69887137207e17689a6522e0da0bc490b8e33bf4` | CI escritorio `41240097710` y Windows `41240097834` SUCCESS sobre SHA exacto; NSIS, upgrade 1.0.6→1.0.7, conservación SQLite y artefacto cargado |
+| 2.5. Estado de Flujos de Efectivo — método indirecto | [#36](https://github.com/fenixlife1978/Sicoven/pull/36) | `8780894d427b4405bd8ab29c07042664ca23bb7b` | Desktop run `41242571620` SUCCESS; Windows run `41242571654` SUCCESS: NSIS, instalador verificado, upgrade 1.0.6→1.0.7 conservó SQLite y artefacto CI cargado (sin publicar release) |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -81,8 +82,21 @@ Los cinco subbloques están fusionados en `main`:
 - CI escritorio `41237562263` y Windows `41237562281`: SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y verificación de conservación de SQLite.
 - Commit de integración en `main`: `48e48bd6d4a1958125a8663759c8c244e361623d`.
 
-**Estado del Bloque 2:** están integrados el Estado de Situación Financiera, el Estado de Resultados, los comparativos históricos, el Estado de Cambios en el Patrimonio y el Estado de Flujos de Efectivo por método directo (PR #33). Permanecen pendientes el método indirecto y las notas/revelaciones. No declarar terminado el bloque hasta cerrar esos componentes y sus conciliaciones.
+**Estado del Bloque 2:** están integrados el Estado de Situación Financiera, el Estado de Resultados, los comparativos históricos, el Estado de Cambios en el Patrimonio y los Estados de Flujos de Efectivo por método directo e indirecto (PR #33 y PR #36). Permanecen pendientes las notas y revelaciones y su validación normativa integral. No declarar terminado el bloque hasta cerrar esos componentes y sus conciliaciones.
 
+
+### Bloque 2.5 — Estado de Flujos de Efectivo por método indirecto — integrado
+
+- **PR #36:** incorpora el cálculo del flujo operativo indirecto desde el resultado neto, ajustes no monetarios explícitos y variaciones clasificadas de capital de trabajo.
+- Presenta Bs. y USD por separado, sin conversión cruzada; inversión y financiación reutilizan los movimientos clasificados del método directo.
+- Cada cuenta requiere tratamiento explícito; no se presume su naturaleza por el nombre. Se validan compatibilidad de clasificación e importes finitos, y las partidas no clasificadas impiden marcar el estado como completamente clasificado.
+- La conciliación compara el efectivo calculado con el mayor contable en ambas monedas. La clasificación y sus tratamientos se persisten en SQLite local.
+- Se añadieron pruebas focalizadas para utilidad neta, depreciación, capital de trabajo, doble moneda, aislamiento multiempresa, períodos inválidos, clasificación incompleta e importes no finitos.
+- CI pre-fusión sobre SHA `28f09b1d3a4f49bea089cf24e6d5c5208e7d1a71`: Desktop run `41242571620` SUCCESS; Windows run `41242571654` SUCCESS.
+- Windows completó compilación NSIS, verificación del instalador, actualización real 1.0.6→1.0.7 con conservación de SQLite y carga del artefacto `SICOVEN-Windows-c36f95d9b0253c584ac9d1afe5e7fd2720b7fc20` (136,701,359 bytes; SHA-256 `12a41c7d5dd0d5835c4fa4b0c96f28d0c354472349858184737ef0bfe88ac1a6`). El artefacto queda en CI y no se publica como release.
+- Commit de integración squash en `main`: `8780894d427b4405bd8ab29c07042664ca23bb7b`.
+
+**Límite:** el método indirecto depende de que la clasificación contable represente correctamente la sustancia económica de cada cuenta y movimiento. Las notas/revelaciones y la validación normativa integral del conjunto de estados financieros siguen pendientes.
 
 ### Bloque 2.4 — Estado de Flujos de Efectivo por método directo — integrado
 
