@@ -189,7 +189,7 @@ function validateNewAccountCatalogEntries(previousAccounts, nextAccounts) {
     const code = String(account.code || '').trim();
     if (priorCodes.has(code)) continue; // No reescribir la estructura histórica en esta migración.
     const segments = code.split('.');
-    if (!/^\\d+(?:\\.\\d+){0,4}$/.test(code) || segments.length > 5 ||
+    if (segments.length < 1 || segments.length > 5 || segments.some(segment => !/^[0-9]+$/.test(segment)) ||
         Number(account.level) !== segments.length || !String(account.name || '').trim() ||
         typeof account.isMovement !== 'boolean') {
       throw new Error('SQLite rechazó una cuenta nueva con código, nivel o clasificación estructural inválida.');
