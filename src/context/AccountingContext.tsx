@@ -3518,7 +3518,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const eligibleBaseByPurchase: Record<string, number> = {};
       for (const purchase of data.purchases as PurchaseRecord[]) {
         if (purchase.documentType === '01' && !purchase.isCancelled) {
-          eligibleBaseByPurchase[purchase.id] = Number(purchase.taxableBaseBs);
+          eligibleBaseByPurchase[purchase.id] = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs);
         }
       }
       validateIslrFiscalEventLedger([], islrFiscalEvents, eligibleBaseByPurchase);
