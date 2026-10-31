@@ -55,6 +55,13 @@ export const RetencionesIslrView: React.FC = () => {
   ));
   const hasFiscalOperations = activeOperations.length > 0 || legacyVouchers.length > 0;
 
+  const filteredOperations = periodPurchases.filter(p => {
+    if (!searchTerm.trim()) return true;
+    const term = searchTerm.toLowerCase();
+    return [p.supplierName, p.supplierRif, p.invoiceNumber, p.islrConceptName || '', p.islrConceptCode || '']
+      .some(value => String(value).toLowerCase().includes(term));
+  }).sort((a, b) => b.invoiceDate.localeCompare(a.invoiceDate));
+
   const filteredVouchers = periodVouchers
     .filter(v => {
       if (searchTerm.trim()) {
@@ -268,6 +275,57 @@ export const RetencionesIslrView: React.FC = () => {
               className="w-full pl-9 pr-3 py-1.5 text-xs border border-slate-300 rounded-lg focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
+        </div>
+      </div>
+
+      {/* Fiscal operation register: independent from whether a retention voucher was issued. */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+        <div className="px-5 py-4 border-b border-slate-200 flex items-center justify-between gap-3">
+          <div>
+            <h2 className="text-sm font-bold text-slate-900">Registro de operaciones fiscales ISLR</h2>
+            <p className="text-[11px] text-slate-500">Pagos y abonos en cuenta con concepto declarado, incluidos los casos sin importe retenido.</p>
+          </div>
+          <span className="text-xs font-semibold text-slate-600">{filteredOperations.length} operaciones</span>
+        </div>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold whitespace-nowrap">
+                <th className="py-2.5 px-4">Fecha</th>
+                <th className="py-2.5 px-4">RIF proveedor</th>
+                <th className="py-2.5 px-4 min-w-[180px]">Beneficiario</th>
+                <th className="py-2.5 px-4">Factura</th>
+                <th className="py-2.5 px-4 min-w-[190px]">Concepto</th>
+                <th className="py-2.5 px-4 text-right">Base (Bs.)</th>
+                <th className="py-2.5 px-4 text-right">Retenido (Bs.)</th>
+                <th className="py-2.5 px-4">Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredOperations.length === 0 ? (
+                <tr><td colSpan={8} className="py-8 text-center text-slate-400">No hay operaciones ISLR registradas para este período y búsqueda.</td></tr>
+              ) : filteredOperations.map(operation => (
+                <tr key={operation.id} className="border-b border-slate-100 hover:bg-slate-50">
+                  <td className="py-2.5 px-4 whitespace-nowrap">{formatDate(operation.invoiceDate)}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap font-mono">{operation.supplierRif}</td>
+                  <td className="py-2.5 px-4">{operation.supplierName}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">{operation.invoiceNumber}</td>
+                  <td className="py-2.5 px-4">{operation.islrConceptCode} · {operation.islrConceptName || 'Concepto sin descripción'}</td>
+                  <td className="py-2.5 px-4 text-right font-mono">{formatBs(operation.taxableBaseBs)}</td>
+                  <td className="py-2.5 px-4 text-right font-mono">{formatBs(operation.islrWithheldBs || 0)}</td>
+                  <td className="py-2.5 px-4 whitespace-nowrap">
+                    {operation.isCancelled ? (
+                      <span className="text-amber-700 font-semibold">Reversada · rectificar</span>
+                    ) : Number(operation.islrWithheldBs || 0) > 0 ? (
+                      <span className="text-emerald-700 font-semibold">Retención emitida</span>
+                    ) : (
+                      <span className="text-slate-600 font-semibold">Sin retención</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
