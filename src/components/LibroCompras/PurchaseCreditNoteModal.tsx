@@ -71,7 +71,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
       return;
     }
     if (!eligible) {
-      setError('Esta factura no cumple las condiciones del flujo automático. Solo se admiten facturas a crédito con líneas de inventario conciliables.');
+      setError('Esta factura no cumple las condiciones del flujo automático. Se admiten facturas vigentes de contado o crédito con líneas de inventario conciliables.');
       return;
     }
     if (invalidRows.length > 0) {
@@ -96,7 +96,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
         controlNumber: controlNumber.trim(),
         reason: reason.trim()
       });
-      setSuccess('Nota de crédito ' + (note.creditNoteNumber || note.invoiceNumber) + ' registrada y confirmada en SQLite. Kardex, CxP y asiento contable quedaron enlazados.');
+      setSuccess('Nota de crédito ' + (note.creditNoteNumber || note.invoiceNumber) + ' registrada y confirmada en SQLite. Kardex, saldo del proveedor y asiento contable quedaron enlazados.');
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : 'No se pudo confirmar la nota de crédito en SQLite.');
     } finally {
@@ -158,7 +158,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
             <label className="block text-xs font-semibold text-slate-700">Motivo y soporte de la devolución
               <textarea required minLength={10} rows={3} value={reason} onChange={event => setReason(event.target.value)} placeholder="Describa el motivo, acuerdo con el proveedor y soporte documental…" className="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 font-normal" />
             </label>
-            <p className="rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-600">Al confirmar, SICOVEN calculará proporcionalmente base, IVA, retenciones e IGTF; reducirá CxP; registrará la salida de Kardex y el contra-asiento enlazado. SQLite valida el conjunto dentro de una transacción. Si cualquier conciliación falla, no se mostrará éxito. Los comprobantes de retención afectados quedarán señalados para revisión fiscal antes de declarar. Esta acción requiere la edición de escritorio conectada a SQLite local.</p>
+            <p className="rounded-lg bg-slate-50 p-3 text-[11px] leading-relaxed text-slate-600">Al confirmar, SICOVEN calculará proporcionalmente base, IVA, retenciones e IGTF; registrará la salida de Kardex y el contra-asiento enlazado. {purchase.paymentTerm === 'CONTADO' ? 'Como la factura fue pagada al contado, el crédito se reconocerá como saldo a favor del proveedor, sin crear ni reducir CxP.' : 'Si existe CxP pendiente, la nota la reducirá; cualquier excedente quedará como saldo a favor del proveedor.'} SQLite valida el conjunto dentro de una transacción. Si cualquier conciliación falla, no se mostrará éxito. Los comprobantes de retención afectados quedarán señalados para revisión fiscal antes de declarar. Esta acción requiere la edición de escritorio conectada a SQLite local.</p>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-4 py-3">
             <button type="button" onClick={onClose} disabled={submitting} className="rounded-lg border border-slate-300 bg-white px-4 py-2 text-xs font-semibold text-slate-700 disabled:opacity-50">Cancelar</button>
