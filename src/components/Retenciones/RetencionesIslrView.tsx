@@ -39,6 +39,16 @@ export const RetencionesIslrView: React.FC = () => {
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
   const periodPurchases = fiscalPurchases.filter(p => p.invoiceDate.slice(0, 7).replace('-', '') === activePeriod);
   const activeOperations = periodPurchases.filter(p => !p.isCancelled);
+  const incompleteFiscalOperations = activeOperations.filter(p =>
+    !p.islrConceptName ||
+    !p.islrBeneficiaryType ||
+    !p.islrResidency ||
+    !Number.isFinite(Number(p.islrRate)) || Number(p.islrRate) <= 0 ||
+    !Number.isFinite(Number(p.islrBasePercentage)) || Number(p.islrBasePercentage) <= 0 ||
+    !Number.isFinite(Number(p.islrUnitTaxValueBs)) || Number(p.islrUnitTaxValueBs) <= 0 ||
+    !Number.isFinite(Number(p.islrFormulaFactor)) || Number(p.islrFormulaFactor) <= 0
+  );
+  const hasIncompleteFiscalOperation = incompleteFiscalOperations.length > 0;
   const legacyVouchers = periodVouchers.filter(v => !periodPurchases.some(p =>
     p.supplierRif === v.supplierRif && p.invoiceNumber === v.invoiceNumber &&
     p.invoiceDate === v.invoiceDate && p.islrConceptCode === v.conceptCode
@@ -61,13 +71,13 @@ export const RetencionesIslrView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled);
+  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
   const totalRetenidoBs = periodVouchers.reduce((s, v) => s + v.withheldAmountBs, 0);
   const totalRetenidoUsd = periodVouchers.reduce((s, v) => s + v.withheldAmountUsd, 0);
   const totalBaseBs = activeOperations.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
 
-  const generatedXml = generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod);
-  const generatedTxt = generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod);
+  const generatedXml = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod);
+  const generatedTxt = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod);
 
   const handleDownloadXml = () => {
     if (hasPendingFiscalCorrection) {
@@ -191,7 +201,9 @@ export const RetencionesIslrView: React.FC = () => {
 
         {hasPendingFiscalCorrection && (
           <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-            Hay comprobantes vinculados a notas de crédito o reversiones que requieren rectificación fiscal. Se conservan como documentos históricos y las exportaciones SENIAT quedan bloqueadas hasta registrar la corrección aplicable.
+            {hasIncompleteFiscalOperation
+              ? 'Hay operaciones ISLR históricas con metadatos fiscales incompletos. No se exportan porcentajes ni parámetros supuestos; revise y complete su soporte antes de declarar.'
+              : 'Hay comprobantes vinculados a notas de crédito o reversiones que requieren rectificación fiscal. Se conservan como documentos históricos y las exportaciones SENIAT quedan bloqueadas hasta registrar la corrección aplicable.'}
           </div>
         )}
 
