@@ -1148,6 +1148,9 @@ function validateAccountingSnapshot(previousState, nextState) {
         throw new Error('SQLite bloqueó la modificación de un anticipo directo histórico; debe corregirse mediante contra-asiento.');
       }
     }
+    if (!advance.isReversed && advance.reversedByJournalEntryId) {
+      throw new Error('SQLite rechazó un enlace de reversión de anticipo directo sin marca de reversión.');
+    }
     if (advance.isReversed) {
       const reversal = advance.reversedByJournalEntryId
         ? nextById.get(String(advance.reversedByJournalEntryId))
