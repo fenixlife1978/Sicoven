@@ -32,3 +32,10 @@ test('usa el valor histórico exacto de la distribución FIFO cuando las notas t
     exchangeDifferenceBs: 200
   });
 });
+
+test('preserves six-decimal USD amounts such as Bs. 106.48 at a BCV rate of 100', () => {
+  assert.deepEqual(calculateSupplierAdvanceFxSettlement(1.0648, 106.48, 1.0648, 106.48), {
+    amountUsd: 1.0648, advanceBookValueBs: 106.48,
+    settlementValueBs: 106.48, exchangeDifferenceBs: 0
+  });
+});
