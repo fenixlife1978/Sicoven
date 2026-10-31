@@ -198,3 +198,17 @@ test('annual T-2 rejects invalid dates, another fiscal year, missing UT snapshot
   ], '2025-07-10', 43, 90), /snapshot de UT/);
   assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], '2025-07-10', 43, 101), /porcentaje/);
 });
+
+test('annual T-2 rejects a current UT snapshot that does not match the verified period value', () => {
+  assert.throws(
+    () => calculateAnnualIslrTariff2Retention(10000, [], '2025-07-10', 9, 90),
+    /snapshot de UT.*operación actual/
+  );
+});
+
+test('annual T-2 rejects a historical UT snapshot that does not match its operation date', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(50000, [
+    { paymentDate: '2025-06-10', baseAmountBs: 100000, withheldAmountBs: first.withheldAmountBs, unitTaxValueBs: 43 }
+  ], '2025-07-10', 43, 90), /snapshot histórico de UT/);
+});
