@@ -177,9 +177,15 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       const journalReversalAmount = (Array.isArray(reversalJournal?.items) ? reversalJournal.items : [])
         .filter(item => item.accountCode === '2.1.2.04')
         .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+      const eventsReversedByJournal = next.filter(item =>
+        item.kind === 'REVERSAL' && item.journalEntryId === event.journalEntryId
+      );
+      const totalEventReversalAmount = eventsReversedByJournal.reduce(
+        (sum, item) => sum + Number(item.withheldAmountBs || 0), 0
+      );
       if (!reversalJournal || reversalJournal.type !== 'AJUSTE' ||
-          Math.abs(journalReversalAmount - Number(event.withheldAmountBs)) > 0.01) {
-        throw new Error('SQLite rechazó la reversión ISLR porque el asiento correctivo no revierte el pasivo por el mismo importe.');
+          Math.abs(journalReversalAmount - totalEventReversalAmount) > 0.01) {
+        throw new Error('SQLite rechazó la reversión ISLR porque el asiento correctivo no concilia con el total de eventos revertidos.');
       }
     } else if (event.kind !== 'REVERSAL' && (event.reversalOfEventId || event.reversalReason)) {
       throw new Error('SQLite rechazó datos de reversión en un evento ISLR de pago o abono.');

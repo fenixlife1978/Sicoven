@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IslrFiscalEvent, validateIslrFiscalEventLedger } from './islrFiscalEvent';
+import { IslrFiscalEvent, allocateIslrFiscalReversal, validateIslrFiscalEventLedger } from './islrFiscalEvent';
 
 const event = (overrides: Partial<IslrFiscalEvent> = {}): IslrFiscalEvent => ({
   id: 'event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
@@ -126,4 +126,29 @@ test('supports cumulative partial ISLR reversals without releasing unreversed ba
     withheldAmountBs: 60, reversalOfEventId: original.id, reversalReason: 'Excede saldo'
   });
   assert.throws(() => validateIslrFiscalEventLedger([], [original, first, second, excessive], eligible), /supera la base pendiente/);
+});
+
+test('distributes a credit-note reversal across multiple active fiscal events', () => {
+  const first = event({ id: 'payment-1', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 400 }], withheldAmountBs: 40 });
+  const second = event({ id: 'credit-1', sequence: 2, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 600 }], withheldAmountBs: 60 });
+  const prior = event({ id: 'prior-reversal', kind: 'REVERSAL', sequence: 3,
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }], withheldAmountBs: 10,
+    reversalOfEventId: first.id, reversalReason: 'Devolución parcial anterior' });
+  const allocations = allocateIslrFiscalReversal([first, second, prior], 'purchase-1', 500);
+  assert.equal(allocations.length, 2);
+  assert.deepEqual(allocations.map(item => item.originalEvent.id), ['payment-1', 'credit-1']);
+  assert.equal(allocations[0].baseAmountBs, 166.67);
+  assert.equal(allocations[0].withheldAmountBs, 16.67);
+  assert.equal(allocations[1].baseAmountBs, 333.33);
+  assert.equal(allocations[1].withheldAmountBs, 33.33);
+  assert.equal(allocations.reduce((sum, item) => sum + item.baseAmountBs, 0), 500);
+  assert.equal(allocations.reduce((sum, item) => sum + item.withheldAmountBs, 0), 50);
+});
+
+test('rejects a credit-note reversal above the combined unreversed fiscal base', () => {
+  const first = event({ id: 'payment-1', allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 400 }], withheldAmountBs: 40 });
+  const second = event({ id: 'credit-1', sequence: 2, allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 600 }], withheldAmountBs: 60 });
+  assert.throws(() => allocateIslrFiscalReversal([first, second], 'purchase-1', 1000.02), /supera la base ISLR pendiente/);
 });

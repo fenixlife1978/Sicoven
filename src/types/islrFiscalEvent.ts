@@ -28,6 +28,96 @@ export interface IslrFiscalEvent {
   createdAt: string;
 }
 
+export interface IslrFiscalReversalAllocation {
+  originalEvent: IslrFiscalEvent;
+  baseAmountBs: number;
+  withheldAmountBs: number;
+}
+
+/**
+ * Distributes a purchase credit-note base across every unreversed PAYMENT or
+ * ACCOUNT_CREDIT event for that purchase. Each source event keeps its own
+ * withholding snapshot; reversals are calculated cumulatively per source.
+ */
+export function allocateIslrFiscalReversal(
+  events: IslrFiscalEvent[],
+  purchaseId: string,
+  requestedBaseAmountBs: number
+): IslrFiscalReversalAllocation[] {
+  const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  if (!Array.isArray(events) || !purchaseId ||
+      !Number.isFinite(requestedBaseAmountBs) || requestedBaseAmountBs <= 0) {
+    throw new Error('La base de reversión ISLR no es válida.');
+  }
+  const sources = events
+    .filter(event => event.kind !== 'REVERSAL' &&
+      event.allocations.some(allocation => allocation.purchaseId === purchaseId))
+    .sort((a, b) => a.fiscalDate.localeCompare(b.fiscalDate) ||
+      a.sequence - b.sequence || a.id.localeCompare(b.id))
+    .map(originalEvent => {
+      const allocations = originalEvent.allocations.filter(item => item.purchaseId === purchaseId);
+      if (allocations.length !== 1) {
+        throw new Error('Un evento ISLR contiene asignaciones duplicadas para la misma factura.');
+      }
+      const originalBase = Number(allocations[0].baseAmountBs);
+      const originalWithheld = Number(originalEvent.withheldAmountBs);
+      const priorReversals = events.filter(event =>
+        event.kind === 'REVERSAL' && event.reversalOfEventId === originalEvent.id);
+      const alreadyReversedBase = priorReversals.flatMap(event => event.allocations)
+        .filter(item => item.purchaseId === purchaseId)
+        .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const alreadyReversedWithheld = priorReversals.reduce((sum, event) =>
+        sum + Number(event.withheldAmountBs), 0);
+      if (!Number.isFinite(originalBase) || originalBase <= 0 ||
+          !Number.isFinite(originalWithheld) || originalWithheld < 0 ||
+          !Number.isFinite(alreadyReversedBase) || alreadyReversedBase < 0 ||
+          !Number.isFinite(alreadyReversedWithheld) || alreadyReversedWithheld < 0 ||
+          alreadyReversedBase > originalBase + 0.01 ||
+          alreadyReversedWithheld > originalWithheld + 0.01) {
+        throw new Error('El historial de reversiones ISLR de la factura no concilia con el evento original.');
+      }
+      return {
+        originalEvent, originalBase, originalWithheld,
+        alreadyReversedBase, alreadyReversedWithheld,
+        remainingBase: Math.max(0, originalBase - alreadyReversedBase),
+        remainingWithheld: Math.max(0, originalWithheld - alreadyReversedWithheld)
+      };
+    })
+    .filter(item => item.remainingBase > 0.000001);
+  if (sources.length === 0) return [];
+  const totalRemainingBase = sources.reduce((sum, item) => sum + item.remainingBase, 0);
+  const requested = money(requestedBaseAmountBs);
+  if (requested > totalRemainingBase + 0.01) {
+    throw new Error('La devolución supera la base ISLR pendiente de reversión de la factura.');
+  }
+  let baseLeft = requested;
+  const result: IslrFiscalReversalAllocation[] = [];
+  sources.forEach((source, index) => {
+    const baseAmountBs = index === sources.length - 1
+      ? money(baseLeft)
+      : Math.min(source.remainingBase, money(requested * source.remainingBase / totalRemainingBase));
+    if (baseAmountBs <= 0.000001) return;
+    baseLeft = money(baseLeft - baseAmountBs);
+    const expectedCumulativeWithheld = source.originalBase > 0
+      ? money(source.originalWithheld *
+        (source.alreadyReversedBase + baseAmountBs) / source.originalBase)
+      : 0;
+    const withheldAmountBs = money(expectedCumulativeWithheld - source.alreadyReversedWithheld);
+    if (withheldAmountBs < -0.01 || withheldAmountBs > source.remainingWithheld + 0.01) {
+      throw new Error('La reversión ISLR calculada supera la retención pendiente de un evento original.');
+    }
+    result.push({
+      originalEvent: source.originalEvent,
+      baseAmountBs,
+      withheldAmountBs: Math.max(0, withheldAmountBs)
+    });
+  });
+  if (Math.abs(baseLeft) > 0.01) {
+    throw new Error('No se pudo distribuir completamente la base de la nota entre los eventos ISLR originales.');
+  }
+  return result;
+}
+
 /** Validación estructural; el cálculo fiscal y el asiento contable son operaciones de dominio separadas. */
 export function validateIslrFiscalEventLedger(
   previous: IslrFiscalEvent[],

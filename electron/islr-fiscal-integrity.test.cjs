@@ -114,3 +114,53 @@ test('SQLite accepts cumulative partial ISLR reversals and rejects over-reversal
     islrFiscalEvents: [...next.islrFiscalEvents, excessive]
   }), /supera la base pendiente/);
 });
+
+test('reconciles multiple partial ISLR source-event reversals against one credit-note journal', () => {
+  const purchase = { id: 'p1', companyId: 'c1', supplierRif: 'J-12345678-9', documentType: '01', taxableBaseBs: 1000, exemptAmountBs: 0, isCancelled: false };
+  const originalJournal = { id: 'j0', companyId: 'c1', date: '2026-10-01' };
+  const reversalJournal = {
+    id: 'j-credit-note', companyId: 'c1', date: '2026-10-20', type: 'AJUSTE',
+    items: [{ accountCode: '2.1.2.04', debitBs: 50, creditBs: 0 }]
+  };
+  const original = {
+    id: 'e0', companyId: 'c1', supplierRif: 'J-12345678-9', conceptCode: '003',
+    fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: 400 }], basePercentage: 90,
+    unitTaxValueBs: 43, withheldAmountBs: 40, journalEntryId: 'j0',
+    createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const secondOriginal = {
+    ...original, id: 'e1', sequence: 2, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: 600 }],
+    withheldAmountBs: 60, journalEntryId: 'j1'
+  };
+  const secondOriginalJournal = { id: 'j1', companyId: 'c1', date: '2026-10-02' };
+  const reversal = (id, sequence, sourceId, base, withheld) => ({
+    id, companyId: 'c1', supplierRif: 'J-12345678-9', conceptCode: '003',
+    fiscalDate: '2026-10-20', sequence, kind: 'REVERSAL',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: base }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: withheld,
+    journalEntryId: 'j-credit-note', reversalOfEventId: sourceId,
+    reversalReason: 'Nota de crédito parcial documentada',
+    createdAt: '2026-10-20T10:00:00.000Z'
+  });
+  const firstReversal = reversal('r1', 1, 'e0', 100, 10);
+  const secondReversal = reversal('r2', 2, 'e1', 200, 20);
+  const previous = {
+    purchases: [purchase],
+    journalEntries: [originalJournal, secondOriginalJournal],
+    islrVouchers: [], islrFiscalEvents: []
+  };
+  const next = {
+    purchases: [purchase],
+    journalEntries: [originalJournal, secondOriginalJournal, reversalJournal],
+    islrVouchers: [],
+    islrFiscalEvents: [original, secondOriginal, firstReversal, secondReversal]
+  };
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
+  assert.throws(() => validateIslrFiscalEventLedger(previous, {
+    ...next, journalEntries: [...next.journalEntries.slice(0, -1), {
+      ...reversalJournal, items: [{ accountCode: '2.1.2.04', debitBs: 49, creditBs: 0 }]
+    }]
+  }), /total de eventos revertidos/);
+});
