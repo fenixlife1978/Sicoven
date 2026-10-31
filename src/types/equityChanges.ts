@@ -68,7 +68,8 @@ const signedProfitLoss = (entry: JournalEntry, accountsByCode: Map<string, Accou
 /**
  * Builds a traceable equity roll-forward from posted ledger entries only.
  * It never infers dividends, contributions, reserves or other labels from
- * descriptions; movements remain linked to their source journal entry.
+ * descriptions; movements remain linked to their source journal entry. Annual
+ * openings are recognized only through exerciseLink, never by APERTURA type alone.
  */
 export function buildEquityChangesReport(
   entries: JournalEntry[],
