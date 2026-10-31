@@ -137,7 +137,7 @@ export function selectHistoricalReportEntries<T extends {
   );
 
   if (kind === 'RESULTADOS') {
-    return validCompanyEntries.filter(entry => entry.date >= start && entry.type !== 'CIERRE');
+    return validCompanyEntries.filter(entry => entry.date >= start && entry.type !== 'CIERRE' && entry.type !== 'APERTURA');
   }
 
   // An annual opening carries forward the complete prior closing balance.
