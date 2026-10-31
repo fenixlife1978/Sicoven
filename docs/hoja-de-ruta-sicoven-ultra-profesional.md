@@ -82,7 +82,7 @@ Los cinco subbloques están fusionados en `main`:
 - CI escritorio `41237562263` y Windows `41237562281`: SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y verificación de conservación de SQLite.
 - Commit de integración en `main`: `48e48bd6d4a1958125a8663759c8c244e361623d`.
 
-**Estado del Bloque 2:** están integrados el Estado de Situación Financiera, el Estado de Resultados, los comparativos históricos, el Estado de Cambios en el Patrimonio y los Estados de Flujos de Efectivo por método directo e indirecto (PR #33 y PR #36). Permanecen pendientes las notas y revelaciones y su validación normativa integral. No declarar terminado el bloque hasta cerrar esos componentes y sus conciliaciones.
+**Estado del Bloque 2:** están integrados el Estado de Situación Financiera, el Estado de Resultados, los comparativos históricos, el Estado de Cambios en el Patrimonio y los Estados de Flujos de Efectivo por método directo e indirecto (PR #33 y PR #36). Las notas y revelaciones están integradas mediante el PR #38. El Bloque 2 continúa abierto para la validación normativa integral del conjunto de estados financieros y sus conciliaciones.
 
 
 ### Bloque 2.5 — Estado de Flujos de Efectivo por método indirecto — integrado
@@ -284,3 +284,19 @@ Estas evidencias prueban presencia de componentes y modelos, no por sí solas el
 ## Criterio global de finalización
 
 SICOVEN se considerará listo para una actualización profesional integral cuando los circuitos contables, fiscales y auxiliares estén completos; los estados financieros cuadren y sean trazables; los cálculos normativos tengan fuentes y vigencias; la multimoneda y multiempresa estén aisladas y verificadas; las exportaciones funcionen; la restauración y actualización preserven datos; la UX sea consistente; no existan defectos bloqueantes; y la versión instalable haya sido probada. La publicación final se hará únicamente con autorización expresa.
+
+
+### Bloque 2.6 — Notas y revelaciones de estados financieros — integrado
+
+- **PR #38:** incorpora notas cualitativas por empresa y ejercicio en Reportes Anuales.
+- Tipos disponibles: políticas contables, estimaciones, compromisos, contingencias, partes relacionadas, hechos posteriores y otras revelaciones.
+- Cada nota conserva título, contenido, número, estado de borrador/revisada y referencias explícitas a cuentas y asientos fuente.
+- Las notas se persisten en el snapshot SQLite, se incluyen en respaldos y restauraciones, y se validan al guardar e importar: empresa, ejercicio, referencias, existencia de cuentas/asientos y unicidad del número de nota por empresa/ejercicio.
+- El anexo cuantitativo presenta movimientos anuales del mayor por cuenta en Bs. y USD separados, excluye asientos de cierre y aclara que los movimientos no equivalen a saldos de cierre.
+- Las notas aparecen en la vista imprimible del reporte anual y en la exportación CSV. Se corrigió la alineación de columnas de las filas de notas y del anexo cuantitativo.
+- CI escritorio run `41244103656`: SUCCESS; completó instalación, pruebas automatizadas, controles de autenticación, TypeScript, auditoría de recursos y build.
+- CI Windows run `41244103534`: SUCCESS; compilación NSIS, verificación del instalador, actualización real 1.0.6→1.0.7 conservando SQLite y carga del artefacto.
+- Artefacto CI: `SICOVEN-Windows-a97c25fcf19cf1b312393dc6afafec331a083d9c`, 136,703,161 bytes; SHA-256 `0e6980179c91fb1a2398b818c3ea4cff573afc4f66f0413c5018ad38bfd54907`. Se conserva como artefacto de CI; no se publicó release ni instalador.
+- Commit de integración squash en `main`: `8fd31a5c7b805db6ffab0e85a6fa3884d625fece`.
+
+**Límite:** la herramienta permite documentar notas y anexar movimientos trazables, pero no certifica por sí sola el cumplimiento VEN-NIF ni genera automáticamente todas las revelaciones exigibles para cada tipo de entidad. La validación normativa integral, suficiencia de notas y conciliación profesional de los cuatro estados siguen pendientes; por tanto, el Bloque 2 no se declara globalmente terminado.
