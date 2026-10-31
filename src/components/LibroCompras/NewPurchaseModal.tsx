@@ -507,7 +507,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                 <div className="grid grid-cols-2 gap-3 bg-purple-50 p-2.5 rounded-lg border border-purple-200 text-xs">
                   <div>
                     <span className="text-[11px] text-purple-800 block">U.T. aplicada / factor:</span>
-                    <span className="font-mono font-bold text-purple-900">Bs. {VALOR_UNIDAD_TRIBUTARIA_BS.toFixed(2)} / {ISLR_FORMULA_FACTOR}</span>
+                    <span className="font-mono font-bold text-purple-900">Bs. {islrUnitTaxValueBs == null ? 'No disponible' : islrUnitTaxValueBs.toFixed(2)} / {ISLR_FORMULA_FACTOR}</span>
                   </div>
                   <div>
                     <span className="text-[11px] text-purple-800 block">Sustraendo Legal (Bs.):</span>
