@@ -474,9 +474,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       if (result?.ok !== true || !result.company) {
         throw new Error('SQLite no confirmó la reapertura contable.');
       }
+      const reopenedCompany = result.company;
       const persistenceConfirmation = waitForPersistence();
       setCompanies(prev => prev.map(company => company.id === currentCompany.id
-        ? { ...company, ...(result.company.closedThroughDate ? { closedThroughDate: result.company.closedThroughDate } : { closedThroughDate: undefined }) }
+        ? { ...company, ...(reopenedCompany.closedThroughDate ? { closedThroughDate: reopenedCompany.closedThroughDate } : { closedThroughDate: undefined }) }
         : company));
       await persistenceConfirmation;
     } finally {
