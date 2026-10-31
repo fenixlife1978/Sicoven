@@ -9,7 +9,7 @@ export function isPurchasePaymentAccount(account?: PurchasePaymentAccount | null
   if (!account || account.type !== 'ACTIVO' || account.isMovement !== true) return false;
   const name = String(account.name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase();
   return /\b(CAJA|BANCO|BANCOS|EFECTIVO|EQUIVALENTES DE EFECTIVO)\b/.test(name) ||
-    /^1\.1\.[12](?:\.|$)/.test(String(account.code || ''));
+    /^1\.1\.1(?:\.|$)/.test(String(account.code || ''));
 }
 export function validatePurchaseSettlementMode(
   paymentTerm?: 'CONTADO' | 'CREDITO', paymentAccountCode?: string,
