@@ -70,3 +70,20 @@ test('rejects missing invoice allocations', () => {
     event({ allocations: [{ purchaseId: 'missing', baseAmountBs: 10 }] })
   ], eligible), /facturas válidas/);
 });
+
+test('rejects a second reversal of an event already reversed in persisted history', () => {
+  const original = event();
+  const firstReversal = event({
+    id: 'event-reversal-1', kind: 'REVERSAL', sequence: 2,
+    journalEntryId: 'journal-reversal-1', reversalOfEventId: original.id,
+    reversalReason: 'Primera corrección'
+  });
+  const secondReversal = event({
+    id: 'event-reversal-2', kind: 'REVERSAL', sequence: 3,
+    journalEntryId: 'journal-reversal-2', reversalOfEventId: original.id,
+    reversalReason: 'Intento de segunda corrección'
+  });
+  assert.throws(() => validateIslrFiscalEventLedger(
+    [original, firstReversal], [original, firstReversal, secondReversal], eligible
+  ), /ya reversado/);
+});
