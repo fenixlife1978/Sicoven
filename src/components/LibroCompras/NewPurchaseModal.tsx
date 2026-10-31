@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
-import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
+import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
 
@@ -63,6 +63,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const selectedConcept = ISLR_CONCEPTS.find(c => c.code === islrConceptCode);
   const normalizedSupplierRif = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const selectedMonthKey = String(invoiceDate || '').slice(0, 7);
+  const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
   const hasCancelledPriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
     item.companyId === currentCompany.id &&
     item.documentType === '01' &&
@@ -101,10 +102,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       withheldAmountBs: item.islrWithheldBs,
       subtrahendBs: item.islrSubtrahendBs
     }));
-    const calc = calculateMonthlyIslrRetention(taxableBaseBs, priorOperations, selectedConcept);
-    islrRate = calc.rate;
-    islrSubtrahendBs = calc.subtrahendBs;
-    islrWithheldBs = calc.withheldAmountBs;
+    if (islrUnitTaxValueBs != null) {
+      const calc = calculateMonthlyIslrRetention(taxableBaseBs, priorOperations, selectedConcept, islrUnitTaxValueBs);
+      islrRate = calc.rate;
+      islrSubtrahendBs = calc.subtrahendBs;
+      islrWithheldBs = calc.withheldAmountBs;
+    }
   }
 
   // Net payable
@@ -135,6 +138,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     }
     if (applyIslr && !selectedConcept) {
       window.alert('Selecciona un concepto ISLR válido. No se aplicará una retención por defecto ni se inferirá la condición fiscal a partir del RIF.');
+      return;
+    }
+    if (applyIslr && islrUnitTaxValueBs == null) {
+      window.alert('No existe un valor de Unidad Tributaria verificado para el período seleccionado. No se puede calcular ni registrar esta retención ISLR.');
       return;
     }
     if (applyIslr && hasCancelledPriorIslrOperation) {
@@ -213,7 +220,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
           : (selectedConcept.isResident ? 'DOMICILED' : 'NON_DOMICILED'))
         : undefined,
       islrBasePercentage: applyIslr ? selectedConcept?.basePercentage : undefined,
-      islrUnitTaxValueBs: applyIslr ? VALOR_UNIDAD_TRIBUTARIA_BS : undefined,
+      islrUnitTaxValueBs: applyIslr ? islrUnitTaxValueBs ?? undefined : undefined,
       islrFormulaFactor: applyIslr ? ISLR_FORMULA_FACTOR : undefined,
       bcvRate,
       totalAmountUsd,
