@@ -13,6 +13,31 @@ test('rejects duplicate ISLR sequence against historical events', () => {
   assert.throws(() => validateIslrFiscalEventLedger(previous, next), /secuencia de eventos ISLR duplicada/);
 });
 
+test('SQLite isolates ISLR events when two companies reuse the same purchase ID', () => {
+  const purchase = companyId => ({
+    id: 'shared-purchase', companyId, supplierRif: 'J-12345678-9',
+    documentType: '01', paymentTerm: 'CREDITO', taxableBaseBs: 100,
+    exemptAmountBs: 0, isCancelled: false
+  });
+  const journal = (id, companyId) => ({ id, companyId, date: '2026-10-01', type: 'PAGO' });
+  const event = (id, companyId, journalEntryId) => ({
+    id, companyId, supplierRif: 'J-12345678-9', conceptCode: '003',
+    fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'shared-purchase', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId, createdAt: '2026-10-01T10:00:00.000Z'
+  });
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(
+    { purchases: [], journalEntries: [], islrFiscalEvents: [] },
+    {
+      purchases: [purchase('company-1'), purchase('company-2')],
+      journalEntries: [journal('j1', 'company-1'), journal('j2', 'company-2')],
+      islrVouchers: [],
+      islrFiscalEvents: [event('e1', 'company-1', 'j1'), event('e2', 'company-2', 'j2')]
+    }
+  ));
+});
+
 test('preserves duplicate legacy sequences when no new event is added', () => {
   const purchase = (id) => ({ id, companyId: 'c1', supplierRif: 'J-12345678-9', documentType: '01', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false });
   const journal = (id) => ({ id, companyId: 'c1', date: '2026-10-01' });
