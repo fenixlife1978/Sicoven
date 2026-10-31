@@ -2,6 +2,7 @@ import React, { createContext, useContext, useState, useEffect, useRef, useCallb
 import {
   Company,
   Account,
+  CashFlowActivity,
   JournalEntry,
   PurchaseRecord,
   getPurchaseAccountCreditDate,
@@ -70,6 +71,7 @@ interface AccountingContextType {
   // Cuentas
   accounts: Account[];
   addAccount: (account: Account) => void;
+  setAccountCashFlowActivity: (accountCode: string, activity: CashFlowActivity) => void;
 
   // Asientos
   journalEntries: JournalEntry[];
@@ -841,6 +843,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const addAccount = (account: Account) => {
     const validatedAccount = prepareAccountForCatalog(account, accounts);
     setAccounts(prev => [...prev, validatedAccount].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
+  };
+
+  const setAccountCashFlowActivity = (accountCode: string, activity: CashFlowActivity) => {
+    const account = accounts.find(item => item.code === accountCode);
+    if (!account || !account.isMovement) throw new Error('Seleccione una cuenta contable imputable existente.');
+    if (!['EFECTIVO_EQUIVALENTE', 'OPERACION', 'INVERSION', 'FINANCIACION', 'NO_MONETARIO', 'SIN_CLASIFICAR'].includes(activity)) {
+      throw new Error('La clasificación del flujo de efectivo no es válida.');
+    }
+    setAccounts(prev => prev.map(item => item.code === accountCode
+      ? { ...item, cashFlowActivity: activity }
+      : item
+    ));
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
@@ -3997,6 +4011,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         updateBcvRate,
         accounts,
         addAccount,
+        setAccountCashFlowActivity,
         journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
         addJournalEntry,
         deleteJournalEntry,
