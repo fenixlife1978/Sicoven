@@ -63,6 +63,14 @@ const zeroTotals = (): CashFlowTotals => ({
 });
 const isAnnualOpening = (entry: JournalEntry, year: number) =>
   entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
+const counterpartAmount = (
+  item: JournalEntry['items'][number],
+  side: 'credit' | 'debit',
+  currency: 'bs' | 'usd'
+): number => {
+  if (currency === 'bs') return side === 'credit' ? amount(item.creditBs) : amount(item.debitBs);
+  return side === 'credit' ? amount(item.creditUsd) : amount(item.debitUsd);
+};
 const cashNet = (entry: JournalEntry, cashCodes: Set<string>) =>
   entry.items.reduce((sum, item) => cashCodes.has(item.accountCode)
     ? {
@@ -142,12 +150,12 @@ export function buildCashFlowReport(
     tolerance: number
   ) => {
     if (Math.abs(net) <= tolerance) return;
-    const side = net > 0 ? 'credit' : 'debit';
+    const side: 'credit' | 'debit' = net > 0 ? 'credit' : 'debit';
     const counterpartLines = entry.items.filter(item =>
-      !cashCodes.has(item.accountCode) && amount(item[side + (currency === 'bs' ? 'Bs' : 'Usd') as 'creditBs']) > 0
+      !cashCodes.has(item.accountCode) && counterpartAmount(item, side, currency) > 0
     );
     const counterpartTotal = counterpartLines.reduce((sum, item) =>
-      sum + amount(item[side + (currency === 'bs' ? 'Bs' : 'Usd') as 'creditBs']), 0
+      sum + counterpartAmount(item, side, currency), 0
     );
     if (Math.abs(counterpartTotal - Math.abs(net)) > tolerance || counterpartLines.length === 0) {
       recordUnclassified(net, currency);
@@ -160,7 +168,7 @@ export function buildCashFlowReport(
         activity === 'OPERACION' || activity === 'INVERSION' || activity === 'FINANCIACION'
           ? activity
           : 'SIN_CLASIFICAR';
-      const value = amount(item[side + (currency === 'bs' ? 'Bs' : 'Usd') as 'creditBs']);
+      const value = counterpartAmount(item, side, currency);
       if (section === 'SIN_CLASIFICAR') {
         recordUnclassified(net > 0 ? value : -value, currency);
         candidates.set(item.accountCode, { accountCode: item.accountCode, accountName: account?.name || item.accountName, activity });
