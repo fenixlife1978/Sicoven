@@ -160,7 +160,7 @@ test('preserva seis decimales USD al distribuir un anticipo de Bs. 106.48 a tasa
 
 test('reconstruye el FIFO de notas junto con liquidaciones mixtas y directas previas', () => {
   const directOnly = {
-    id: 'direct-only', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    id: 'direct-only', companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
     sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
     sourceDirectAdvanceIds: ['direct-1'],
     sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-1', amountUsd: 5, bookValueBs: 500 }],
