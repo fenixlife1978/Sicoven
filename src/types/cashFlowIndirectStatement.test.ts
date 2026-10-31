@@ -15,8 +15,8 @@ const accounts: Account[] = [
 const banks: BankAccount[] = [];
 const line = (accountCode: string, debitBs: number, creditBs: number, debitUsd: number, creditUsd: number) =>
   ({ accountCode, accountName: accountCode, debitBs, creditBs, debitUsd, creditUsd });
-const entry = (id: string, date: string, items: JournalEntry['items'], type: JournalEntry['type'] = 'MANUAL'): JournalEntry =>
-  ({ id, companyId: 'co-1', entryNumber: 1, date, description: id, type, bcvRate: 1, items, createdAt: date });
+const entry = (id: string, date: string, items: JournalEntry['items'], type: JournalEntry['type'] = 'MANUAL', exerciseLink?: JournalEntry['exerciseLink']): JournalEntry =>
+  ({ id, companyId: 'co-1', entryNumber: 1, date, description: id, type, bcvRate: 1, items, createdAt: date, exerciseLink });
 
 describe('cash flow indirect method', () => {
   it('reconciles profit plus depreciation and working-capital changes in both currencies', () => {
@@ -25,7 +25,7 @@ describe('cash flow indirect method', () => {
         line('1.1.1.01', 100, 0, 10, 0),
         line('1.1.2.01', 20, 0, 2, 0),
         line('2.1.1.01', 10, 0, 1, 0)
-      ], 'APERTURA'),
+      ], 'APERTURA', { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' }),
       entry('sale-credit', '2026-02-01', [
         line('1.1.2.01', 50, 0, 5, 0),
         line('4.1.1', 0, 50, 0, 5)
