@@ -149,6 +149,15 @@ export function allocateSupplierAdvanceCreditNotes(
       if (!Array.isArray(settlement.sourceCreditNoteIds) || settlement.sourceCreditNoteIds.length === 0) continue;
       throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
     }
+    const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
+    const combinedUsd = allocations.reduce((sum, item) => sum + Number(item?.amountUsd || 0), 0) +
+      directAllocations.reduce((sum, item) => sum + Number(item?.amountUsd || 0), 0);
+    const combinedBs = allocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0) +
+      directAllocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0);
+    if (Math.abs(combinedUsd - roundUsd(settlement.amountUsd)) > 0.00001 ||
+        Math.abs(combinedBs - roundBs(settlement.advanceBookValueBs ?? settlement.amountBs)) > 0.02) {
+      throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no concilia con la suma de sus orígenes de anticipo.');
+    }
     const allocationError = validateSupplierAdvanceCreditNoteAllocations(
       allocations,
       settlement.sourceCreditNoteIds,
