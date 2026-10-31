@@ -1070,8 +1070,25 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó un anticipo directo cuyo asiento no debita Anticipos a proveedores y acredita Caja/Banco por los importes exactos.');
     }
     const old = priorDirectById.get(id);
-    if (old && JSON.stringify(old) !== JSON.stringify(advance)) {
-      throw new Error('SQLite bloqueó la modificación de un anticipo directo histórico; debe corregirse mediante contra-asiento.');
+    if (old) {
+      const immutable = item => {
+        const copy = { ...item };
+        delete copy.isReversed;
+        delete copy.reversedByJournalEntryId;
+        return copy;
+      };
+      if (JSON.stringify(immutable(old)) !== JSON.stringify(immutable(advance)) ||
+          (old.isReversed && (!advance.isReversed || advance.reversedByJournalEntryId !== old.reversedByJournalEntryId))) {
+        throw new Error('SQLite bloqueó la modificación de un anticipo directo histórico; debe corregirse mediante contra-asiento.');
+      }
+    }
+    if (advance.isReversed) {
+      const reversal = advance.reversedByJournalEntryId
+        ? nextById.get(String(advance.reversedByJournalEntryId))
+        : undefined;
+      if (!reversal || reversal.companyId !== companyId || reversal.reversalOfEntryId !== journal.id) {
+        throw new Error('SQLite rechazó la reversión del anticipo directo sin contra-asiento vinculado.');
+      }
     }
   }
   for (const old of priorDirectAdvances) {
