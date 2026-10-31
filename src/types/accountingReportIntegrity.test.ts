@@ -77,7 +77,7 @@ describe('historical report period selection', () => {
     { id: 'opening-2025', companyId: 'co-1', date: '2025-01-01', type: 'APERTURA' },
     { id: 'sale-2025', companyId: 'co-1', date: '2025-06-30', type: 'VENTA' },
     { id: 'closing-2025', companyId: 'co-1', date: '2025-12-31', type: 'CIERRE' },
-    { id: 'opening-2026', companyId: 'co-1', date: '2026-01-01', type: 'APERTURA' },
+    { id: 'opening-2026', companyId: 'co-1', date: '2026-01-01', type: 'APERTURA', exerciseLink: { nextPeriodStartDate: '2026-01-01' } },
     { id: 'sale-2026', companyId: 'co-1', date: '2026-03-15', type: 'VENTA' },
     { id: 'closing-2026', companyId: 'co-1', date: '2026-12-31', type: 'CIERRE' },
     { id: 'future-2027', companyId: 'co-1', date: '2027-01-01', type: 'MANUAL' },
@@ -87,8 +87,18 @@ describe('historical report period selection', () => {
   it('uses cumulative ledger entries through year-end for historical situation reports', () => {
     assert.deepEqual(
       selectHistoricalReportEntries(entries, 'co-1', 2026, 'SITUACION').map(entry => entry.id),
-      ['opening-2025', 'sale-2025', 'closing-2025', 'opening-2026', 'sale-2026', 'closing-2026']
+      ['opening-2026', 'sale-2026', 'closing-2026']
     );
+  });
+
+  it('keeps the prior exercise cumulative but resets at the next annual opening', () => {
+    assert.deepEqual(
+      selectHistoricalReportEntries(entries, 'co-1', 2025, 'SITUACION').map(entry => entry.id),
+      ['opening-2025', 'sale-2025', 'closing-2025']
+    );
+    const selected2026 = selectHistoricalReportEntries(entries, 'co-1', 2026, 'SITUACION');
+    assert.equal(selected2026.some(entry => entry.id === 'sale-2025'), false);
+    assert.equal(selected2026.some(entry => entry.id === 'opening-2026'), true);
   });
 
   it('uses only selected-year operating entries for historical income statements', () => {
