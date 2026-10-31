@@ -1,7 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const Database = require('better-sqlite3');
-const { registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
+const { persistAccountingSnapshot, registerAccountingPersistenceHandler } = require('./accounting-persistence.cjs');
 
 const emptyState = () => ({
   companies: [], currentCompanyId: '', accounts: [],
@@ -84,6 +84,72 @@ test('Electron IPC persists an authorized accounting snapshot through the produc
     assert.deepEqual(saved.purchases, []);
     const audit = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
     assert.deepEqual(audit, ['state_saved']);
+  } finally {
+    harness.db.close();
+  }
+});
+
+test('SQLite audit records direct supplier advance posting and its linked reversal', () => {
+  const harness = createHarness();
+  try {
+    const accounts = [
+      { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+      { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true }
+    ];
+    const original = {
+      id: 'direct-advance-entry', companyId: 'company-1', entryNumber: 1,
+      date: '2026-10-10', description: 'Anticipo directo proveedor',
+      type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: 'ADV-AUDIT-1',
+      items: [
+        { accountCode: '1.1.2.03', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+        { accountCode: '1.1.1.01', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+      ], createdAt: '2026-10-10T10:00:00.000Z'
+    };
+    const advance = {
+      id: 'direct-advance-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+      supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100,
+      bookValueBs: 10000, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+      paymentCurrency: 'BS', paidAmount: 10000, reference: 'ADV-AUDIT-1',
+      support: 'REC-AUDIT-1', journalEntryId: original.id,
+      createdAt: '2026-10-10T10:00:00.000Z'
+    };
+    const first = {
+      ...emptyState(), accounts, journalEntries: [original],
+      supplierDirectAdvances: [advance], supplierAdvanceSettlements: []
+    };
+    persistAccountingSnapshot(harness.db, first);
+    const posted = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='supplier_direct_advance_posted'").get();
+    assert.ok(posted);
+    const postedDetails = JSON.parse(posted.details_json);
+    assert.equal(postedDetails.directAdvanceId, advance.id);
+    assert.equal(postedDetails.journalEntryId, original.id);
+    assert.equal(postedDetails.support, 'REC-AUDIT-1');
+
+    const reversal = {
+      id: 'direct-advance-reversal', companyId: 'company-1', entryNumber: 2,
+      date: '2026-10-11', description: 'Reversión documentada del anticipo',
+      type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-ADV-AUDIT-1',
+      reversalOfEntryId: original.id, reversalReason: 'Desembolso duplicado verificado.',
+      workpaperNote: 'Se verificó el comprobante original antes de revertir.',
+      items: [
+        { accountCode: '1.1.2.03', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 },
+        { accountCode: '1.1.1.01', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 }
+      ], createdAt: '2026-10-11T10:00:00.000Z'
+    };
+    const reversed = {
+      ...first,
+      journalEntries: [
+        { ...original, reversedByEntryId: reversal.id, isAdjusted: true },
+        reversal
+      ],
+      supplierDirectAdvances: [{
+        ...advance, isReversed: true, reversedByJournalEntryId: reversal.id
+      }]
+    };
+    persistAccountingSnapshot(harness.db, reversed);
+    const reversalAudit = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='supplier_direct_advance_reversed'").get();
+    assert.ok(reversalAudit);
+    assert.equal(JSON.parse(reversalAudit.details_json).reversedByJournalEntryId, reversal.id);
   } finally {
     harness.db.close();
   }
