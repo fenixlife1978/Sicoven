@@ -17,6 +17,7 @@ import {
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { validateJournalEntryAccounts } from '../types/journalEntryValidation';
+import { buildOpeningEntryItems } from '../types/accountingYearOpening';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -76,6 +77,7 @@ interface AccountingContextType {
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
+  createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
@@ -353,6 +355,59 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return result.events || [];
   }, [token]);
 
+  const createAccountingYearOpening = async (input: {
+    periodStartDate: string;
+    periodEndDate: string;
+    openingDate: string;
+    retainedEarningsAccountCode?: string;
+  }): Promise<JournalEntry> => {
+    if (yearOpeningInFlightRef.current) throw new Error('Ya hay un asiento de apertura en proceso.');
+    if (persistenceFaultRef.current) throw new Error('La persistencia SQLite falló. Reinicie SICOVEN antes de continuar.');
+    if (!window.sicovenStore || !storageReady) throw new Error('La apertura contable solo puede registrarse cuando SQLite de escritorio esté disponible.');
+    if (!currentCompany.id) throw new Error('Seleccione una empresa antes de preparar la apertura.');
+    if (!currentCompany.closedThroughDate || currentCompany.closedThroughDate !== input.periodEndDate) {
+      throw new Error('El ejercicio debe estar cerrado exactamente hasta la fecha final indicada antes de registrar su apertura.');
+    }
+    const nextDay = new Date(input.periodEndDate + 'T00:00:00.000Z');
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    const expectedOpeningDate = nextDay.toISOString().slice(0, 10);
+    if (input.openingDate !== expectedOpeningDate) {
+      throw new Error('La fecha del asiento de apertura debe ser el día inmediatamente posterior al cierre.');
+    }
+    yearOpeningInFlightRef.current = true;
+    try {
+      const items = buildOpeningEntryItems({
+        companyId: currentCompany.id,
+        periodStartDate: input.periodStartDate,
+        periodEndDate: input.periodEndDate,
+        openingDate: input.openingDate,
+        accounts,
+        journalEntries,
+        retainedEarningsAccountCode: input.retainedEarningsAccountCode
+      });
+      const referenceDoc = 'APERTURA:' + currentCompany.id + ':' + input.openingDate;
+      if (journalEntries.some(entry => entry.companyId === currentCompany.id &&
+          (entry.type === 'APERTURA' && entry.date === input.openingDate || entry.referenceDoc === referenceDoc))) {
+        throw new Error('Ya existe un asiento de apertura para esta empresa y fecha.');
+      }
+      const created = addJournalEntry({
+        entryNumber: 0,
+        date: input.openingDate,
+        description: 'Asiento de apertura del ejercicio iniciado el ' + input.openingDate,
+        type: 'APERTURA',
+        bcvRate: currentCompany.bcvRate,
+        items,
+        referenceDoc
+      });
+      // El waiter se registra inmediatamente después del setState y antes del siguiente
+      // ciclo de efectos; solo se confirma al terminar el guardado transaccional SQLite.
+      await waitForPersistence();
+      return created;
+    } finally {
+      yearOpeningInFlightRef.current = false;
+    }
+  };
+
   const closeAccountingPeriod = async (closedThroughDate: string): Promise<void> => {
     if (periodClosureInFlightRef.current) throw new Error('Ya hay un cierre contable en proceso.');
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
@@ -556,6 +611,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const journalReversalInFlightRef = useRef(false);
   const productionInFlightRef = useRef(false);
   const periodClosureInFlightRef = useRef(false);
+  const yearOpeningInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
@@ -3900,6 +3956,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteJournalEntry,
         reverseJournalEntry,
         closeAccountingPeriod,
+        createAccountingYearOpening,
         creditSettlements: creditSettlements.filter(s => s.companyId === currentCompany.id),
         getCreditBalance,
         addCreditSettlement,
