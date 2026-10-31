@@ -52,7 +52,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
   }, [purchase.id]);
 
   const eligible = purchase.documentType === '01' && !purchase.isCancelled &&
-    purchase.paymentTerm === 'CREDITO' && Boolean(purchase.inventoryLines?.length);
+    ['CREDITO', 'CONTADO'].includes(purchase.paymentTerm || '') && Boolean(purchase.inventoryLines?.length);
   const invalidRows = rows.filter(row => !row.product || !row.originalMovement);
   const selectedLines = rows.flatMap(row => {
     const quantity = Number(quantities[row.line.productId] || 0);
@@ -118,7 +118,7 @@ export const PurchaseCreditNoteModal: React.FC<Props> = ({ purchase, onClose }) 
         </div>
         <form onSubmit={submit} className="flex min-h-0 flex-1 flex-col">
           <div className="flex-1 space-y-4 overflow-y-auto p-4 sm:p-5">
-            {!eligible && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />No elegible: el flujo automático requiere factura vigente a crédito y líneas de mercancía vinculadas al Kardex. Las compras de contado y facturas históricas sin detalle siguen bloqueadas.</div>}
+            {!eligible && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />No elegible: el flujo automático requiere factura vigente (contado o crédito) y líneas de mercancía vinculadas al Kardex. Las facturas históricas sin detalle siguen bloqueadas.</div>}
             {eligible && invalidRows.length > 0 && <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900"><AlertTriangle className="mr-2 inline h-4 w-4" />La factura tiene artículos sin conciliación única o sin cantidad pendiente. No se habilitará el registro parcial mientras falte esa conciliación.</div>}
             {error && <div role="alert" className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</div>}
             {success && <div role="status" className="rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">{success}</div>}
