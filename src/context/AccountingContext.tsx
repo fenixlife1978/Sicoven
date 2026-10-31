@@ -3741,7 +3741,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         }
         for (const allocation of directAllocations) {
           const source = directById.get(allocation.directAdvanceId);
-          if (!source || source.companyId !== settlement.companyId || source.isReversed ||
+          if (!source || source.companyId !== settlement.companyId || (source.isReversed && !settlement.isReversed) ||
               String(source.supplierRif || '').trim().toUpperCase() !== String(settlement.supplierRif || '').trim().toUpperCase()) {
             throw new Error('Una liquidación de anticipo referencia un desembolso directo inexistente, reversado o de otro proveedor/empresa.');
           }
