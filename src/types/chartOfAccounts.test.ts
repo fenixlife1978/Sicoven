@@ -29,6 +29,13 @@ describe('chart of accounts hierarchy validation', () => {
     assert.equal(result.level, 1);
   });
 
+  it('does not insert an intermediate parent that would silently reclassify existing children', () => {
+    assert.throws(
+      () => prepareAccountForCatalog(account({ code: '1.1.1', level: 3, isMovement: false }), DEFAULT_CHART_OF_ACCOUNTS),
+      /ya tiene subcuentas/
+    );
+  });
+
   it('rejects duplicate account codes rather than silently replacing an existing account', () => {
     assert.throws(
       () => prepareAccountForCatalog(account({ code: '1.1.1.01' }), DEFAULT_CHART_OF_ACCOUNTS),
