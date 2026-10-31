@@ -23,3 +23,10 @@ test('rechaza importes o tasas inválidos', () => {
   assert.throws(() => allocateSupplierCredit(10, 1000, 5, 0), /importes, saldo o tasa inválidos/);
   assert.throws(() => allocateSupplierCredit(10, 900, 5, 100), /no concilia entre Bs. y USD/);
 });
+
+test('conserva precisión USD suficiente para conciliar notas con tasa BCV y Bs.', () => {
+  const result = allocateSupplierCredit(1.0648, 106.48, 0, 100);
+  assert.equal(result.appliedToPayableUsd, 0);
+  assert.equal(result.supplierAdvanceUsd, 1.0648);
+  assert.equal(result.supplierAdvanceBs, 106.48);
+});
