@@ -144,7 +144,7 @@ export function selectHistoricalReportEntries<T extends {
   // Once it exists, adding all earlier ledger entries again would duplicate
   // every balance already represented by that opening journal entry.
   const latestOpeningDate = validCompanyEntries
-    .filter(entry => entry.type === 'APERTURA')
+    .filter(entry => entry.type === 'APERTURA' && Boolean(entry.exerciseLink?.nextPeriodStartDate))
     .reduce((latest, entry) => entry.date > latest ? entry.date : latest, '');
 
   return validCompanyEntries.filter(entry => !latestOpeningDate || entry.date >= latestOpeningDate);
