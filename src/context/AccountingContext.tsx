@@ -42,7 +42,7 @@ import { validateSaleSettlementMode } from '../types/saleSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
-import { validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
+import { allocateDirectSupplierAdvance, validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 
 export interface AccountingAuditEvent {
@@ -820,7 +820,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
-    calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id);
+    calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id, supplierDirectAdvances);
 
   const addSupplierDirectAdvance = async (draft: SupplierDirectAdvanceDraft): Promise<SupplierDirectAdvance> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
@@ -893,6 +893,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       !item.isCancelled && String(item.supplierRif || '').trim().toUpperCase() === rif &&
       Number(item.supplierAdvanceUsd || 0) > 0).sort((a, b) =>
         String(a.invoiceDate || '').localeCompare(String(b.invoiceDate || '')) || String(a.id).localeCompare(String(b.id)));
+    const sourceDirectAdvances = supplierDirectAdvances.filter(item => item.companyId === currentCompany.id &&
+      !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif)
+      .sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id));
     const target = draft.kind === 'APPLIED_TO_PURCHASE'
       ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && !item.isCancelled)
       : undefined;
@@ -944,27 +947,57 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             ? payable.outstandingBsAtInvoiceRate * amountUsd / payable.outstandingUsd
             : 0) * 100) / 100;
         })();
-    // Distribuir primero por nota fuente FIFO. El valor en libros debe salir
-    // de los importes históricos concretos consumidos, no de un promedio global.
-    const sourceCreditNoteAllocations = allocateSupplierAdvanceCreditNotes(
-      sourceNotes.map(note => ({
-        id: note.id,
-        amountUsd: Number(note.supplierAdvanceUsd || 0),
-        bookValueBs: Number(note.supplierAdvanceBs || 0)
-      })),
-      supplierAdvanceSettlements,
-      currentCompany.id,
-      rif,
-      amountUsd
-    );
+    // Consumir primero los saldos originados en notas de crédito y luego
+    // los desembolsos directos, cada origen con su valor histórico FIFO.
+    const activeSettlements = supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
+      !item.isReversed && String(item.supplierRif || '').trim().toUpperCase() === rif);
+    const noteConsumedUsd = activeSettlements.flatMap(item => item.sourceCreditNoteAllocations || [])
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const directConsumedUsd = activeSettlements.flatMap(item => item.sourceDirectAdvanceAllocations || [])
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const noteAvailableUsd = Math.max(0, sourceNotes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) - noteConsumedUsd);
+    const directAvailableUsd = Math.max(0, sourceDirectAdvances.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0) - directConsumedUsd);
+    if (amountUsd > noteAvailableUsd + directAvailableUsd + 0.005) {
+      throw new Error('La liquidación supera los anticipos disponibles de notas de crédito y desembolsos directos.');
+    }
+    const noteRequestedUsd = Math.min(amountUsd, noteAvailableUsd);
+    const directRequestedUsd = Math.max(0, amountUsd - noteRequestedUsd);
+    const sourceCreditNoteAllocations = noteRequestedUsd > 0.005
+      ? allocateSupplierAdvanceCreditNotes(
+          sourceNotes.map(note => ({
+            id: note.id,
+            amountUsd: Number(note.supplierAdvanceUsd || 0),
+            bookValueBs: Number(note.supplierAdvanceBs || 0)
+          })),
+          supplierAdvanceSettlements, currentCompany.id, rif, noteRequestedUsd
+        )
+      : [];
     const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
-    const advanceBookValueBs = Math.round(sourceCreditNoteAllocations.reduce(
-      (sum, allocation) => sum + allocation.bookValueBs, 0
+    const sourceDirectAdvanceAllocations = directRequestedUsd > 0.005
+      ? allocateDirectSupplierAdvance(
+          sourceDirectAdvances,
+          activeSettlements.map(item => ({
+            companyId: item.companyId, supplierRif: item.supplierRif,
+            allocations: item.sourceDirectAdvanceAllocations || [], isReversed: item.isReversed
+          })),
+          currentCompany.id, rif, directRequestedUsd
+        )
+      : [];
+    const sourceDirectAdvanceIds = sourceDirectAdvanceAllocations.map(item => item.directAdvanceId);
+    const advanceBookValueBs = Math.round((
+      sourceCreditNoteAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0) +
+      sourceDirectAdvanceAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0)
     ) * 100) / 100;
-    const allocationError = validateSupplierAdvanceCreditNoteAllocations(
-      sourceCreditNoteAllocations, sourceCreditNoteIds, amountUsd, advanceBookValueBs
-    );
-    if (allocationError) throw new Error(allocationError);
+    if (sourceCreditNoteAllocations.length) {
+      const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+        sourceCreditNoteAllocations, sourceCreditNoteIds, noteRequestedUsd,
+        sourceCreditNoteAllocations.reduce((sum, allocation) => sum + allocation.bookValueBs, 0)
+      );
+      if (allocationError) throw new Error(allocationError);
+    }
+    if (sourceDirectAdvanceAllocations.reduce((sum, item) => sum + item.amountUsd, 0) + 0.005 < directRequestedUsd) {
+      throw new Error('No se pudo distribuir el importe completo entre los desembolsos directos disponibles.');
+    }
 
     // Se reutiliza el cálculo FX con el valor histórico exacto de la asignación FIFO.
     const fxAmounts = calculateSupplierAdvanceFxSettlement(
@@ -1022,8 +1055,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       throw cause;
     }
     const settlement: SupplierAdvanceSettlement = {
-      ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || target?.supplierName || '',
-      sourceCreditNoteIds, sourceCreditNoteAllocations,
+      ...draft, supplierRif: rif, supplierName: sourceNotes[0]?.supplierName || sourceDirectAdvances[0]?.supplierName || target?.supplierName || '',
+      sourceCreditNoteIds, sourceCreditNoteAllocations, sourceDirectAdvanceIds, sourceDirectAdvanceAllocations,
       id: `supplier-advance-${currentCompany.id}-${Date.now()}`,
       companyId: currentCompany.id, amountUsd, amountBs: advanceBookValueBs, advanceBookValueBs,
       cashReceivedBs: draft.kind === 'REFUND_RECEIVED' ? settlementValueBs : undefined,
