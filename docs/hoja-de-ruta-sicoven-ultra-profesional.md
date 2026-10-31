@@ -33,6 +33,7 @@
 | 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge y post-merge escritorio/Windows SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 | 2.1. Corrección del corte acumulado de balances históricos | [#27](https://github.com/fenixlife1978/Sicoven/pull/27) | `9d8147e52b3e9be7c470c281537ddaf8e59c8692` | CI escritorio `41235602359` y Windows `41235602352` SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 | 2.2. Corrección de aperturas anuales y saldos históricos | [#29](https://github.com/fenixlife1978/Sicoven/pull/29) | `48e48bd6d4a1958125a8663759c8c244e361623d` | CI escritorio `41237562263` y Windows `41237562281` SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
+| 2.3. Estado de Cambios en el Patrimonio con trazabilidad | [#32](https://github.com/fenixlife1978/Sicoven/pull/32) | `2415abcd2a9645e44931343f0464c604190d9a60` | CI escritorio `41238252145` y Windows `41238252132` SUCCESS sobre SHA `f9a5f21dbd34334fe448b2428122cc1457a3839c`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -70,7 +71,20 @@ Los cinco subbloques están fusionados en `main`:
 - CI escritorio `41237562263` y Windows `41237562281`: SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y verificación de conservación de SQLite.
 - Commit de integración en `main`: `48e48bd6d4a1958125a8663759c8c244e361623d`.
 
-**Estado del Bloque 2:** el Estado de Situación Financiera, el Estado de Resultados y los comparativos históricos tienen avances integrados. El Estado de Cambios en el Patrimonio está en desarrollo en el PR #32; el Estado de Flujos de Efectivo y las notas/revelaciones continúan pendientes. No declarar terminado el bloque hasta cerrar todos esos componentes y sus conciliaciones.
+**Estado del Bloque 2:** están integrados el Estado de Situación Financiera, el Estado de Resultados, los comparativos históricos y el Estado de Cambios en el Patrimonio. El Estado de Flujos de Efectivo por método directo está en desarrollo en el PR #33; el método indirecto y las notas/revelaciones siguen pendientes. No declarar terminado el bloque hasta cerrar esos componentes y sus conciliaciones.
+
+### Bloque 2.3 — Estado de Cambios en el Patrimonio — integrado
+
+- **PR #32:** incorpora un roll-forward patrimonial en Bs. y USD a partir de las cuentas y asientos contabilizados.
+- Utiliza el asiento de apertura anual vinculado para el saldo inicial; cuando no existe, reconstruye saldos previos y resultados no transferidos.
+- Detalla los movimientos de cuentas patrimoniales y conserva vínculo con el asiento fuente.
+- Cuando el asiento CIERRE ya transfirió el resultado al patrimonio, lo incluye una sola vez; si no existe transferencia, muestra el resultado del ejercicio por separado.
+- Integra el estado en Reportes Anuales y en la exportación CSV.
+- No atribuye automáticamente aportes, dividendos, reservas o ajustes si el asiento no los identifica.
+- CI escritorio `41238252145` y Windows `41238252132`: SUCCESS sobre SHA `f9a5f21dbd34334fe448b2428122cc1457a3839c`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y conservación de SQLite.
+- Commit de integración en `main`: `2415abcd2a9645e44931343f0464c604190d9a60`.
+
+**Límite:** el estado presenta movimientos patrimoniales trazables, pero no inventa su naturaleza económica. Las revelaciones cualitativas y notas normativas siguen pendientes.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
