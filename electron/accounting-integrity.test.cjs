@@ -71,6 +71,50 @@ test('SQLite validates direct supplier advance disbursements against the exact c
   }), /importes, moneda, referencia o cuenta/);
 });
 
+test('SQLite accepts a linked contra-entry reversal of an unused direct supplier advance', () => {
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true }
+  ];
+  const original = {
+    id: 'advance-original', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Anticipo directo', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: 'ADV-REV-1', reversedByEntryId: 'advance-reversal',
+    isAdjusted: true,
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const reversal = {
+    id: 'advance-reversal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Reversión documentada del anticipo',
+    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-ADV-1',
+    reversalOfEntryId: 'advance-original', reversalReason: 'El desembolso fue registrado por duplicado.',
+    workpaperNote: 'Se verificó el comprobante original y el movimiento bancario antes de revertir.',
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const source = {
+    id: 'advance-source-reversed', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100, bookValueBs: 10000,
+    bcvRate: 100, treasuryAccountCode: '1.1.1.01', paymentCurrency: 'BS',
+    paidAmount: 10000, reference: 'ADV-REV-1', support: 'REC-REV-1',
+    journalEntryId: 'advance-original', createdAt: '2026-10-10T10:00:00.000Z',
+    isReversed: true, reversedByJournalEntryId: 'advance-reversal'
+  };
+  const previous = {
+    ...emptyState([ { ...original, reversedByEntryId: undefined, isAdjusted: undefined } ]),
+    accounts, supplierDirectAdvances: [{ ...source, isReversed: false, reversedByJournalEntryId: undefined }]
+  };
+  const next = {
+    ...emptyState([original, reversal]), accounts, supplierDirectAdvances: [source]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+});
+
 test('SQLite accepts a direct supplier advance refund allocated to its original cash disbursement', () => {
   const accounts = [
     { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
