@@ -7,6 +7,7 @@ import {
   type SupplierDirectAdvance
 } from './supplierDirectAdvance';
 import type { Account } from './accounting';
+import { calculateOutstandingSupplierAdvance } from './supplierAdvance';
 
 const accounts: Account[] = [
   { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', level: 4, isMovement: true },
@@ -48,7 +49,6 @@ describe('supplier direct advances', () => {
   });
 
   it('combines credit-note balances and direct disbursements without mixing companies', () => {
-    const { calculateOutstandingSupplierAdvance } = require('./supplierAdvance') as typeof import('./supplierAdvance');
     const creditNote = {
       id: 'note-1', companyId: 'company-1', documentType: '03',
       supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
