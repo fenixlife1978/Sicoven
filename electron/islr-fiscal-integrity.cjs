@@ -39,9 +39,6 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
     }
   }
 
-  const reversed = new Set(next
-    .filter(event => oldById.has(String(event.id)) && event.kind === 'REVERSAL')
-    .map(event => String(event.reversalOfEventId || '')));
   // Reservar secuencias históricas como claves ocupadas, sin rechazar
   // duplicados preexistentes de datos legacy. Solo se validan eventos nuevos.
   const sequences = new Set(previous

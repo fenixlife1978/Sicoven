@@ -107,7 +107,9 @@ export const RetencionesIslrView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = periodEvents.some(event => event.kind === 'REVERSAL') || periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
+  const periodEventIds = new Set(periodEvents.filter(event => event.kind !== 'REVERSAL').map(event => event.id));
+  const hasRelatedFiscalReversal = companyFiscalEvents.some(event => event.kind === 'REVERSAL' && periodEventIds.has(String(event.reversalOfEventId || '')));
+  const hasPendingFiscalCorrection = periodEvents.some(event => event.kind === 'REVERSAL') || hasRelatedFiscalReversal || periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
   const fiscalEventRetainedBs = periodEvents.reduce((sum, event) =>
     sum + (event.kind === 'REVERSAL' ? -1 : 1) * Number(event.withheldAmountBs || 0), 0);
   const fiscalEventRetainedUsd = periodEvents.reduce((sum, event) => {

@@ -57,9 +57,6 @@ export function validateIslrFiscalEventLedger(
   }
 
   // Los eventos antiguos ya reversados también bloquean una segunda reversión.
-  const reversed = new Set<string>(next
-    .filter(item => oldById.has(String(item.id)) && item.kind === 'REVERSAL')
-    .map(item => String(item.reversalOfEventId || '')));
   for (const event of next) {
     if (oldById.has(String(event.id))) continue;
     if (!event.id || !event.companyId || !event.supplierRif || !event.conceptCode ||
