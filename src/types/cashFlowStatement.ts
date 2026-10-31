@@ -252,7 +252,10 @@ export function buildCashFlowReport(
     }
   }
 
-  const ledgerClosing = companyEntries.reduce((sum, entry) => {
+  // Reconcile against the same opening basis: a linked annual opening supersedes
+  // the prior-year ledger movements for this year's opening balance.
+  const ledgerEntries = annualOpening ? [annualOpening, ...periodEntries] : companyEntries;
+  const ledgerClosing = ledgerEntries.reduce((sum, entry) => {
     const net = cashNet(entry, cashCodes);
     return { bs: sum.bs + net.bs, usd: sum.usd + net.usd };
   }, { bs: 0, usd: 0 });
