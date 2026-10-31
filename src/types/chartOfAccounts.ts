@@ -28,6 +28,9 @@ export function prepareAccountForCatalog(account: Account, existing: Account[]):
   if (existing.some(item => item.code === code)) {
     throw new Error('Ya existe una cuenta con ese código. No se reemplazó ni modificó la cuenta existente.');
   }
+  if (existing.some(item => item.code.startsWith(code + '.'))) {
+    throw new Error('El código ya tiene subcuentas registradas. No se puede insertar un nivel intermedio sin una reclasificación controlada.');
+  }
 
   const segments = code.split('.');
   const level = segments.length;
