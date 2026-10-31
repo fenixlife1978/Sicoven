@@ -13,6 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { hasAccountMovement, isTrialBalanceBalanced } from '../../types/accountingReportIntegrity';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
@@ -158,7 +159,7 @@ export const BalancesView: React.FC = () => {
       adjustedDebitUsd,
       adjustedCreditUsd,
 
-      hasMovement: totalDebitBs > 0 || totalCreditBs > 0
+      hasMovement: hasAccountMovement({ debitBs: totalDebitBs, creditBs: totalCreditBs, debitUsd: totalDebitUsd, creditUsd: totalCreditUsd })
     };
   });
 
@@ -176,9 +177,16 @@ export const BalancesView: React.FC = () => {
   const sumCreditBalancesUsd = activeAccounts.reduce((s, a) => s + a.adjustedCreditUsd, 0);
 
   // Check equality
-  const isComprobacionSquare =
-    Math.abs(sumTotalDebitBs - sumTotalCreditBs) < 0.05 &&
-    Math.abs(sumDebitBalancesBs - sumCreditBalancesBs) < 0.05;
+  const isComprobacionSquare = isTrialBalanceBalanced({
+    totalDebitBs: sumTotalDebitBs,
+    totalCreditBs: sumTotalCreditBs,
+    debitBalancesBs: sumDebitBalancesBs,
+    creditBalancesBs: sumCreditBalancesBs,
+    totalDebitUsd: sumTotalDebitUsd,
+    totalCreditUsd: sumTotalCreditUsd,
+    debitBalancesUsd: sumDebitBalancesUsd,
+    creditBalancesUsd: sumCreditBalancesUsd
+  });
 
   // Balance General Calculations (VEN-NIF)
   const activoAccounts = activeAccounts.filter(a => a.type === 'ACTIVO');

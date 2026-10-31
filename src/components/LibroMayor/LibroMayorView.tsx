@@ -13,6 +13,7 @@ import {
 import { formatBs, formatUsd, formatDate } from '../../utils/formatters';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportMayorPdf } from '../../utils/pdfGenerator';
+import { getAccountBalanceNature } from '../../types/accountingReportIntegrity';
 
 interface LedgerMovement {
   entryId: string;
@@ -126,6 +127,7 @@ export const LibroMayorView: React.FC = () => {
 
       const netBs = totalDebitBs - totalCreditBs;
       const netUsd = totalDebitUsd - totalCreditUsd;
+      const balanceBs = isDebitNature ? netBs : -netBs;
 
       return {
         code: acc.code,
@@ -136,9 +138,9 @@ export const LibroMayorView: React.FC = () => {
         totalCreditBs,
         totalDebitUsd,
         totalCreditUsd,
-        balanceBs: isDebitNature ? netBs : -netBs,
+        balanceBs,
         balanceUsd: isDebitNature ? netUsd : -netUsd,
-        balanceNature: netBs >= 0 ? ('DEUDOR' as const) : ('ACREEDOR' as const)
+        balanceNature: getAccountBalanceNature(balanceBs, isDebitNature)
       };
     })
     .filter(acc => acc.movements.length > 0);
