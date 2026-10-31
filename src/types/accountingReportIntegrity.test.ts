@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   filterEntriesByCompany,
   getAccountBalanceNature,
+  getUnclosedResultContribution,
   hasAccountMovement,
   isBalanceSheetBalanced,
   isTrialBalanceBalanced,
@@ -61,6 +62,13 @@ describe('accounting report integrity', () => {
     };
     assert.equal(isTrialBalanceBalanced({ ...totals, totalDebitUsd: Number.NaN }), false);
     assert.equal(isTrialBalanceBalanced({ ...totals, totalDebitBs: -1 }), false);
+  });
+
+  it('applies income, cost and expense signs to unclosed result in both currencies', () => {
+    assert.deepEqual(getUnclosedResultContribution('INGRESOS', 0, 100, 0, 10), { bs: 100, usd: 10 });
+    assert.deepEqual(getUnclosedResultContribution('COSTOS', 30, 0, 3, 0), { bs: 30, usd: 3 });
+    assert.deepEqual(getUnclosedResultContribution('GASTOS', 20, 0, 2, 0), { bs: 20, usd: 2 });
+    assert.deepEqual(getUnclosedResultContribution('ACTIVO', 20, 10, 2, 1), { bs: 0, usd: 0 });
   });
 
   it('labels debit and credit nature according to normal account balance', () => {
