@@ -2006,7 +2006,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const fiscalReversalEvents: IslrFiscalEvent[] = [];
     if (originalIslrEvents.length > 0 && valuation.taxableBaseBs > 0.01) {
       const reversalAllocations = allocateIslrFiscalReversal(
-        islrFiscalEvents, purchase.id, Number(valuation.taxableBaseBs)
+        islrFiscalEvents, purchase.id, Number(valuation.taxableBaseBs), currentCompany.id
       );
       const totalReversalWithheld = Math.round(reversalAllocations.reduce(
         (sum, allocation) => sum + allocation.withheldAmountBs, 0
@@ -3821,7 +3821,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const eligibleBaseByPurchase: Record<string, number> = {};
       for (const purchase of data.purchases as PurchaseRecord[]) {
         if (purchase.documentType === '01' && !purchase.isCancelled) {
-          eligibleBaseByPurchase[purchase.id] = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs);
+          eligibleBaseByPurchase[`${purchase.companyId}|${purchase.id}`] = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs);
         }
       }
       validateIslrFiscalEventLedger([], islrFiscalEvents, eligibleBaseByPurchase);
