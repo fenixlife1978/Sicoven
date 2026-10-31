@@ -86,14 +86,14 @@ export const ISLR_FORMULA_FACTOR = 83.3334;
  * UT aplicable al período mensual, según el valor vigente al inicio del mes.
  * La providencia de junio de 2025 rige desde el 02/06/2025, por lo que junio
  * conserva UT 9 y julio 2025 inicia con UT 43. No se extrapolan valores
- * anteriores a noviembre de 2021, cuando cambió la escala monetaria.
+ * anteriores a octubre de 2021, cuando entró en vigor la reconversión monetaria.
  */
 export function getIslrUnitTaxValueForPeriod(period: string): number | null {
   if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return null;
   if (period >= '2025-07') return 43;
   if (period >= '2023-06') return 9;
   if (period >= '2022-05') return 0.4;
-  if (period >= '2021-11') return 0.02;
+  if (period >= '2021-10') return 0.02;
   return null;
 }
 
