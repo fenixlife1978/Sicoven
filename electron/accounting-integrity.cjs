@@ -235,7 +235,7 @@ function validateNoNewTransactionsInClosedPeriods(previousState, nextState) {
       if (priorIds.has(String(item.id))) continue;
       const closedThrough = closedByCompany.get(String(item.companyId));
       const transactionDate = String(item[dateField] || '');
-      if (closedThrough && /^\\d{4}-\\d{2}-\\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
+      if (closedThrough && /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
         const company = priorCompanies.get(String(item.companyId)) ||
           asArray(nextState.companies).find(candidate => String(candidate.id) === String(item.companyId));
         throw new Error('SQLite bloqueó el registro de ' + label + ' con fecha ' + transactionDate +
