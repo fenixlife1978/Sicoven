@@ -1,3 +1,4 @@
+const crypto = require('node:crypto');
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 
 function persistAccountingSnapshot(db, state, actor = null) {
@@ -186,6 +187,92 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       typeof licenseView !== 'function' || typeof getActiveSession !== 'function') {
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS period_reopenings (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      company_name TEXT NOT NULL,
+      previous_closed_through_date TEXT NOT NULL,
+      reopened_through_date TEXT,
+      reason TEXT NOT NULL,
+      actor_user_id INTEGER NOT NULL,
+      actor_username TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_update
+      BEFORE UPDATE ON period_reopenings
+      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS period_reopenings_no_delete
+      BEFORE DELETE ON period_reopenings
+      BEGIN SELECT RAISE(ABORT, 'period_reopenings is append-only'); END;
+  `);
+  ipcMain.handle('sicoven:reopen-accounting-period', (_event, token, input) => {
+    const licensing = licenseView();
+    if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
+    const actor = getActiveSession(token);
+    if (!actor) throw new Error('Sesión no válida. Inicie sesión para reabrir un período.');
+    if (actor.role !== 'admin') throw new Error('Permiso insuficiente: solo un administrador puede reabrir períodos contables.');
+    if (!input || typeof input !== 'object' || Array.isArray(input)) throw new Error('Solicitud de reapertura inválida.');
+    const companyId = String(input.companyId || '').trim();
+    const reason = String(input.reason || '').trim();
+    const reopenedThroughDate = input.reopenedThroughDate === null || input.reopenedThroughDate === ''
+      ? null : String(input.reopenedThroughDate);
+    if (!companyId) throw new Error('Seleccione una empresa para reabrir el período.');
+    if (reason.length < 10 || reason.length > 1000) throw new Error('El motivo de reapertura es obligatorio y debe tener entre 10 y 1000 caracteres.');
+    if (reopenedThroughDate !== null && !/^\\d{4}-\\d{2}-\\d{2}$/.test(reopenedThroughDate)) {
+      throw new Error('La nueva fecha de cierre debe ser una fecha ISO válida o quedar vacía para reabrir todo el período.');
+    }
+    if (reopenedThroughDate !== null) {
+      const parsed = new Date(reopenedThroughDate + 'T00:00:00.000Z');
+      if (!Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== reopenedThroughDate) {
+        throw new Error('La nueva fecha de cierre no existe en el calendario.');
+      }
+    }
+    const reopen = db.transaction(() => {
+      const row = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
+      if (!row) throw new Error('No existe un estado contable persistido para reabrir.');
+      let state;
+      try { state = JSON.parse(row.state_json); }
+      catch { throw new Error('El estado contable SQLite es ilegible; se bloqueó la reapertura para proteger el historial.'); }
+      if (!state || !Array.isArray(state.companies)) throw new Error('El estado contable no contiene empresas válidas.');
+      const company = state.companies.find(item => String(item.id) === companyId);
+      if (!company) throw new Error('La empresa seleccionada no existe en SQLite.');
+      const previousClosedThroughDate = String(company.closedThroughDate || '');
+      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(previousClosedThroughDate)) {
+        throw new Error('La empresa no tiene un cierre contable vigente para reabrir.');
+      }
+      if (reopenedThroughDate !== null && reopenedThroughDate >= previousClosedThroughDate) {
+        throw new Error('La nueva fecha debe ser anterior al cierre vigente para que exista una reapertura efectiva.');
+      }
+      if (reopenedThroughDate === null && !previousClosedThroughDate) {
+        throw new Error('No existe un período cerrado que pueda reabrirse.');
+      }
+      const reopeningId = crypto.randomUUID();
+      const nextState = {
+        ...state,
+        companies: state.companies.map(item => String(item.id) === companyId
+          ? { ...item, ...(reopenedThroughDate ? { closedThroughDate: reopenedThroughDate } : { closedThroughDate: undefined }) }
+          : item)
+      };
+      const json = JSON.stringify(nextState);
+      if (json.length > 50 * 1024 * 1024) throw new Error('El estado contable supera el límite permitido.');
+      db.prepare("UPDATE app_state SET state_json=?, updated_at=datetime('now') WHERE state_key='accounting'").run(json);
+      const details = {
+        reopeningId, companyId, companyName: String(company.name || ''),
+        previousClosedThroughDate, reopenedThroughDate,
+        reason, actor: { userId: actor.id, username: actor.username }
+      };
+      db.prepare(`INSERT INTO period_reopenings
+        (id,company_id,company_name,previous_closed_through_date,reopened_through_date,reason,actor_user_id,actor_username)
+        VALUES(?,?,?,?,?,?,?,?)`)
+        .run(reopeningId, companyId, String(company.name || ''), previousClosedThroughDate,
+          reopenedThroughDate, reason, Number(actor.id), String(actor.username || ''));
+      db.prepare('INSERT INTO audit_events(event_type,details_json) VALUES(?,?)')
+        .run('accounting_period_reopened', JSON.stringify(details));
+      return { ok: true, company: nextState.companies.find(item => String(item.id) === companyId), reopeningId };
+    });
+    return reopen();
+  });
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
