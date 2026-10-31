@@ -43,6 +43,16 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   const sequences = new Set();
   for (const event of next) {
     const id = String(event?.id || '');
+    // La unicidad se aplica al libro completo, incluidos eventos históricos.
+    // No revalidamos la estructura legacy, pero tampoco permitimos colisiones nuevas.
+    if (event && event.companyId && isValidDate(event.fiscalDate) &&
+        Number.isInteger(event.sequence) && event.sequence > 0) {
+      const sequenceKey = [event.companyId, event.fiscalDate, event.sequence].join('|');
+      if (sequences.has(sequenceKey)) {
+        throw new Error('SQLite rechazó una secuencia de eventos ISLR duplicada para la empresa y fecha.');
+      }
+      sequences.add(sequenceKey);
+    }
     if (oldById.has(id)) continue;
     if (!id || !event.companyId || !event.supplierRif || !event.conceptCode ||
         !isValidDate(event.fiscalDate) || !Number.isInteger(event.sequence) || event.sequence <= 0 ||
