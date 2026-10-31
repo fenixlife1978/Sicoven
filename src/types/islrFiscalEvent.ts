@@ -73,12 +73,12 @@ export function validateIslrFiscalEventLedger(
       fail('El snapshot de UT del evento fiscal ISLR no coincide con el valor verificado para su fecha.');
     }
     if (event.kind === 'REVERSAL') {
-      const reversalOfEventId = event.reversalOfEventId;
+      const reversalOfEventId = String(event.reversalOfEventId || '');
       if (!reversalOfEventId || !event.reversalReason?.trim()) {
-        fail('La reversión fiscal requiere evento original y justificación.');
+        throw new Error('La reversión fiscal requiere evento original y justificación.');
       }
       const original = nextById.get(reversalOfEventId);
-      if (!original) fail('La reversión fiscal no encuentra el evento original.');
+      if (!original) throw new Error('La reversión fiscal no encuentra el evento original.');
       if (original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
           original.supplierRif !== event.supplierRif || original.conceptCode !== event.conceptCode ||
           original.allocations.length !== event.allocations.length ||
