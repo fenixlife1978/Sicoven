@@ -159,6 +159,16 @@ export function buildCashFlowReport(
     );
     if (Math.abs(counterpartTotal - Math.abs(net)) > tolerance || counterpartLines.length === 0) {
       recordUnclassified(net, currency);
+      lines.push({
+        entryId: entry.id, entryNumber: entry.entryNumber, date: entry.date,
+        description: 'Movimiento de efectivo sin contrapartida conciliada: ' + entry.description,
+        referenceDoc: entry.referenceDoc, accountCode: 'NO-CLASIFICADO',
+        accountName: 'Contrapartida no conciliada', activity: 'SIN_CLASIFICAR',
+        receiptsBs: currency === 'bs' && net > 0 ? net : 0,
+        paymentsBs: currency === 'bs' && net < 0 ? Math.abs(net) : 0,
+        receiptsUsd: currency === 'usd' && net > 0 ? net : 0,
+        paymentsUsd: currency === 'usd' && net < 0 ? Math.abs(net) : 0
+      });
       return;
     }
     for (const item of counterpartLines) {
@@ -170,7 +180,18 @@ export function buildCashFlowReport(
           : 'SIN_CLASIFICAR';
       const value = counterpartAmount(item, side, currency);
       if (section === 'SIN_CLASIFICAR') {
-        recordUnclassified(net > 0 ? value : -value, currency);
+        const signedValue = net > 0 ? value : -value;
+        recordUnclassified(signedValue, currency);
+        lines.push({
+          entryId: entry.id, entryNumber: entry.entryNumber, date: entry.date,
+          description: item.description || entry.description, referenceDoc: entry.referenceDoc,
+          accountCode: item.accountCode, accountName: account?.name || item.accountName,
+          activity: 'SIN_CLASIFICAR',
+          receiptsBs: currency === 'bs' && signedValue > 0 ? value : 0,
+          paymentsBs: currency === 'bs' && signedValue < 0 ? value : 0,
+          receiptsUsd: currency === 'usd' && signedValue > 0 ? value : 0,
+          paymentsUsd: currency === 'usd' && signedValue < 0 ? value : 0
+        });
         candidates.set(item.accountCode, { accountCode: item.accountCode, accountName: account?.name || item.accountName, activity });
         continue;
       }
