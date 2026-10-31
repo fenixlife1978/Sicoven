@@ -89,19 +89,20 @@ test('rejects a second reversal of an event already reversed in persisted histor
 });
 
 test('preserves legacy duplicate sequences while rejecting new collisions', () => {
-  const legacyOne = event({ id: 'legacy-1', sequence: 7 });
-  const legacyTwo = event({ id: 'legacy-2', sequence: 7 });
+  const eligibleWithSecond = { ...eligible, 'purchase-2': 1000 };
+  const legacyOne = event({ id: 'legacy-1', sequence: 7, allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 400 }] });
+  const legacyTwo = event({ id: 'legacy-2', sequence: 7, allocations: [{ purchaseId: 'purchase-2', baseAmountBs: 400 }] });
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(
-    [legacyOne, legacyTwo], [legacyOne, legacyTwo], eligible
+    [legacyOne, legacyTwo], [legacyOne, legacyTwo], eligibleWithSecond
   ));
   assert.throws(() => validateIslrFiscalEventLedger(
     [legacyOne, legacyTwo],
-    [legacyOne, legacyTwo, event({ id: 'new-collision', sequence: 7 })],
-    eligible
+    [legacyOne, legacyTwo, event({ id: 'new-collision', sequence: 7, allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }] })],
+    eligibleWithSecond
   ), /secuencia.*duplicada/);
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(
     [legacyOne, legacyTwo],
-    [legacyOne, legacyTwo, event({ id: 'new-sequence', sequence: 8 })],
-    eligible
+    [legacyOne, legacyTwo, event({ id: 'new-sequence', sequence: 8, allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }] })],
+    eligibleWithSecond
   ));
 });
