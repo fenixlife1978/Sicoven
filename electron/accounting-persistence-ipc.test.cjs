@@ -388,3 +388,44 @@ test('SQLite rejects duplicate exercise openings atomically but allows the same 
     assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 2);
   } finally { harness.db.close(); }
 });
+
+test('a reopened and reclosed exercise can be opened once with a durable link to its prior period', () => {
+  const harness = createHarness();
+  try {
+    persistClosedCompanyFixture(harness.db);
+    harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: null,
+      reason: 'Reapertura integral autorizada para corregir el ejercicio completo.'
+    });
+    let state = JSON.parse(harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    state = {
+      ...state,
+      companies: state.companies.map(company => company.id === 'company-1'
+        ? { ...company, closedThroughDate: '2026-12-31' } : company)
+    };
+    harness.handler({}, 'valid-session', state);
+    const opening = {
+      id: 'opening-after-reclose', companyId: 'company-1', entryNumber: 2,
+      date: '2027-01-01', description: 'Apertura posterior a reapertura autorizada',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' },
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    state = {
+      ...state,
+      accounts: [
+        { code: '1.1.1', name: 'Banco', type: 'ACTIVO', isMovement: true },
+        { code: '3.1.1', name: 'Patrimonio', type: 'PATRIMONIO', isMovement: true }
+      ],
+      journalEntries: [...state.journalEntries, opening]
+    };
+    harness.handler({}, 'valid-session', state);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 3);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 1);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 1);
+  } finally { harness.db.close(); }
+});
