@@ -2,6 +2,15 @@
 
 ## Gobierno del proyecto
 
+### Regla arquitectónica innegociable: escritorio y SQLite local
+
+- **SICOVEN es y será exclusivamente un software de escritorio.** Su funcionamiento operativo no depende ni dependerá de Vercel, ni de plataformas de hosting, despliegue o ejecución web de terceros.
+- **Vercel no es de interés para el proyecto y queda fuera de su arquitectura, operación, validación y criterios de finalización.** No se utilizará como destino de despliegue, backend, base de datos, servicio auxiliar ni requisito para compilar, instalar, actualizar o ejecutar SICOVEN.
+- **SQLite local es la única base de datos operativa y la única fuente de la verdad.** Los datos contables y empresariales se leen y escriben en la base SQLite local del equipo donde se ejecuta SICOVEN.
+- La aplicación debe poder funcionar de forma autónoma en escritorio, sin conexión obligatoria a Vercel ni dependencia de servicios remotos para las operaciones contables, fiscales, auxiliares o administrativas.
+- Cualquier integración externa futura será opcional, explícita y subordinada a SQLite local; nunca podrá sustituirla, convertirse en autoridad de datos ni impedir la operación local.
+- Las compilaciones, pruebas, instaladores, actualizaciones, respaldos y restauraciones se validarán en el entorno de escritorio correspondiente. Los límites, errores o estados de Vercel no constituyen bloqueos ni señales de calidad o disponibilidad de SICOVEN.
+
 - Repositorio único: `fenixlife1978/Sicoven`.
 - Rama estable: `main`. Esta rama de hoja de ruta no sustituye a `main`.
 - Versión de referencia del código: 1.0.7.
