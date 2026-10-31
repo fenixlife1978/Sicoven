@@ -1184,8 +1184,7 @@ test('SQLite accepts a supplier credit note from a cash purchase as a supplier a
   original.paymentAccountCode = '1.1.1.01';
   original.paymentReference = 'EG-100';
   const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
-  const originalPayable = originalEntry.items.find(item => item.accountCode === '2.1.1.01');
-  originalPayable.accountCode = '1.1.1.01';
+  originalEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '1.1.1.01';
   const treasury = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
   prior.accounts = [treasury];
   next.accounts = [treasury];
@@ -1195,8 +1194,9 @@ test('SQLite accepts a supplier credit note from a cash purchase as a supplier a
   note.supplierAdvanceBs = 106.48;
   note.supplierAdvanceUsd = 1.0648;
   const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
-  const payableDebit = noteEntry.items.find(item => item.accountCode === '2.1.1.01');
-  payableDebit.accountCode = '1.1.2.03';
+  noteEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '1.1.2.03';
+  assert.equal(originalEntry.items.some(item => String(item.accountCode).startsWith('2.1.1.')), false);
+  assert.equal(noteEntry.items.some(item => String(item.accountCode).startsWith('2.1.1.')), false);
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
 });
 
@@ -1216,7 +1216,12 @@ test('SQLite rejects a cash-purchase credit note that posts any amount to a fict
   note.supplierAdvanceBs = 106.48;
   note.supplierAdvanceUsd = 1.0648;
   const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
-  noteEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '1.1.2.03';
+  const advanceDebit = noteEntry.items.find(item => item.accountCode === '2.1.1.01');
+  advanceDebit.accountCode = '1.1.2.03';
+  advanceDebit.debitBs = 105.48;
+  advanceDebit.debitUsd = 1.0548;
   noteEntry.items.push({ accountCode: '2.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 });
+  assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado|no revierte CxP|modalidad de pago/);
+});
   assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no está balanceado|no está balanceado o no revierte CxP/);
 });
