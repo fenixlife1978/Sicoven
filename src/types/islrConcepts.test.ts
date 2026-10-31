@@ -38,6 +38,16 @@ test('ISLR calculation uses the UT snapshot applicable to the period', () => {
   assert.equal(july.subtrahendBs, 107.5);
 });
 
+test('monthly ISLR accumulation preserves the period UT for every invoice', async () => {
+  const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
+  const first = calculateMonthlyIslrRetention(10000, [], concept('002'), 9);
+  assert.deepEqual(first, { rate: 3, subtrahendBs: 22.5, withheldAmountBs: 277.5 });
+  const second = calculateMonthlyIslrRetention(10000, [
+    { baseAmountBs: 10000, subtrahendBs: first.subtrahendBs, withheldAmountBs: first.withheldAmountBs }
+  ], concept('002'), 9);
+  assert.deepEqual(second, { rate: 3, subtrahendBs: 0, withheldAmountBs: 300 });
+});
+
 test('code 002 applies the legal 3% formula and UT 43 sustraendo', () => {
   const result = calculateIslrRetention(10000, concept('002'));
   assert.equal(result.rate, 3);
