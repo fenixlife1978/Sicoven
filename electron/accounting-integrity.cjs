@@ -1106,7 +1106,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         !['BS', 'USD'].includes(advance.paymentCurrency) ||
         !Number.isFinite(paidAmount) || paidAmount <= 0 ||
         Math.abs(paidAmount - (advance.paymentCurrency === 'USD' ? amountUsd : bookValueBs)) > 0.02 ||
-        !String(advance.reference || '').trim() ||
+        !String(advance.reference || '').trim() || !String(advance.support || '').trim() ||
         !account || account.type !== 'ACTIVO' || !account.isMovement ||
         !String(account.code).startsWith('1.1.1.') ||
         !String(advance.journalEntryId || '').trim()) {
