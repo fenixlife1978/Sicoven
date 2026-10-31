@@ -77,6 +77,7 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
     }
 
     const allocationIds = new Set();
+    let accountCreditWithheldTotal = 0;
     for (const allocation of event.allocations) {
       const purchase = purchaseById.get(String(allocation?.purchaseId || ''));
       if (!purchase || purchase.documentType !== '01' || purchase.isCancelled ||
@@ -91,7 +92,26 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
           Number(allocation.baseAmountBs) > eligibleBase + 0.01) {
         throw new Error('SQLite rechazó una asignación ISLR superior a la base de la factura antes del IVA.');
       }
+      if (event.kind === 'ACCOUNT_CREDIT') {
+        if (purchase.islrConceptCode !== event.conceptCode ||
+            Math.abs(Number(purchase.islrBasePercentage) - Number(event.basePercentage)) > 0.000001 ||
+            Math.abs(Number(purchase.islrUnitTaxValueBs) - Number(event.unitTaxValueBs)) > 0.000001 ||
+            Math.abs(Number(allocation.baseAmountBs) - Number(purchase.taxableBaseBs)) > 0.01) {
+          throw new Error('SQLite rechazó un abono ISLR que no coincide con el concepto, base y snapshot fiscal de la factura.');
+        }
+        accountCreditWithheldTotal += Number(purchase.islrWithheldBs || 0);
+      }
       allocationIds.add(String(allocation.purchaseId));
+    }
+    if (event.kind === 'ACCOUNT_CREDIT') {
+      const journalWithheld = (Array.isArray(journal.items) ? journal.items : [])
+        .filter(item => item.accountCode === '2.1.2.04')
+        .reduce((sum, item) => sum + Number(item.creditBs || 0) - Number(item.debitBs || 0), 0);
+      if (journal.type !== 'COMPRA' ||
+          Math.abs(accountCreditWithheldTotal - Number(event.withheldAmountBs)) > 0.01 ||
+          Math.abs(journalWithheld - Number(event.withheldAmountBs)) > 0.01) {
+        throw new Error('SQLite rechazó el evento de abono ISLR: el asiento de compra no concilia la retención con el libro fiscal.');
+      }
     }
 
     if (event.kind === 'REVERSAL' && !oldById.has(id)) {
