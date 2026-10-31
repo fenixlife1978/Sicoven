@@ -96,3 +96,21 @@ test('requires and reconciles an ISLR voucher for positive account-credit withho
     ...next, islrVouchers: [{ ...voucher, withheldAmountBs: 4 }]
   }), /comprobante emitido no existe/);
 });
+
+test('SQLite accepts cumulative partial ISLR reversals and rejects over-reversal', () => {
+  const purchase = { id: 'p1', companyId: 'c1', supplierRif: 'J-12345678-9', documentType: '01', taxableBaseBs: 1000, exemptAmountBs: 0, isCancelled: false };
+  const originalJournal = { id: 'j0', companyId: 'c1', date: '2026-10-01' };
+  const reversalJournal = (id, amount) => ({ id, companyId: 'c1', date: '2026-10-10', type: 'AJUSTE', items: [{ accountCode: '2.1.2.04', debitBs: amount, creditBs: 0 }] });
+  const original = { id: 'e0', companyId: 'c1', supplierRif: 'J-12345678-9', conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT', allocations: [{ purchaseId: 'p1', baseAmountBs: 1000 }], basePercentage: 100, unitTaxValueBs: 43, withheldAmountBs: 100, journalEntryId: 'j0', createdAt: '2026-10-01T10:00:00.000Z' };
+  const reversal = (id, sequence, base, amount, journalId) => ({ id, companyId: 'c1', supplierRif: 'J-12345678-9', conceptCode: '003', fiscalDate: '2026-10-10', sequence, kind: 'REVERSAL', allocations: [{ purchaseId: 'p1', baseAmountBs: base }], basePercentage: 100, unitTaxValueBs: 43, withheldAmountBs: amount, journalEntryId: journalId, reversalOfEventId: 'e0', reversalReason: 'Devolución parcial documentada', createdAt: '2026-10-10T10:00:00.000Z' });
+  const previous = { purchases: [purchase], journalEntries: [originalJournal], islrVouchers: [], islrFiscalEvents: [] };
+  const first = reversal('r1', 1, 300, 30, 'jr1');
+  const second = reversal('r2', 2, 200, 20, 'jr2');
+  const next = { purchases: [purchase], journalEntries: [originalJournal, reversalJournal('jr1', 30), reversalJournal('jr2', 20)], islrVouchers: [], islrFiscalEvents: [original, first, second] };
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
+  const excessive = reversal('r3', 3, 600, 60, 'jr3');
+  assert.throws(() => validateIslrFiscalEventLedger(previous, {
+    ...next, journalEntries: [...next.journalEntries, reversalJournal('jr3', 60)],
+    islrFiscalEvents: [...next.islrFiscalEvents, excessive]
+  }), /supera la base pendiente/);
+});

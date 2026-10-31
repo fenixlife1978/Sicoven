@@ -106,3 +106,24 @@ test('preserves legacy duplicate sequences while rejecting new collisions', () =
     eligibleWithSecond
   ));
 });
+
+test('supports cumulative partial ISLR reversals without releasing unreversed base', () => {
+  const original = event({ withheldAmountBs: 100 });
+  const first = event({
+    id: 'partial-1', kind: 'REVERSAL', sequence: 2, journalEntryId: 'journal-r1',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 300 }],
+    withheldAmountBs: 30, reversalOfEventId: original.id, reversalReason: 'Devolución parcial inicial'
+  });
+  const second = event({
+    id: 'partial-2', kind: 'REVERSAL', sequence: 3, journalEntryId: 'journal-r2',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 200 }],
+    withheldAmountBs: 20, reversalOfEventId: original.id, reversalReason: 'Devolución parcial posterior'
+  });
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger([], [original, first, second], eligible));
+  const excessive = event({
+    id: 'partial-3', kind: 'REVERSAL', sequence: 4, journalEntryId: 'journal-r3',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 600 }],
+    withheldAmountBs: 60, reversalOfEventId: original.id, reversalReason: 'Excede saldo'
+  });
+  assert.throws(() => validateIslrFiscalEventLedger([], [original, first, second, excessive], eligible), /supera la base pendiente/);
+});

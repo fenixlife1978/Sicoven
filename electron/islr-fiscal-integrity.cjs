@@ -146,31 +146,61 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       if (!originalId || !String(event.reversalReason || '').trim() || !original ||
           original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
           String(original.supplierRif).trim().toUpperCase() !== String(event.supplierRif).trim().toUpperCase() ||
-          original.conceptCode !== event.conceptCode ||
-          original.allocations.length !== event.allocations.length ||
-          original.allocations.some((item, index) =>
-            item.purchaseId !== event.allocations[index].purchaseId ||
-            Math.abs(Number(item.baseAmountBs) - Number(event.allocations[index].baseAmountBs)) > 0.000001) ||
-          Math.abs(Number(original.withheldAmountBs) - Number(event.withheldAmountBs)) > 0.01 ||
-          reversed.has(originalId)) {
-        throw new Error('SQLite rechazó una reversión ISLR sin original vigente, justificación o coincidencia exacta.');
+          original.conceptCode !== event.conceptCode) {
+        throw new Error('SQLite rechazó una reversión ISLR sin original vigente, justificación o coincidencia de empresa/proveedor/concepto.');
       }
-      reversed.add(originalId);
+      const priorReversals = next.filter(item => item.kind === 'REVERSAL' &&
+        String(item.reversalOfEventId) === originalId && String(item.id) !== id);
+      const originalBase = new Map(original.allocations.map(item => [String(item.purchaseId), Number(item.baseAmountBs)]));
+      const reversedBase = new Map();
+      for (const prior of priorReversals) for (const allocation of prior.allocations) {
+        const key = String(allocation.purchaseId);
+        reversedBase.set(key, (reversedBase.get(key) || 0) + Number(allocation.baseAmountBs));
+      }
+      for (const allocation of event.allocations) {
+        const key = String(allocation.purchaseId);
+        const base = Number(originalBase.get(key) || 0);
+        const totalReversed = (reversedBase.get(key) || 0) + Number(allocation.baseAmountBs);
+        if (base <= 0 || totalReversed > base + 0.01) {
+          throw new Error('SQLite rechazó una reversión ISLR que supera la base pendiente del evento original.');
+        }
+        reversedBase.set(key, totalReversed);
+      }
+      const originalTotalBase = original.allocations.reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const totalReversedBase = Array.from(reversedBase.values()).reduce((sum, value) => sum + value, 0);
+      const priorWithheld = priorReversals.reduce((sum, item) => sum + Number(item.withheldAmountBs), 0);
+      const expectedCumulativeWithheld = originalTotalBase > 0
+        ? Math.round((Number(original.withheldAmountBs) * totalReversedBase / originalTotalBase + Number.EPSILON) * 100) / 100
+        : 0;
+      if (priorWithheld + Number(event.withheldAmountBs) > Number(original.withheldAmountBs) + 0.01 ||
+          Math.abs(priorWithheld + Number(event.withheldAmountBs) - expectedCumulativeWithheld) > 0.02) {
+        throw new Error('SQLite rechazó una reversión ISLR que no concilia proporcionalmente con la base y retención original pendiente.');
+      }
+      const reversalJournal = journalById.get(String(event.journalEntryId));
+      const journalReversalAmount = (Array.isArray(reversalJournal?.items) ? reversalJournal.items : [])
+        .filter(item => item.accountCode === '2.1.2.04')
+        .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+      if (!reversalJournal || reversalJournal.type !== 'AJUSTE' ||
+          Math.abs(journalReversalAmount - Number(event.withheldAmountBs)) > 0.01) {
+        throw new Error('SQLite rechazó la reversión ISLR porque el asiento correctivo no revierte el pasivo por el mismo importe.');
+      }
     } else if (event.kind !== 'REVERSAL' && (event.reversalOfEventId || event.reversalReason)) {
       throw new Error('SQLite rechazó datos de reversión en un evento ISLR de pago o abono.');
     }
   }
 
-  const reversedIds = new Set(next.filter(event => event.kind === 'REVERSAL').map(event => String(event.reversalOfEventId)));
   const activeByPurchase = new Map();
   for (const event of next) {
-    if (event.kind === 'REVERSAL' || reversedIds.has(String(event.id)) || !Array.isArray(event.allocations)) continue;
+    if (event.kind === 'REVERSAL' || !Array.isArray(event.allocations)) continue;
     for (const allocation of event.allocations) {
       const id = String(allocation.purchaseId);
-      // Los eventos legacy conservados sin factura vinculada no se pueden
-      // reasignar retrospectivamente; los eventos nuevos sí se validan arriba.
       if (!purchaseById.has(id)) continue;
-      activeByPurchase.set(id, (activeByPurchase.get(id) || 0) + Number(allocation.baseAmountBs));
+      const reversed = next.filter(item => item.kind === 'REVERSAL' && String(item.reversalOfEventId) === String(event.id))
+        .flatMap(item => item.allocations)
+        .filter(item => String(item.purchaseId) === id)
+        .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const remaining = Math.max(0, Number(allocation.baseAmountBs) - reversed);
+      activeByPurchase.set(id, (activeByPurchase.get(id) || 0) + remaining);
     }
   }
   for (const [purchaseId, allocated] of activeByPurchase) {
