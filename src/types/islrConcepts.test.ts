@@ -5,7 +5,8 @@ import {
   VALOR_UNIDAD_TRIBUTARIA_BS,
   ISLR_FORMULA_FACTOR,
   getIslrUnitTaxValueForPeriod,
-  calculateIslrRetention
+  calculateIslrRetention,
+  calculateIslrTariff2Ut
 } from '../data/islrConcepts';
 
 const concept = (code: string) => {
@@ -127,4 +128,21 @@ test('monthly ISLR accumulation rejects historical withholding that exceeds the 
   assert.throws(() => calculateMonthlyIslrRetention(100, [
     { baseAmountBs: 100, withheldAmountBs: 99, subtrahendBs: 107.5 }
   ], concept('002')), /no coinciden|no concilia/i);
+});
+
+
+test('ISLR T-2 applies the progressive marginal brackets at 2,000 and 3,000 UT', () => {
+  assert.equal(calculateIslrTariff2Ut(0), 0);
+  assert.equal(calculateIslrTariff2Ut(2000), 300);
+  assert.equal(calculateIslrTariff2Ut(2500), 410);
+  assert.equal(calculateIslrTariff2Ut(3000), 520);
+  assert.equal(calculateIslrTariff2Ut(3500), 690);
+});
+
+test('ISLR T-2 is progressive rather than applying one flat rate to the whole base', () => {
+  const atBoundary = calculateIslrTariff2Ut(3000);
+  const aboveBoundary = calculateIslrTariff2Ut(3001);
+  assert.equal(aboveBoundary - atBoundary, 0.34);
+  assert.throws(() => calculateIslrTariff2Ut(-1), /base anual/);
+  assert.throws(() => calculateIslrTariff2Ut(Number.NaN), /base anual/);
 });
