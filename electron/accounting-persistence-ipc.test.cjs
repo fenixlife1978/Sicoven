@@ -162,6 +162,7 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
       id: 'opening-entry-1', companyId: 'company-1', entryNumber: 1,
       date: '2027-01-01', description: 'Asiento de apertura del ejercicio',
       type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' },
       items: [
         { accountCode: '1.1.1', accountName: 'Banco', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
         { accountCode: '3.1.1', accountName: 'Patrimonio', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 }
@@ -188,7 +189,15 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
     assert.equal(details.referenceDoc, opening.referenceDoc);
     assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
     const types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
-    assert.deepEqual(types, ['journal_entry_posted', 'accounting_year_opening_posted', 'accounting_period_closed', 'state_saved']);
+    assert.deepEqual(types, ['accounting_exercise_opening_linked', 'journal_entry_posted', 'accounting_year_opening_posted', 'accounting_period_closed', 'state_saved']);
+    const link = harness.db.prepare('SELECT * FROM accounting_exercise_links').get();
+    assert.equal(link.company_id, 'company-1');
+    assert.equal(link.prior_period_start_date, '2026-01-01');
+    assert.equal(link.prior_period_end_date, '2026-12-31');
+    assert.equal(link.next_period_start_date, '2027-01-01');
+    assert.equal(link.journal_entry_id, opening.id);
+    assert.throws(() => harness.db.prepare("UPDATE accounting_exercise_links SET prior_period_end_date='2026-11-30'").run(), /append-only/);
+    assert.throws(() => harness.db.prepare('DELETE FROM accounting_exercise_links').run(), /append-only/);
   } finally {
     harness.db.close();
   }
@@ -321,5 +330,131 @@ test('full period reopening clears only the active boundary and retains its immu
     assert.equal(saved.companies.find(item => item.id === 'company-2').closedThroughDate, '2026-06-30');
     assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
     assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 2);
+  } finally { harness.db.close(); }
+});
+
+test('SQLite rejects a linked opening whose prior exercise is not closed through the exact end date', () => {
+  const harness = createHarness();
+  try {
+    const opening = {
+      id: 'opening-invalid', companyId: 'company-1', entryNumber: 1,
+      date: '2027-01-01', description: 'Apertura no vinculable',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' },
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    const snapshot = { ...emptyState(), companies: [{ id: 'company-1', name: 'Empresa Uno', closedThroughDate: '2026-11-30' }], journalEntries: [opening] };
+    assert.throws(() => harness.handler({}, 'valid-session', snapshot), /debe permanecer cerrado hasta su fecha final/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 0);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events').get().count, 0);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM app_state').get().count, 0);
+  } finally { harness.db.close(); }
+});
+
+test('SQLite rejects duplicate exercise openings atomically but allows the same dates for another company', () => {
+  const harness = createHarness();
+  try {
+    const opening = {
+      id: 'opening-company-1', companyId: 'company-1', entryNumber: 1,
+      date: '2027-01-01', description: 'Apertura ejercicio 2027',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' },
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    const base = {
+      ...emptyState(),
+      companies: [
+        { id: 'company-1', name: 'Empresa Uno', closedThroughDate: '2026-12-31' },
+        { id: 'company-2', name: 'Empresa Dos', closedThroughDate: '2026-12-31' }
+      ],
+      journalEntries: [opening]
+    };
+    harness.handler({}, 'valid-session', base);
+    const duplicate = { ...opening, id: 'opening-company-1-duplicate', entryNumber: 2 };
+    assert.throws(() => harness.handler({}, 'valid-session', { ...base, journalEntries: [opening, duplicate] }), /duplicarla/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 1);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM audit_events WHERE event_type=\'accounting_exercise_opening_linked\'').get().count, 1);
+    const otherCompany = {
+      ...opening, id: 'opening-company-2', companyId: 'company-2',
+      referenceDoc: 'APERTURA:company-2:2027-01-01'
+    };
+    harness.handler({}, 'valid-session', { ...base, journalEntries: [opening, otherCompany] });
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 2);
+  } finally { harness.db.close(); }
+});
+
+test('a reopened and reclosed exercise can be opened once with a durable link to its prior period', () => {
+  const harness = createHarness();
+  try {
+    persistClosedCompanyFixture(harness.db);
+    harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: null,
+      reason: 'Reapertura integral autorizada para corregir el ejercicio completo.'
+    });
+    let state = JSON.parse(harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    state = {
+      ...state,
+      companies: state.companies.map(company => company.id === 'company-1'
+        ? { ...company, closedThroughDate: '2026-12-31' } : company)
+    };
+    harness.handler({}, 'valid-session', state);
+    const opening = {
+      id: 'opening-after-reclose', companyId: 'company-1', entryNumber: 2,
+      date: '2027-01-01', description: 'Apertura posterior a reapertura autorizada',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' },
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    state = {
+      ...state,
+      accounts: [
+        { code: '1.1.1', name: 'Banco', type: 'ACTIVO', isMovement: true },
+        { code: '3.1.1', name: 'Patrimonio', type: 'PATRIMONIO', isMovement: true }
+      ],
+      journalEntries: [...state.journalEntries, opening]
+    };
+    harness.handler({}, 'valid-session', state);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 3);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 1);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 1);
+  } finally { harness.db.close(); }
+});
+
+test('SQLite does not duplicate an opening that predates the exercise-link migration', () => {
+  const harness = createHarness();
+  try {
+    const legacy = {
+      id: 'legacy-opening', companyId: 'company-1', entryNumber: 1,
+      date: '2027-01-01', description: 'Apertura histórica anterior al vínculo',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA-LEGACY',
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    const base = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa Uno', closedThroughDate: '2026-12-31' }],
+      journalEntries: [legacy]
+    };
+    harness.handler({}, 'valid-session', base);
+    const linked = {
+      ...legacy, id: 'linked-opening', entryNumber: 2,
+      referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' }
+    };
+    assert.throws(() => harness.handler({}, 'valid-session', { ...base, journalEntries: [legacy, linked] }), /duplicarla/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 0);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 0);
   } finally { harness.db.close(); }
 });

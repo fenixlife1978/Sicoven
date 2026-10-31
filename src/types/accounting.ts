@@ -71,6 +71,12 @@ export interface JournalEntry {
   reversalReason?: string;
   workpaperNote?: string;
   priorPeriodAdjustment?: boolean;
+  /** Vínculo inmutable entre el ejercicio cerrado y el ejercicio que inicia con esta apertura. */
+  exerciseLink?: {
+    priorPeriodStartDate: string;
+    priorPeriodEndDate: string;
+    nextPeriodStartDate: string;
+  };
 }
 
 export interface PurchaseInventoryLine {

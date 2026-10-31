@@ -21,6 +21,51 @@ function persistAccountingSnapshot(db, state, actor = null) {
         debitUsd: sum.debitUsd + Number(item.debitUsd || 0),
         creditUsd: sum.creditUsd + Number(item.creditUsd || 0)
       }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+      if (entry.type === 'APERTURA' && String(entry.referenceDoc || '').startsWith('APERTURA:')) {
+        const link = entry.exerciseLink;
+        const validDate = value => {
+          if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+          const parsed = new Date(value + 'T00:00:00.000Z');
+          return Number.isFinite(parsed.getTime()) && parsed.toISOString().slice(0, 10) === value;
+        };
+        if (!link || !validDate(link.priorPeriodStartDate) || !validDate(link.priorPeriodEndDate) ||
+            !validDate(link.nextPeriodStartDate) || link.priorPeriodStartDate > link.priorPeriodEndDate) {
+          throw new Error('La apertura del ejercicio requiere un vínculo válido con el período anterior.');
+        }
+        const nextDay = new Date(link.priorPeriodEndDate + 'T00:00:00.000Z');
+        nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+        const expectedNextStart = nextDay.toISOString().slice(0, 10);
+        if (link.nextPeriodStartDate !== expectedNextStart || entry.date !== expectedNextStart) {
+          throw new Error('La apertura debe iniciar exactamente el día siguiente al cierre del ejercicio anterior.');
+        }
+        const company = (Array.isArray(state.companies) ? state.companies : [])
+          .find(item => String(item.id) === String(entry.companyId));
+        if (!company || String(company.closedThroughDate || '') !== link.priorPeriodEndDate) {
+          throw new Error('El ejercicio anterior debe permanecer cerrado hasta su fecha final para vincular la apertura.');
+        }
+        const duplicate = (Array.isArray(state.journalEntries) ? state.journalEntries : []).some(item =>
+          String(item.id) !== String(entry.id) && String(item.companyId) === String(entry.companyId) &&
+          item.type === 'APERTURA' && (
+            item.date === link.nextPeriodStartDate ||
+            (item.exerciseLink &&
+              item.exerciseLink.priorPeriodStartDate === link.priorPeriodStartDate &&
+              item.exerciseLink.priorPeriodEndDate === link.priorPeriodEndDate &&
+              item.exerciseLink.nextPeriodStartDate === link.nextPeriodStartDate)
+          ));
+        if (duplicate) throw new Error('Ya existe una apertura vinculada a este ejercicio anterior y no se permite duplicarla.');
+        db.prepare(`INSERT INTO accounting_exercise_links
+          (id,company_id,prior_period_start_date,prior_period_end_date,next_period_start_date,journal_entry_id)
+          VALUES(?,?,?,?,?,?)`)
+          .run(crypto.randomUUID(), String(entry.companyId), link.priorPeriodStartDate,
+            link.priorPeriodEndDate, link.nextPeriodStartDate, String(entry.id));
+        auditInsert.run('accounting_exercise_opening_linked', JSON.stringify({
+          companyId: entry.companyId, journalEntryId: entry.id,
+          priorPeriodStartDate: link.priorPeriodStartDate,
+          priorPeriodEndDate: link.priorPeriodEndDate,
+          nextPeriodStartDate: link.nextPeriodStartDate,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null
+        }));
+      }
       auditInsert.run(entry.reversalOfEntryId ? 'journal_entry_reversed' : 'journal_entry_posted', JSON.stringify({
         entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
         date: entry.date, type: entry.type, referenceDoc: entry.referenceDoc || null,
@@ -188,6 +233,22 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
     throw new Error('No se pudo registrar el puente de persistencia contable de SICOVEN.');
   }
   db.exec(`
+    CREATE TABLE IF NOT EXISTS accounting_exercise_links (
+      id TEXT PRIMARY KEY,
+      company_id TEXT NOT NULL,
+      prior_period_start_date TEXT NOT NULL,
+      prior_period_end_date TEXT NOT NULL,
+      next_period_start_date TEXT NOT NULL,
+      journal_entry_id TEXT NOT NULL UNIQUE,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(company_id, prior_period_start_date, prior_period_end_date, next_period_start_date)
+    );
+    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_update
+      BEFORE UPDATE ON accounting_exercise_links
+      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS accounting_exercise_links_no_delete
+      BEFORE DELETE ON accounting_exercise_links
+      BEGIN SELECT RAISE(ABORT, 'accounting_exercise_links is append-only'); END;
     CREATE TABLE IF NOT EXISTS period_reopenings (
       id TEXT PRIMARY KEY,
       company_id TEXT NOT NULL,

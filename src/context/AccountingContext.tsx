@@ -398,7 +398,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         type: 'APERTURA',
         bcvRate: currentCompany.bcvRate,
         items,
-        referenceDoc
+        referenceDoc,
+        exerciseLink: {
+          priorPeriodStartDate: input.periodStartDate,
+          priorPeriodEndDate: input.periodEndDate,
+          nextPeriodStartDate: input.openingDate
+        }
       });
       // El waiter se registra inmediatamente después del setState y antes del siguiente
       // ciclo de efectos; solo se confirma al terminar el guardado transaccional SQLite.
