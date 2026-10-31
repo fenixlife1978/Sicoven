@@ -1540,4 +1540,10 @@ test('SQLite validates the full contado purchase matrix: cash/bank, currencies, 
   const missingReference = structuredClone(base.state);
   missingReference.purchases[0].paymentReference = '';
   assert.throws(() => validateAccountingSnapshot(emptyState(), missingReference), /asiento no reconoce en Bs\. y USD/);
+  const duplicate = {
+    ...base.purchase, id: 'cash-matrix-duplicate', journalEntryId: 'cash-matrix-duplicate-entry'
+  };
+  assert.throws(() => validateAccountingSnapshot(emptyState(), {
+    ...base.state, purchases: [...base.state.purchases, duplicate]
+  }), /factura de compra duplicada/);
 });
