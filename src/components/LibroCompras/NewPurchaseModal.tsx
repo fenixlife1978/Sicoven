@@ -64,10 +64,23 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const normalizedSupplierRif = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
   const selectedMonthKey = String(invoiceDate || '').slice(0, 7);
   const hasCancelledPriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
+    item.companyId === currentCompany.id &&
+    item.documentType === '01' &&
     item.isCancelled &&
     String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedSupplierRif &&
     item.islrConceptCode === selectedConcept?.code &&
     String(item.invoiceDate || '').slice(0, 7) === selectedMonthKey
+  );
+  const hasIncompletePriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
+    item.companyId === currentCompany.id &&
+    item.documentType === '01' &&
+    !item.isCancelled &&
+    String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedSupplierRif &&
+    item.islrConceptCode === selectedConcept?.code &&
+    String(item.invoiceDate || '').slice(0, 7) === selectedMonthKey &&
+    (item.islrUnitTaxValueBs == null || item.islrFormulaFactor == null ||
+      item.islrBasePercentage == null || !Number.isFinite(Number(item.taxableBaseBs)) ||
+      !Number.isFinite(Number(item.islrWithheldBs)) || !Number.isFinite(Number(item.islrSubtrahendBs)))
   );
   let islrWithheldBs = 0;
   let islrSubtrahendBs = 0;
@@ -77,6 +90,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     const supplierKey = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
     const monthKey = String(invoiceDate || '').slice(0, 7);
     const priorOperations = purchases.filter(item =>
+      item.companyId === currentCompany.id &&
       !item.isCancelled &&
       item.documentType === '01' &&
       String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
@@ -84,8 +98,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       String(item.invoiceDate || '').slice(0, 7) === monthKey
     ).map(item => ({
       baseAmountBs: item.taxableBaseBs,
-      withheldAmountBs: item.islrWithheldBs || 0,
-      subtrahendBs: item.islrSubtrahendBs || 0
+      withheldAmountBs: item.islrWithheldBs,
+      subtrahendBs: item.islrSubtrahendBs
     }));
     const calc = calculateMonthlyIslrRetention(taxableBaseBs, priorOperations, selectedConcept);
     islrRate = calc.rate;
@@ -125,6 +139,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     }
     if (applyIslr && hasCancelledPriorIslrOperation) {
       window.alert('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
+      return;
+    }
+    if (applyIslr && hasIncompletePriorIslrOperation) {
+      window.alert('El historial ISLR mensual contiene operaciones anteriores con parámetros o importes incompletos. Se requiere conciliación fiscal antes de acumular.');
       return;
     }
     if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
