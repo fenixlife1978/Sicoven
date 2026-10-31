@@ -6,6 +6,7 @@ import { buildCashFlowIndirectReport } from './cashFlowIndirectStatement';
 const accounts: Account[] = [
   { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'EFECTIVO_EQUIVALENTE' },
   { code: '1.1.2.01', name: 'Cuentas por cobrar', type: 'ACTIVO', level: 4, isMovement: true, cashFlowIndirectTreatment: 'OPERATING_ASSET_INCREASE_DEDUCT' },
+  { code: '1.2.1', name: 'Depreciación acumulada', type: 'ACTIVO', level: 4, isMovement: true, cashFlowActivity: 'INVERSION' },
   { code: '2.1.1.01', name: 'Cuentas por pagar', type: 'PASIVO', level: 4, isMovement: true, cashFlowIndirectTreatment: 'OPERATING_LIABILITY_INCREASE_ADD' },
   { code: '5.1.1', name: 'Gasto depreciación', type: 'GASTOS', level: 4, isMovement: true, cashFlowIndirectTreatment: 'NON_CASH_EXPENSE_ADD_BACK' },
   { code: '4.1.1', name: 'Ingresos operacionales', type: 'INGRESOS', level: 4, isMovement: true, cashFlowActivity: 'OPERACION' },
@@ -24,7 +25,8 @@ describe('cash flow indirect method', () => {
       entry('opening', '2026-01-01', [
         line('1.1.1.01', 100, 0, 10, 0),
         line('1.1.2.01', 20, 0, 2, 0),
-        line('2.1.1.01', 10, 0, 1, 0)
+        line('2.1.1.01', 0, 10, 0, 1),
+        line('3.1.1', 0, 110, 0, 11)
       ], 'APERTURA', { priorPeriodStartDate: '2025-01-01', priorPeriodEndDate: '2025-12-31', nextPeriodStartDate: '2026-01-01' }),
       entry('sale-credit', '2026-02-01', [
         line('1.1.2.01', 50, 0, 5, 0),
