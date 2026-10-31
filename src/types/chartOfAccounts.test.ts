@@ -31,7 +31,7 @@ describe('chart of accounts hierarchy validation', () => {
 
   it('does not insert an intermediate parent that would silently reclassify existing children', () => {
     assert.throws(
-      () => prepareAccountForCatalog(account({ code: '1.1.1', level: 3, isMovement: false }), DEFAULT_CHART_OF_ACCOUNTS),
+      () => prepareAccountForCatalog(account({ code: '3.1.1', level: 3, type: 'PATRIMONIO', isMovement: false }), DEFAULT_CHART_OF_ACCOUNTS),
       /ya tiene subcuentas/
     );
   });
@@ -49,7 +49,7 @@ describe('chart of accounts hierarchy validation', () => {
   });
 
   it('requires an existing parent and does not permit a movement account to become a parent', () => {
-    assert.throws(() => prepareAccountForCatalog(account({ code: '1.9.01' }), DEFAULT_CHART_OF_ACCOUNTS), /No existe una cuenta agrupadora/);
+    assert.throws(() => prepareAccountForCatalog(account({ code: '1.9.1.01', level: 4 }), DEFAULT_CHART_OF_ACCOUNTS), /Falta crear un nivel agrupador intermedio/);
     const movementParent = [account({ code: '1.1', level: 2, isMovement: true })];
     assert.throws(() => prepareAccountForCatalog(account({ code: '1.1.01', level: 3 }), movementParent), /imputable/);
   });
