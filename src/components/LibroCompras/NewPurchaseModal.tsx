@@ -80,7 +80,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     !item.isCancelled &&
     String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedSupplierRif &&
     item.islrConceptCode === selectedConcept?.code &&
-    String(item.invoiceDate || '').slice(0, 7) === selectedMonthKey &&
+    getPurchaseAccountCreditDate(item).slice(0, 7) === selectedMonthKey &&
     (item.islrUnitTaxValueBs == null || item.islrFormulaFactor == null ||
       item.islrBasePercentage == null || !Number.isFinite(Number(item.taxableBaseBs)) ||
       !Number.isFinite(Number(item.islrWithheldBs)) || !Number.isFinite(Number(item.islrSubtrahendBs)))

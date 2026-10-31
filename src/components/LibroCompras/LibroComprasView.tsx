@@ -21,7 +21,7 @@ import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { exportComprasPdf } from '../../utils/pdfGenerator';
 import { PurchaseCreditNoteModal } from './PurchaseCreditNoteModal';
 import { SupplierAdvanceSettlementModal } from './SupplierAdvanceSettlementModal';
-import type { PurchaseRecord } from '../../types/accounting';
+import { getPurchaseAccountCreditDate, type PurchaseRecord } from '../../types/accounting';
 
 export const LibroComprasView: React.FC = () => {
   const {
@@ -196,7 +196,7 @@ export const LibroComprasView: React.FC = () => {
             <thead>
               <tr className="bg-slate-100 text-slate-700 border-b border-slate-200 font-semibold whitespace-nowrap">
                 <th className="py-2.5 px-3 text-center w-12">Op. N°</th>
-                <th className="py-2.5 px-3 w-24">Fecha</th>
+                <th className="py-2.5 px-3 w-28">Emisión / Abono</th>
                 <th className="py-2.5 px-3 min-w-[150px]">Condición / Vencimiento</th>
                 <th className="py-2.5 px-3 w-28">RIF Proveedor</th>
                 <th className="py-2.5 px-3 min-w-[200px]">Nombre o Razón Social</th>
@@ -229,7 +229,10 @@ export const LibroComprasView: React.FC = () => {
                       {p.opNumber}
                     </td>
                     <td className="py-2 px-3 font-mono text-slate-600 whitespace-nowrap">
-                      {formatDate(p.invoiceDate)}
+                      <div>{formatDate(p.invoiceDate)}</div>
+                      <div className="mt-1 text-[10px] text-indigo-700" title="Fecha fiscal y contable de reconocimiento del pasivo">
+                        Abono: {formatDate(getPurchaseAccountCreditDate(p))}
+                      </div>
                     </td>
                     <td className="py-2 px-3 text-xs whitespace-nowrap">
                       <span className={`inline-flex rounded px-1.5 py-0.5 font-semibold ${p.paymentTerm === 'CREDITO' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-600'}`}>{p.paymentTerm === 'CREDITO' ? 'CRÉDITO' : p.paymentTerm === 'CONTADO' ? 'CONTADO' : 'SIN DEFINIR'}</span>
