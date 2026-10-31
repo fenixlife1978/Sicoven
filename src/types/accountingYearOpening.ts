@@ -2,6 +2,7 @@ import type { Account, JournalEntry, JournalEntryItem } from './accounting';
 
 export interface OpeningEntryBuildInput {
   companyId: string;
+  periodStartDate: string;
   periodEndDate: string;
   openingDate: string;
   accounts: Account[];
@@ -23,7 +24,8 @@ const emptyTotals = (): Totals => ({ debitBs: 0, creditBs: 0, debitUsd: 0, credi
 export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEntryItem[] {
   const { companyId, periodEndDate, openingDate, accounts, journalEntries } = input;
   if (!companyId.trim()) throw new Error('Debe indicar la empresa del ejercicio.');
-  if (!isIsoDate(periodEndDate) || !isIsoDate(openingDate) || openingDate <= periodEndDate) {
+  if (!isIsoDate(input.periodStartDate) || !isIsoDate(periodEndDate) || !isIsoDate(openingDate) ||
+      input.periodStartDate > periodEndDate || openingDate <= periodEndDate) {
     throw new Error('Las fechas de cierre y apertura deben ser válidas y mantener el orden cronológico.');
   }
 
@@ -64,10 +66,10 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
       totals.debitUsd += Number(line.debitUsd);
       totals.creditUsd += Number(line.creditUsd);
 
-      if (account.type === 'INGRESOS') {
+      if (entry.date >= input.periodStartDate && account.type === 'INGRESOS') {
         profitLoss.bs += Number(line.creditBs) - Number(line.debitBs);
         profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
-      } else if (account.type === 'COSTOS' || account.type === 'GASTOS') {
+      } else if (entry.date >= input.periodStartDate && (account.type === 'COSTOS' || account.type === 'GASTOS')) {
         profitLoss.bs += Number(line.debitBs) - Number(line.creditBs);
         profitLoss.usd += Number(line.debitUsd) - Number(line.creditUsd);
       } else {
@@ -107,11 +109,12 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
     const account = accountByCode.get(code)!;
     const netBs = totals.debitBs - totals.creditBs;
     const netUsd = totals.debitUsd - totals.creditUsd;
-    const debitNormal = account.type === 'ACTIVO';
-    const debitBs = roundBs(Math.max(0, debitNormal ? netBs : -netBs));
-    const creditBs = roundBs(Math.max(0, debitNormal ? -netBs : netBs));
-    const debitUsd = roundUsd(Math.max(0, debitNormal ? netUsd : -netUsd));
-    const creditUsd = roundUsd(Math.max(0, debitNormal ? -netUsd : netUsd));
+    // The signed ledger balance already determines the side: debit minus credit.
+    // Do not invert credit-nature accounts; their negative net is a credit balance.
+    const debitBs = roundBs(Math.max(0, netBs));
+    const creditBs = roundBs(Math.max(0, -netBs));
+    const debitUsd = roundUsd(Math.max(0, netUsd));
+    const creditUsd = roundUsd(Math.max(0, -netUsd));
     if (debitBs || creditBs || debitUsd || creditUsd) {
       items.push({
         accountCode: code, accountName: account.name, debitBs, creditBs, debitUsd, creditUsd,
