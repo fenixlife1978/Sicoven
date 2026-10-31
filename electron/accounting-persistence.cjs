@@ -219,7 +219,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       ? null : String(input.reopenedThroughDate);
     if (!companyId) throw new Error('Seleccione una empresa para reabrir el período.');
     if (reason.length < 10 || reason.length > 1000) throw new Error('El motivo de reapertura es obligatorio y debe tener entre 10 y 1000 caracteres.');
-    if (reopenedThroughDate !== null && !/^\\d{4}-\\d{2}-\\d{2}$/.test(reopenedThroughDate)) {
+    if (reopenedThroughDate !== null && !/^\d{4}-\d{2}-\d{2}$/.test(reopenedThroughDate)) {
       throw new Error('La nueva fecha de cierre debe ser una fecha ISO válida o quedar vacía para reabrir todo el período.');
     }
     if (reopenedThroughDate !== null) {
@@ -238,7 +238,7 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
       const company = state.companies.find(item => String(item.id) === companyId);
       if (!company) throw new Error('La empresa seleccionada no existe en SQLite.');
       const previousClosedThroughDate = String(company.closedThroughDate || '');
-      if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(previousClosedThroughDate)) {
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(previousClosedThroughDate)) {
         throw new Error('La empresa no tiene un cierre contable vigente para reabrir.');
       }
       if (reopenedThroughDate !== null && reopenedThroughDate >= previousClosedThroughDate) {
