@@ -815,11 +815,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       : [];
     const creditedByNotesUsd = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
     const creditedByNotesBs = creditNotes.reduce((sum, item) => sum + Number(item.netPayableReductionBs || 0), 0);
-    const outstandingUsd = Math.max(0, Math.round((balance.outstandingUsd - creditedByNotesUsd) * 1000000) / 1000000);
+    const advanceApplications = kind === 'PURCHASE_PAYMENT'
+      ? supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id &&
+          !item.isReversed && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === documentId)
+      : [];
+    const creditedBySupplierAdvancesUsd = advanceApplications.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const creditedBySupplierAdvancesBs = advanceApplications.reduce((sum, item) => sum + Number(item.advanceBookValueBs ?? item.amountBs ?? 0), 0);
+    const outstandingUsd = Math.max(0, Math.round((balance.outstandingUsd - creditedByNotesUsd - creditedBySupplierAdvancesUsd) * 1000000) / 1000000);
     return {
       ...balance,
       creditedByNotesUsd,
       creditedByNotesBs,
+      creditedBySupplierAdvancesUsd,
+      creditedBySupplierAdvancesBs,
       outstandingUsd,
       outstandingBsAtInvoiceRate: Math.round(outstandingUsd * (principal.originalAmountUsd > 0
         ? principal.originalAmountBs / principal.originalAmountUsd : 0) * 100) / 100
