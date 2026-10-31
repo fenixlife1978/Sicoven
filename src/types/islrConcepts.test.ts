@@ -152,7 +152,7 @@ test('ISLR T-2 is progressive rather than applying one flat rate to the whole ba
 test('annual T-2 calculator applies 90% base and returns the incremental annual withholding', () => {
   const first = calculateAnnualIslrTariff2Retention(100000, [], 43, 90);
   assert.equal(first.cumulativeTaxableBaseUt, 90000 / 43);
-  assert.equal(first.cumulativeWithheldBs, 90000 / 43 * 0.34 * 43 - 520 * 43 + 520 * 43);
+  assert.equal(first.cumulativeWithheldBs, Math.round((300 + (90000 / 43 - 2000) * 0.22) * 43 * 100) / 100);
   const second = calculateAnnualIslrTariff2Retention(50000, [
     { baseAmountBs: 100000, withheldAmountBs: first.cumulativeWithheldBs }
   ], 43, 90);
