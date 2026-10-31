@@ -57,7 +57,7 @@ test('SQLite validates direct supplier advance disbursements against the exact c
     id: 'advance-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
     supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100,
     bookValueBs: 10000, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
-    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-ADV-1',
+    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-ADV-1', support: 'REC-ADV-1',
     journalEntryId: 'advance-journal', createdAt: '2026-10-10T10:00:00.000Z'
   };
   const previous = { ...emptyState(), supplierDirectAdvances: [] };
@@ -98,7 +98,7 @@ test('SQLite accepts a direct supplier advance refund allocated to its original 
     id: 'direct-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
     supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100,
     bookValueBs: 10000, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
-    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-DIRECT-1',
+    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-DIRECT-1', support: 'REC-DIRECT-1',
     journalEntryId: 'direct-journal', createdAt: '2026-10-10T10:00:00.000Z'
   };
   const settlement = {
