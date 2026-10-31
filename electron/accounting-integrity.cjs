@@ -169,11 +169,57 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     Number.isFinite(Number(entry.bcvRate)) && Math.abs(Number(entry.bcvRate) - rate) <= 0.000001;
 }
 
+const ROOT_ACCOUNT_TYPES = {
+  '1': 'ACTIVO', '2': 'PASIVO', '3': 'PATRIMONIO',
+  '4': 'INGRESOS', '5': 'COSTOS', '6': 'GASTOS'
+};
+
+function validateNewAccountCatalogEntries(previousAccounts, nextAccounts) {
+  const priorCodes = new Set(asArray(previousAccounts).map(account => String(account.code)));
+  const accounts = asArray(nextAccounts);
+  const byCode = new Map();
+  for (const account of accounts) {
+    const code = String(account.code || '');
+    if (!code) continue;
+    if (byCode.has(code)) throw new Error('SQLite rechazó el catálogo: hay códigos de cuenta duplicados.');
+    byCode.set(code, account);
+  }
+
+  for (const account of accounts) {
+    const code = String(account.code || '').trim();
+    if (priorCodes.has(code)) continue; // No reescribir la estructura histórica en esta migración.
+    const segments = code.split('.');
+    if (!/^\\d+(?:\\.\\d+){0,4}$/.test(code) || segments.length > 5 ||
+        Number(account.level) !== segments.length || !String(account.name || '').trim() ||
+        typeof account.isMovement !== 'boolean') {
+      throw new Error('SQLite rechazó una cuenta nueva con código, nivel o clasificación estructural inválida.');
+    }
+    const expectedType = ROOT_ACCOUNT_TYPES[segments[0]];
+    if (!expectedType || account.type !== expectedType) {
+      throw new Error('SQLite rechazó una cuenta nueva cuya clasificación no coincide con el código.');
+    }
+    if (segments.length === 1) {
+      if (account.parentCode) throw new Error('SQLite rechazó una cuenta raíz con cuenta padre.');
+      continue;
+    }
+    const parents = accounts
+      .filter(candidate => code.startsWith(String(candidate.code || '') + '.') &&
+        Number(candidate.level) < segments.length)
+      .sort((a, b) => String(b.code).length - String(a.code).length);
+    const parent = parents[0];
+    if (!parent || account.parentCode !== parent.code || parent.isMovement ||
+        parent.type !== account.type || !code.startsWith(parent.code + '.')) {
+      throw new Error('SQLite rechazó la cuenta nueva: debe tener una cuenta padre agrupadora, compatible y correctamente enlazada.');
+    }
+  }
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
   }
   const priorState = previousState && typeof previousState === 'object' ? previousState : {};
+  validateNewAccountCatalogEntries(priorState.accounts, nextState.accounts);
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['journalEntryId', 'isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'sales',
@@ -1186,4 +1232,4 @@ function validateAccountingSnapshot(previousState, nextState) {
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
-module.exports = { validateAccountingSnapshot };
+module.exports = { validateAccountingSnapshot, validateNewAccountCatalogEntries };
