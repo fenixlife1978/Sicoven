@@ -118,7 +118,7 @@ export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcep
   const minimumBase = concept.minBaseUt
     ? unitTaxValueBs * concept.minBaseUt
     : 0;
-  const thresholdNotReached = concept.appliesSubtrahend && baseAmountBs <= minimumBase;
+  const thresholdNotReached = concept.appliesSubtrahend && baseAmountBs <= minimumBase + 0.000001;
   const subtrahend = concept.appliesSubtrahend && !thresholdNotReached
     ? unitTaxValueBs * ISLR_FORMULA_FACTOR * (concept.rate / 100)
     : 0;
