@@ -4,7 +4,7 @@ const { validateNewAccountCatalogEntries } = require('./accounting-integrity.cjs
 
 const root = { code: '1', name: 'ACTIVO', type: 'ACTIVO', level: 1, isMovement: false };
 const group = { code: '1.1', name: 'ACTIVO CORRIENTE', type: 'ACTIVO', level: 2, isMovement: false, parentCode: '1' };
-const leaf = { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 3, isMovement: true, parentCode: '1.1' };
+const leaf = { code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1' };
 
 test('SQLite integrity accepts a correctly linked new movement account', () => {
   assert.doesNotThrow(() => validateNewAccountCatalogEntries([root, group], [root, group, leaf]));
