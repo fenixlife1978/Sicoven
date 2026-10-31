@@ -1176,3 +1176,47 @@ test('SQLite preserves the ISLR fiscal event ledger as append-only history', () 
     islrFiscalEvents: [{ ...fiscalEvent, withheldAmountBs: 10 }]
   }), /modificación de un registro histórico en islrFiscalEvents/);
 });
+
+test('SQLite accepts a supplier credit note from a cash purchase as a supplier advance without creating or reducing AP', () => {
+  const { prior, next, note } = supplierCreditFixture();
+  const original = next.purchases.find(item => item.id === 'purchase-original');
+  original.paymentTerm = 'CONTADO';
+  original.paymentAccountCode = '1.1.1.01';
+  original.paymentReference = 'EG-100';
+  const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
+  const originalPayable = originalEntry.items.find(item => item.accountCode === '2.1.1.01');
+  originalPayable.accountCode = '1.1.1.01';
+  const treasury = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
+  prior.accounts = [treasury];
+  next.accounts = [treasury];
+
+  note.netPayableReductionBs = 0;
+  note.netPayableReductionUsd = 0;
+  note.supplierAdvanceBs = 106.48;
+  note.supplierAdvanceUsd = 1.0648;
+  const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
+  const payableDebit = noteEntry.items.find(item => item.accountCode === '2.1.1.01');
+  payableDebit.accountCode = '1.1.2.03';
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});
+
+test('SQLite rejects a cash-purchase credit note that posts any amount to a fictitious AP auxiliary', () => {
+  const { prior, next, note } = supplierCreditFixture();
+  const original = next.purchases.find(item => item.id === 'purchase-original');
+  original.paymentTerm = 'CONTADO';
+  original.paymentAccountCode = '1.1.1.01';
+  original.paymentReference = 'EG-100';
+  const originalEntry = next.journalEntries.find(item => item.id === 'purchase-entry');
+  originalEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '1.1.1.01';
+  const treasury = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
+  prior.accounts = [treasury];
+  next.accounts = [treasury];
+  note.netPayableReductionBs = 0;
+  note.netPayableReductionUsd = 0;
+  note.supplierAdvanceBs = 106.48;
+  note.supplierAdvanceUsd = 1.0648;
+  const noteEntry = next.journalEntries.find(item => item.id === 'credit-entry');
+  noteEntry.items.find(item => item.accountCode === '2.1.1.01').accountCode = '1.1.2.03';
+  noteEntry.items.push({ accountCode: '2.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 });
+  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no está balanceado|no está balanceado o no revierte CxP/);
+});
