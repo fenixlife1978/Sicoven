@@ -3771,9 +3771,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         ? []
         : data.islrFiscalEvents;
       const financialDisclosures: FinancialDisclosure[] = data?.financialDisclosures === undefined ? [] : data.financialDisclosures;
-      if (!Array.isArray(financialDisclosures) || financialDisclosures.some(item => validateFinancialDisclosure(item, companyIds) !== null)) {
-        throw new Error('El respaldo contiene notas o revelaciones financieras inválidas o vinculadas a otra empresa.');
-      }
       if (!Array.isArray(islrFiscalEvents) || islrFiscalEvents.some((event: any) =>
         !event || typeof event.id !== 'string' || !event.id.trim() ||
         typeof event.companyId !== 'string' || !event.companyId.trim() ||
@@ -3796,6 +3793,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyIds.add(c.id);
         return false;
       })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
+      const financialDisclosures: FinancialDisclosure[] = data?.financialDisclosures === undefined ? [] : data.financialDisclosures;
+      if (!Array.isArray(financialDisclosures) || financialDisclosures.some(item => validateFinancialDisclosure(item, companyIds) !== null)) {
+        throw new Error('El respaldo contiene notas o revelaciones financieras inválidas o vinculadas a otra empresa.');
+      }
       const journalIds = new Set<string>();
       const journalNumbers = new Set<string>();
       if (data.journalEntries.some((entry: any) => {
