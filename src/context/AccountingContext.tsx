@@ -270,6 +270,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
+  const supplierDirectAdvanceInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
   // estos contadores evitan reutilizar correlativos e identificadores por estado obsoleto.
   const runAtomicInvoiceImport = <T,>(operation: () => T): T => {
@@ -843,39 +844,56 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     const validation = validateSupplierDirectAdvanceDraft(draft, currentCompany.id, accounts);
     if (validation) throw new Error(validation);
+    const rif = String(draft.supplierRif).trim().toUpperCase();
+    if (!validateVenezuelanRif(rif).isValid) throw new Error('El RIF del proveedor no tiene una estructura venezolana válida.');
     if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. El anticipo no se registró.');
     }
-    const rif = String(draft.supplierRif).trim().toUpperCase();
+    const bank = bankAccounts.find(item => item.companyId === currentCompany.id && item.accountCode === draft.treasuryAccountCode);
+    const accountCurrency = bank?.currency || (draft.treasuryAccountCode === '1.1.1.02' ? 'USD' : 'BS');
+    if (accountCurrency !== draft.paymentCurrency) {
+      throw new Error('La moneda del desembolso no coincide con la moneda configurada para la cuenta de Caja/Banco.');
+    }
+    const operationKey = [currentCompany.id, rif, draft.date, draft.treasuryAccountCode,
+      draft.paymentCurrency, draft.paidAmount, draft.reference.trim().toUpperCase()].join('|');
+    if (supplierDirectAdvanceInFlightRef.current.has(operationKey)) {
+      throw new Error('Este anticipo ya se está registrando. Espere la confirmación de SQLite.');
+    }
     const duplicate = supplierDirectAdvances.some(item => item.companyId === currentCompany.id &&
       !item.isReversed && item.treasuryAccountCode === draft.treasuryAccountCode &&
       item.date === draft.date && item.reference.trim().toUpperCase() === draft.reference.trim().toUpperCase());
-    if (duplicate) throw new Error('La referencia ya fue utilizada en un anticipo de este proveedor/cuenta.');
-    const advanceAccount = accounts.find(item => item.code === '1.1.2.03' && item.isMovement && item.type === 'ACTIVO');
-    const treasuryAccount = accounts.find(item => item.code === draft.treasuryAccountCode && item.isMovement && item.type === 'ACTIVO');
-    if (!advanceAccount || !treasuryAccount) {
-      throw new Error('El plan de cuentas no tiene un auxiliar activo válido para anticipos y la cuenta real de Caja/Banco.');
+    if (duplicate) throw new Error('La referencia ya fue utilizada en un anticipo de esta cuenta.');
+    supplierDirectAdvanceInFlightRef.current.add(operationKey);
+    try {
+      const advanceAccount = accounts.find(item => item.code === '1.1.2.03' && item.isMovement && item.type === 'ACTIVO');
+      const treasuryAccount = accounts.find(item => item.code === draft.treasuryAccountCode && item.isMovement && item.type === 'ACTIVO');
+      if (!advanceAccount || !treasuryAccount) {
+        throw new Error('El plan de cuentas no tiene un auxiliar activo válido para anticipos y la cuenta real de Caja/Banco.');
+      }
+      const amountUsd = Math.round(draft.amountUsd * 1000000) / 1000000;
+      const bookValueBs = Math.round(amountUsd * draft.bcvRate * 100) / 100;
+      const entry = addJournalEntry({
+        entryNumber: 0, date: draft.date,
+        description: 'Anticipo directo a proveedor ' + rif + ' · ' + draft.supplierName.trim(),
+        type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate, referenceDoc: draft.reference.trim(),
+        items: [
+          { accountCode: advanceAccount.code, accountName: advanceAccount.name, debitBs: bookValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Reconocimiento de anticipo directo a proveedor' },
+          { accountCode: treasuryAccount.code, accountName: treasuryAccount.name, debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd, description: 'Desembolso documentado desde Caja/Banco' }
+        ]
+      });
+      const record: SupplierDirectAdvance = {
+        ...draft, supplierRif: rif, supplierName: draft.supplierName.trim(),
+        id: 'supplier-direct-advance-' + currentCompany.id + '-' + Date.now() + '-' + Math.floor(Math.random() * 100000),
+        companyId: currentCompany.id, amountUsd, bookValueBs,
+        reference: draft.reference.trim(), support: draft.support!.trim(),
+        journalEntryId: entry.id, createdAt: new Date().toISOString()
+      };
+      setSupplierDirectAdvances(prev => [...prev, record]);
+      await waitForPersistence();
+      return record;
+    } finally {
+      supplierDirectAdvanceInFlightRef.current.delete(operationKey);
     }
-    const amountUsd = Math.round(draft.amountUsd * 1000000) / 1000000;
-    const bookValueBs = Math.round(amountUsd * draft.bcvRate * 100) / 100;
-    const entry = addJournalEntry({
-      entryNumber: 0, date: draft.date,
-      description: 'Anticipo directo a proveedor ' + rif + ' · ' + draft.supplierName.trim(),
-      type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate, referenceDoc: draft.reference.trim(),
-      items: [
-        { accountCode: advanceAccount.code, accountName: advanceAccount.name, debitBs: bookValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Reconocimiento de anticipo directo a proveedor' },
-        { accountCode: treasuryAccount.code, accountName: treasuryAccount.name, debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd, description: 'Desembolso documentado desde Caja/Banco' }
-      ]
-    });
-    const record: SupplierDirectAdvance = {
-      ...draft, supplierRif: rif, supplierName: draft.supplierName.trim(),
-      id: 'supplier-direct-advance-' + currentCompany.id + '-' + Date.now(),
-      companyId: currentCompany.id, amountUsd, bookValueBs,
-      reference: draft.reference.trim(), journalEntryId: entry.id, createdAt: new Date().toISOString()
-    };
-    setSupplierDirectAdvances(prev => [...prev, record]);
-    await waitForPersistence();
-    return record;
   };
 
   const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
