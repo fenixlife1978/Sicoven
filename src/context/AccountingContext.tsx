@@ -30,6 +30,7 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { IslrFiscalEvent, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
+import { getIslrUnitTaxValueForPeriod } from '../data/islrConcepts';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
@@ -1852,6 +1853,64 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       notes: request.reason.trim()
     };
     purchaseSequenceRef.current[currentCompany.id] = nextPurchaseOp;
+    const originalIslrEvent = islrFiscalEvents.find(event =>
+      event.companyId === currentCompany.id && event.kind !== 'REVERSAL' &&
+      event.allocations.some(allocation => allocation.purchaseId === purchase.id)
+    );
+    let fiscalReversalEvent: IslrFiscalEvent | undefined;
+    if (originalIslrEvent && valuation.taxableBaseBs > 0.01) {
+      const priorReversals = islrFiscalEvents.filter(event =>
+        event.kind === 'REVERSAL' && event.reversalOfEventId === originalIslrEvent.id
+      );
+      const originalAllocation = originalIslrEvent.allocations.find(allocation => allocation.purchaseId === purchase.id);
+      const alreadyReversedBase = priorReversals.flatMap(event => event.allocations)
+        .filter(allocation => allocation.purchaseId === purchase.id)
+        .reduce((sum, allocation) => sum + Number(allocation.baseAmountBs), 0);
+      const remainingBase = Number(originalAllocation?.baseAmountBs || 0) - alreadyReversedBase;
+      if (!originalAllocation || valuation.taxableBaseBs > remainingBase + 0.01) {
+        throw new Error('La devolución supera la base ISLR pendiente de reversión de la factura original.');
+      }
+      const priorWithheld = priorReversals.reduce((sum, event) => sum + Number(event.withheldAmountBs), 0);
+      const expectedReversalWithheld = Math.round((
+        Number(originalIslrEvent.withheldAmountBs) *
+        (alreadyReversedBase + Number(valuation.taxableBaseBs)) /
+        Number(originalAllocation.baseAmountBs) + Number.EPSILON
+      ) * 100) / 100 - priorWithheld;
+      if (Math.abs(Number(valuation.islrWithheldBs) - expectedReversalWithheld) > 0.02) {
+        throw new Error('La retención ISLR calculada para la nota no concilia con el saldo fiscal proporcional pendiente.');
+      }
+      const reversalUt = getIslrUnitTaxValueForPeriod(request.returnDate.slice(0, 7));
+      if (reversalUt == null || !Number.isFinite(Number(reversalUt)) || Number(reversalUt) <= 0) {
+        throw new Error('No existe una Unidad Tributaria histórica verificada para la fecha de la nota de crédito.');
+      }
+      const eventKey = currentCompany.id + ':' + request.returnDate;
+      const existingDayEvents = islrFiscalEvents.filter(event =>
+        event.companyId === currentCompany.id && event.fiscalDate === request.returnDate
+      );
+      const nextEventSequence = Math.max(
+        existingDayEvents.reduce((max, event) => Math.max(max, Number(event.sequence) || 0), 0),
+        islrEventSequenceRef.current[eventKey] || 0
+      ) + 1;
+      islrEventSequenceRef.current[eventKey] = nextEventSequence;
+      fiscalReversalEvent = {
+        id: 'islr-reversal-' + note.id,
+        companyId: currentCompany.id,
+        supplierRif: originalIslrEvent.supplierRif,
+        conceptCode: originalIslrEvent.conceptCode,
+        fiscalDate: request.returnDate,
+        sequence: nextEventSequence,
+        kind: 'REVERSAL',
+        allocations: [{ purchaseId: purchase.id, baseAmountBs: Number(valuation.taxableBaseBs) }],
+        basePercentage: originalIslrEvent.basePercentage,
+        unitTaxValueBs: Number(reversalUt),
+        withheldAmountBs: Number(valuation.islrWithheldBs),
+        journalEntryId: journalId,
+        voucherId: originalIslrEvent.voucherId,
+        reversalOfEventId: originalIslrEvent.id,
+        reversalReason: request.reason.trim(),
+        createdAt: new Date().toISOString()
+      };
+    }
     const fiscalCorrectionNote = 'La nota de crédito ' + note.creditNoteNumber + ' afecta la retención de la factura ' + purchase.invoiceNumber + '. Verifique el tratamiento del comprobante original y la rectificación que corresponda antes de declarar.';
     if (!window.sicovenStore?.save) {
       throw new Error('No se puede confirmar la devolución: SQLite local no está disponible. No se modificó el estado contable.');
@@ -1895,6 +1954,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           correctionNote: [voucher.correctionNote, fiscalCorrectionNote].filter(Boolean).join(' | ') }
         : voucher
     ));
+    if (fiscalReversalEvent) setIslrFiscalEvents(prev => [...prev, fiscalReversalEvent!]);
     await persistenceConfirmation;
     return note;
       });
