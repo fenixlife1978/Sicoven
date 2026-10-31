@@ -114,3 +114,46 @@ export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcep
     withheldAmountBs: withheld
   };
 }
+
+
+/**
+ * Calcula la retención incremental de una operación dentro del mismo mes,
+ * proveedor y concepto. El sustraendo se aplica una sola vez al acumulado.
+ */
+export function calculateMonthlyIslrRetention(
+  currentBaseAmountBs: number,
+  previousOperations: Array<{ baseAmountBs: number; withheldAmountBs?: number; subtrahendBs?: number }>,
+  concept: IslrConcept
+): { rate: number; subtrahendBs: number; withheldAmountBs: number } {
+  if (!Array.isArray(previousOperations)) {
+    throw new Error('El historial mensual ISLR no tiene un formato válido.');
+  }
+  if (!concept.appliesSubtrahend) return calculateIslrRetention(currentBaseAmountBs, concept);
+
+  const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  let previousBase = 0;
+  let previousWithheld = 0;
+  let previousSubtrahend = 0;
+  for (const operation of previousOperations) {
+    const base = Number(operation.baseAmountBs);
+    const withheld = Number(operation.withheldAmountBs ?? 0);
+    const subtrahend = Number(operation.subtrahendBs ?? 0);
+    if (![base, withheld, subtrahend].every(Number.isFinite) || base < 0 || withheld < 0 || subtrahend < 0) {
+      throw new Error('Existe una operación ISLR mensual con importes históricos inválidos; se requiere conciliación antes de continuar.');
+    }
+    previousBase += base;
+    previousWithheld += withheld;
+    previousSubtrahend += subtrahend;
+  }
+  const cumulative = calculateIslrRetention(previousBase + currentBaseAmountBs, concept);
+  const incrementalWithheld = roundMoney(cumulative.withheldAmountBs - previousWithheld);
+  const incrementalSubtrahend = roundMoney(cumulative.subtrahendBs - previousSubtrahend);
+  if (incrementalWithheld < -0.01 || incrementalSubtrahend < -0.01) {
+    throw new Error('El acumulado ISLR no concilia con las retenciones/sustraendos previamente registrados. No se permite continuar sin rectificación fiscal.');
+  }
+  return {
+    rate: cumulative.rate,
+    subtrahendBs: Math.max(0, incrementalSubtrahend),
+    withheldAmountBs: Math.max(0, incrementalWithheld)
+  };
+}
