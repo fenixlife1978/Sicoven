@@ -23,7 +23,7 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   }
   const purchases = Array.isArray(nextState.purchases) ? nextState.purchases : [];
   const journals = Array.isArray(nextState.journalEntries) ? nextState.journalEntries : [];
-  const purchaseById = new Map(purchases.map(item => [String(item.id), item]));
+  const purchaseById = new Map(purchases.map(item => [[String(item.companyId), String(item.id)].join('|'), item]));
   const journalById = new Map(journals.map(item => [String(item.id), item]));
   const vouchers = Array.isArray(nextState.islrVouchers) ? nextState.islrVouchers : [];
   const voucherById = new Map(vouchers.map(item => [String(item.id), item]));
@@ -78,7 +78,7 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
     const allocationIds = new Set();
     let accountCreditWithheldTotal = 0;
     for (const allocation of event.allocations) {
-      const purchase = purchaseById.get(String(allocation?.purchaseId || ''));
+      const purchase = purchaseById.get([String(event.companyId), String(allocation?.purchaseId || '')].join('|'));
       if (!purchase || purchase.documentType !== '01' || purchase.isCancelled ||
           purchase.companyId !== event.companyId ||
           String(purchase.supplierRif || '').trim().toUpperCase() !== String(event.supplierRif).trim().toUpperCase() ||
@@ -113,12 +113,12 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       allocationIds.add(String(allocation.purchaseId));
     }
     const cashPurchasePayment = event.kind === 'PAYMENT' &&
-      event.allocations.some(allocation => purchaseById.get(String(allocation.purchaseId))?.paymentTerm === 'CONTADO');
+      event.allocations.some(allocation => purchaseById.get([String(event.companyId), String(allocation.purchaseId)].join('|'))?.paymentTerm === 'CONTADO');
     if (event.kind === 'ACCOUNT_CREDIT' || cashPurchasePayment) {
       if (Number(event.withheldAmountBs) > 0.01) {
         const voucher = event.voucherId ? voucherById.get(String(event.voucherId)) : null;
         const linkedPurchase = event.allocations.length === 1
-          ? purchaseById.get(String(event.allocations[0].purchaseId))
+          ? purchaseById.get([String(event.companyId), String(event.allocations[0].purchaseId)].join('|'))
           : null;
         if (!voucher || !linkedPurchase ||
             voucher.companyId !== event.companyId ||
@@ -203,17 +203,19 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
     if (event.kind === 'REVERSAL' || !Array.isArray(event.allocations)) continue;
     for (const allocation of event.allocations) {
       const id = String(allocation.purchaseId);
-      if (!purchaseById.has(id)) continue;
-      const reversed = next.filter(item => item.kind === 'REVERSAL' && String(item.reversalOfEventId) === String(event.id))
+      const key = [String(event.companyId), id].join('|');
+      if (!purchaseById.has(key)) continue;
+      const reversed = next.filter(item => item.kind === 'REVERSAL' &&
+          String(item.reversalOfEventId) === String(event.id) && item.companyId === event.companyId)
         .flatMap(item => item.allocations)
         .filter(item => String(item.purchaseId) === id)
         .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
       const remaining = Math.max(0, Number(allocation.baseAmountBs) - reversed);
-      activeByPurchase.set(id, (activeByPurchase.get(id) || 0) + remaining);
+      activeByPurchase.set(key, (activeByPurchase.get(key) || 0) + remaining);
     }
   }
-  for (const [purchaseId, allocated] of activeByPurchase) {
-    const purchase = purchaseById.get(purchaseId);
+  for (const [purchaseKey, allocated] of activeByPurchase) {
+    const purchase = purchaseById.get(purchaseKey);
     const eligibleBase = Number(purchase.taxableBaseBs) + Number(purchase.exemptAmountBs);
     if (allocated > eligibleBase + 0.01) {
       throw new Error('SQLite bloqueó una doble retención ISLR: las asignaciones acumuladas exceden la base elegible de la factura.');
