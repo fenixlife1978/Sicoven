@@ -19,22 +19,31 @@ import {
 } from '../../utils/seniatGenerators';
 
 export const RetencionesIslrView: React.FC = () => {
-  const { currentCompany, islrVouchers, displayCurrency } = useAccounting();
+  const { currentCompany, islrVouchers, purchases, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<IslrRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedPeriod, setSelectedPeriod] = useState('');
   const [showXmlPreview, setShowXmlPreview] = useState(false);
 
-  const availablePeriods = [...new Set(islrVouchers
-    .filter(v => v.companyId === currentCompany.id)
-    .map(v => v.period))].sort((a, b) => b.localeCompare(a));
+  const fiscalPurchases = purchases.filter(p => p.companyId === currentCompany.id && p.documentType === '01' && Boolean(p.islrConceptCode));
+  const availablePeriods = [...new Set([
+    ...islrVouchers.filter(v => v.companyId === currentCompany.id).map(v => v.period),
+    ...fiscalPurchases.map(p => p.invoiceDate.slice(0, 7).replace('-', ''))
+  ])].sort((a, b) => b.localeCompare(a));
   const activePeriod = availablePeriods.includes(selectedPeriod)
     ? selectedPeriod
     : (availablePeriods[0] || '');
   const periodVouchers = islrVouchers
     .filter(v => v.companyId === currentCompany.id && v.period === activePeriod)
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
+  const periodPurchases = fiscalPurchases.filter(p => p.invoiceDate.slice(0, 7).replace('-', '') === activePeriod);
+  const activeOperations = periodPurchases.filter(p => !p.isCancelled);
+  const legacyVouchers = periodVouchers.filter(v => !periodPurchases.some(p =>
+    p.supplierRif === v.supplierRif && p.invoiceNumber === v.invoiceNumber &&
+    p.invoiceDate === v.invoiceDate && p.islrConceptCode === v.conceptCode
+  ));
+  const hasFiscalOperations = activeOperations.length > 0 || legacyVouchers.length > 0;
 
   const filteredVouchers = periodVouchers
     .filter(v => {
@@ -52,20 +61,20 @@ export const RetencionesIslrView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection);
+  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled);
   const totalRetenidoBs = periodVouchers.reduce((s, v) => s + v.withheldAmountBs, 0);
   const totalRetenidoUsd = periodVouchers.reduce((s, v) => s + v.withheldAmountUsd, 0);
-  const totalBaseBs = periodVouchers.reduce((s, v) => s + v.baseAmountBs, 0);
+  const totalBaseBs = activeOperations.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
 
-  const generatedXml = generateSeniatIslrXml(currentCompany, periodVouchers);
-  const generatedTxt = generateSeniatIslrTxt(currentCompany, periodVouchers);
+  const generatedXml = generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod);
+  const generatedTxt = generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod);
 
   const handleDownloadXml = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (periodVouchers.length === 0) {
+    if (!hasFiscalOperations) {
       alert('No hay retenciones de ISLR para generar el archivo XML.');
       return;
     }
@@ -79,7 +88,7 @@ export const RetencionesIslrView: React.FC = () => {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (periodVouchers.length === 0) {
+    if (!hasFiscalOperations) {
       alert('No hay retenciones de ISLR para generar el archivo TXT.');
       return;
     }
@@ -123,7 +132,7 @@ export const RetencionesIslrView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadTxt}
-              disabled={filteredVouchers.length === 0 || hasPendingFiscalCorrection}
+              disabled={!hasFiscalOperations || hasPendingFiscalCorrection}
               className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold text-slate-700 bg-slate-100 hover:bg-slate-200 disabled:opacity-40 rounded-xl transition cursor-pointer border border-slate-300"
               title="Descargar versión TXT"
             >
@@ -231,7 +240,7 @@ export const RetencionesIslrView: React.FC = () => {
             </select>
           </label>
           <p className="text-[11px] text-slate-500">
-            XML, TXT y totales incluyen todos los comprobantes del período seleccionado. La búsqueda solo filtra la tabla.
+            XML, TXT y base fiscal incluyen todas las operaciones con concepto ISLR del período, incluso con retención cero. La búsqueda solo filtra la tabla.
           </p>
         </div>
 
