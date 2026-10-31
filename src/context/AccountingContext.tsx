@@ -3693,7 +3693,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           !Number.isFinite(item.bookValueBs) || item.bookValueBs <= 0 ||
           !Number.isFinite(item.bcvRate) || item.bcvRate <= 0 ||
           !['BS', 'USD'].includes(item.paymentCurrency) || !Number.isFinite(item.paidAmount) || item.paidAmount <= 0 ||
-          !String(item.reference || '').trim() || !account || account.type !== 'ACTIVO' || !account.isMovement ||
+          !String(item.reference || '').trim() || !String(item.support || '').trim() || !account || account.type !== 'ACTIVO' || !account.isMovement ||
           !account.code.startsWith('1.1.1.') || !journal || journal.companyId !== item.companyId ||
           journal.type !== 'ANTICIPO_PROVEEDOR' || journal.date !== item.date;
       })) throw new Error('El respaldo contiene anticipos directos de proveedor inválidos o sin asiento contable.');
