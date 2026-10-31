@@ -473,7 +473,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
           }
 
           .login-form::after {
-            content: "Sistema Contable Integral Multiempresas";
+            content: "Sistema Contable VEN-NIF & SENIAT";
             display: block;
             margin-top: 22px;
             color: #64758d;
@@ -518,7 +518,7 @@ export const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       >
         <img
           src={loginReferenceImg}
-          alt="SICOVEN - Sistema Contable Integral Multiempresas"
+          alt="SICOVEN - Sistema Contable VEN-NIF & SENIAT"
           className="login-background-img"
           draggable={false}
         />

@@ -101,7 +101,7 @@ export function LicenseGate({ onReady }: { onReady: () => void }) {
         <div className="mb-6 flex items-center justify-between gap-3 border-b border-slate-100 pb-5">
           <img
             src="./sicoven-logo-horizontal.svg"
-            alt="SICOVEN"
+            alt="SICOVEN · Sistema Contable VEN-NIF & SENIAT"
             className="h-10 w-auto max-w-[200px] object-contain"
           />
           <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-50 text-emerald-800 text-xs font-bold border border-emerald-200">

@@ -105,9 +105,9 @@ const AppContent: React.FC<{ auth: {token:string; user:AuthUser}; logout: () => 
       <footer className="bg-slate-900 border-t border-slate-800 text-slate-400 py-6 text-xs no-print mt-auto">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <div className="flex items-center gap-2.5">
-            <img src="./sicoven-logo-horizontal.svg" alt="SICOVEN" className="h-6 w-auto object-contain" />
+            <img src="./sicoven-logo-horizontal.svg" alt="SICOVEN · Sistema Contable VEN-NIF & SENIAT" className="h-6 w-auto object-contain" />
             <span className="text-slate-600">•</span>
-            <span>Sistema Contable Multi-Empresa VEN-NIF & SENIAT</span>
+            <span>Sistema Contable VEN-NIF & SENIAT</span>
           </div>
 
           <div className="flex flex-wrap items-center gap-4 text-[11px] text-slate-400">

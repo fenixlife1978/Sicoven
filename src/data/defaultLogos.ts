@@ -17,9 +17,9 @@ export const SICOVEN_OFFICIAL_HORIZONTAL_LOGO =
     </g>
   </g>
   <text x="300" y="175" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif" font-size="128" font-weight="800" letter-spacing="-3" fill="#0F172A">Sicoven</text>
-  <line x1="304" y1="208" x2="810" y2="208" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
-  <line x1="304" y1="220" x2="810" y2="220" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
-  <text x="304" y="260" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif" font-size="28" font-weight="600" letter-spacing="1" fill="#475569">Sistema Contable Integral</text>
+  <line x1="304" y1="208" x2="880" y2="208" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
+  <line x1="304" y1="220" x2="880" y2="220" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
+  <text x="304" y="260" font-family="'Segoe UI', -apple-system, BlinkMacSystemFont, Arial, sans-serif" font-size="28" font-weight="600" letter-spacing="0.5" fill="#475569">Sistema Contable VEN-NIF &amp; SENIAT</text>
 </svg>`);
 
 // Logotipo por defecto para empresas

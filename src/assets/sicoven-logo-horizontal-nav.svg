@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 300" width="1100" height="300">
-  <title>Sicoven · Sistema Contable Integral Multiempresas</title>
+  <title>Sicoven · Sistema Contable VEN-NIF &amp; SENIAT</title>
   <g transform="translate(30,30) scale(0.4688)">
     <rect width="512" height="512" rx="112" fill="#1e293b" stroke="#334155" stroke-width="10"/>
     <g transform="translate(0,-20)">
@@ -10,7 +10,7 @@
     </g>
   </g>
   <text x="300" y="175" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="128" font-weight="700" letter-spacing="-3" fill="#FFFFFF">Sicoven</text>
-  <line x1="304" y1="208" x2="810" y2="208" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
-  <line x1="304" y1="220" x2="810" y2="220" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
-  <text x="304" y="260" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="22" font-weight="600" letter-spacing="0.5" fill="#94A3B8">Sistema Contable Integral Multiempresas</text>
+  <line x1="304" y1="208" x2="880" y2="208" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
+  <line x1="304" y1="220" x2="880" y2="220" stroke="#FFC72C" stroke-width="6" stroke-linecap="round"/>
+  <text x="304" y="260" font-family="'Segoe UI','Helvetica Neue',Arial,sans-serif" font-size="24" font-weight="600" letter-spacing="0.5" fill="#94A3B8">Sistema Contable VEN-NIF &amp; SENIAT</text>
 </svg>

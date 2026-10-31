@@ -143,7 +143,7 @@ export function AdminUsers({ token, user, onLogout, onBack }: AdminUsersProps) {
           <div className="flex items-center gap-3">
             <img
               src={sicovenNavLogo}
-              alt="SICOVEN"
+              alt="SICOVEN · Sistema Contable VEN-NIF & SENIAT"
               className="h-8 sm:h-9 w-auto max-w-[180px] sm:max-w-[220px] object-contain"
             />
             <span className="hidden sm:inline-block text-[10px] font-bold tracking-wider uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
