@@ -146,7 +146,22 @@ export function allocateSupplierAdvanceCreditNotes(
         String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
     const allocations = settlement.sourceCreditNoteAllocations;
     if (!Array.isArray(allocations) || allocations.length === 0) {
-      if (!Array.isArray(settlement.sourceCreditNoteIds) || settlement.sourceCreditNoteIds.length === 0) continue;
+      if (!Array.isArray(settlement.sourceCreditNoteIds) || settlement.sourceCreditNoteIds.length === 0) {
+        const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
+        const directIds = settlement.sourceDirectAdvanceIds || [];
+        const directUsd = directAllocations.reduce((sum, item) => sum + Number(item?.amountUsd || 0), 0);
+        const directBs = directAllocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0);
+        if (!directAllocations.length || directAllocations.length !== directIds.length ||
+            new Set(directIds).size !== directIds.length ||
+            directAllocations.some(item => !item || !directIds.includes(item.directAdvanceId) ||
+              !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
+              !Number.isFinite(item.bookValueBs) || item.bookValueBs < 0) ||
+            Math.abs(directUsd - roundUsd(settlement.amountUsd)) > 0.00001 ||
+            Math.abs(directBs - roundBs(settlement.advanceBookValueBs ?? settlement.amountBs)) > 0.02) {
+          throw new Error('Existe una liquidación histórica de anticipos directos sin distribución individual conciliada.');
+        }
+        continue;
+      }
       throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
     }
     const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
