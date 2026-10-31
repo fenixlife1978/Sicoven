@@ -429,3 +429,32 @@ test('a reopened and reclosed exercise can be opened once with a durable link to
     assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 1);
   } finally { harness.db.close(); }
 });
+
+test('SQLite does not duplicate an opening that predates the exercise-link migration', () => {
+  const harness = createHarness();
+  try {
+    const legacy = {
+      id: 'legacy-opening', companyId: 'company-1', entryNumber: 1,
+      date: '2027-01-01', description: 'Apertura histórica anterior al vínculo',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA-LEGACY',
+      items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    };
+    const base = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa Uno', closedThroughDate: '2026-12-31' }],
+      journalEntries: [legacy]
+    };
+    harness.handler({}, 'valid-session', base);
+    const linked = {
+      ...legacy, id: 'linked-opening', entryNumber: 2,
+      referenceDoc: 'APERTURA:company-1:2027-01-01',
+      exerciseLink: { priorPeriodStartDate: '2026-01-01', priorPeriodEndDate: '2026-12-31', nextPeriodStartDate: '2027-01-01' }
+    };
+    assert.throws(() => harness.handler({}, 'valid-session', { ...base, journalEntries: [legacy, linked] }), /duplicarla/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM accounting_exercise_links').get().count, 0);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_exercise_opening_linked'").get().count, 0);
+  } finally { harness.db.close(); }
+});
