@@ -5,7 +5,7 @@ import {
   VALOR_UNIDAD_TRIBUTARIA_BS,
   ISLR_FORMULA_FACTOR,
   calculateIslrRetention
-} from './islrConcepts';
+} from '../data/islrConcepts';
 
 const concept = (code: string) => {
   const found = ISLR_CONCEPTS.find(item => item.code === code);
