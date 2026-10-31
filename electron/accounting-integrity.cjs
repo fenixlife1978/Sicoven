@@ -936,7 +936,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó un asiento de anticipo descuadrado o que no descarga el valor histórico correcto.');
     }
     if (settlement.kind === 'REFUND_RECEIVED') {
-      const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode && item.currency === 'BS');
+      const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode && (!item.currency || item.currency === 'BS'));
       const treasuryAccount = asArray(nextState.accounts).find(item => item.code === settlement.treasuryAccountCode);
       const validCashAccount = treasuryAccount && treasuryAccount.type === 'ACTIVO' &&
         treasuryAccount.isMovement === true && treasuryAccount.code === '1.1.1.01';
