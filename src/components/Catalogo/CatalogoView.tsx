@@ -25,6 +25,7 @@ export const CatalogoView: React.FC = () => {
   const [name, setName] = useState('');
   const [type, setType] = useState<AccountType>('ACTIVO');
   const [isMovement, setIsMovement] = useState(true);
+  const [accountError, setAccountError] = useState<string | null>(null);
 
   const filteredAccounts = accounts.filter(acc => {
     if (typeFilter !== 'ALL' && acc.type !== typeFilter) return false;
@@ -39,20 +40,22 @@ export const CatalogoView: React.FC = () => {
     e.preventDefault();
     if (!code.trim() || !name.trim()) return;
 
-    // determine level from code segments: e.g. "1" -> 1, "1.1" -> 2, "1.1.1" -> 3, "1.1.1.01" -> 4
-    const level = code.split('.').length;
-
-    addAccount({
-      code: code.trim(),
-      name: name.trim().toUpperCase(),
-      type,
-      level,
-      isMovement
-    });
-
-    setIsModalOpen(false);
-    setCode('');
-    setName('');
+    try {
+      const level = code.trim().split('.').length;
+      addAccount({
+        code: code.trim(),
+        name: name.trim().toUpperCase(),
+        type,
+        level,
+        isMovement
+      });
+      setIsModalOpen(false);
+      setCode('');
+      setName('');
+      setAccountError(null);
+    } catch (error) {
+      setAccountError(error instanceof Error ? error.message : 'No se pudo validar la cuenta contable.');
+    }
   };
 
   const getTypeColor = (accType: AccountType) => {
@@ -96,7 +99,7 @@ export const CatalogoView: React.FC = () => {
           </div>
 
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={() => { setAccountError(null); setIsModalOpen(true); }}
             className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl transition shadow cursor-pointer"
           >
             <Plus className="w-4 h-4" />
@@ -267,6 +270,12 @@ export const CatalogoView: React.FC = () => {
                   <option value="GASTOS">6 - Gastos</option>
                 </select>
               </div>
+
+              {accountError && (
+                <div role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">
+                  {accountError}
+                </div>
+              )}
 
               <div className="pt-2">
                 <label className="flex items-center gap-2 font-semibold text-slate-700 cursor-pointer">
