@@ -71,8 +71,8 @@ test('SENIAT XML uses fiscal event date and allocation instead of invoice date',
     journalEntryId: 'j1', createdAt: '2026-10-10T10:00:00.000Z'
   };
   const xml = generateSeniatIslrOperationsXml(company, [purchase()], [], '202610', [event]);
-  assert.match(xml, /<FechaOperacion>10\\/10\\/2026<\\/FechaOperacion>/);
-  assert.match(xml, /<MontoOperacion>800\\.00<\\/MontoOperacion>/);
+  assert.ok(xml.includes('<FechaOperacion>10/10/2026</FechaOperacion>'));
+  assert.ok(xml.includes('<MontoOperacion>800.00</MontoOperacion>'));
 });
 
 test('SENIAT event-backed purchase is not duplicated by its legacy voucher', () => {
