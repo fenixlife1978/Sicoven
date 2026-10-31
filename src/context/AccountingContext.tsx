@@ -943,7 +943,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const balance = getSupplierAdvanceBalance(rif);
     // El formulario captura el importe efectivamente recibido en Bs.; por tanto,
     // no debe permitir seleccionar una cuenta bancaria denominada en USD.
-    const treasuryCodes = [...new Set([...bankAccounts.filter(item => item.companyId === currentCompany.id && item.currency === 'BS').map(item => item.accountCode), ...accounts.filter(item => item.type === 'ACTIVO' && item.isMovement && item.code === '1.1.1.01').map(item => item.code)])];
+    const treasuryCodes = [...new Set([...bankAccounts.filter(item => item.companyId === currentCompany.id && (!item.currency || item.currency === 'BS')).map(item => item.accountCode), ...accounts.filter(item => item.type === 'ACTIVO' && item.isMovement && item.code === '1.1.1.01').map(item => item.code)])];
     const validation = validateSupplierAdvanceSettlementDraft(draft, balance.outstandingUsd, target?.supplierRif, treasuryCodes);
     if (validation) throw new Error(validation);
     if (draft.kind === 'APPLIED_TO_PURCHASE') {
