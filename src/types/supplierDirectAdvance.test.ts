@@ -19,7 +19,7 @@ const advance = (id: string, overrides: Partial<SupplierDirectAdvance> = {}): Su
   id, companyId: 'company-1', supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
   date: '2026-10-01', amountUsd: 100, bookValueBs: 10000, bcvRate: 100,
   treasuryAccountCode: '1.1.1.01', paymentCurrency: 'BS', paidAmount: 10000,
-  reference: 'TRX-001', journalEntryId: 'journal-' + id, createdAt: '2026-10-01T10:00:00.000Z',
+  reference: 'TRX-001', support: 'REC-001', journalEntryId: 'journal-' + id, createdAt: '2026-10-01T10:00:00.000Z',
   ...overrides
 });
 
@@ -40,7 +40,7 @@ describe('supplier direct advances', () => {
     const draft = {
       supplierRif: 'J-12345678-9', supplierName: 'Proveedor', date: '2026-10-01',
       amountUsd: 12.5, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
-      paymentCurrency: 'BS' as const, paidAmount: 1250, reference: 'TRX-002'
+      paymentCurrency: 'BS' as const, paidAmount: 1250, reference: 'TRX-002', support: 'REC-002'
     };
     assert.equal(validateSupplierDirectAdvanceDraft(draft, 'company-1', accounts), null);
     assert.match(validateSupplierDirectAdvanceDraft({ ...draft, paidAmount: 1200 }, 'company-1', accounts) || '', /no concilia/);
