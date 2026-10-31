@@ -31,6 +31,7 @@ test('code 002 applies the legal 3% formula and UT 43 sustraendo', () => {
 test('code 002 does not withhold when the payment base does not exceed 83.3334 UT', () => {
   const result = calculateIslrRetention(3583.34, concept('002'));
   assert.equal(result.withheldAmountBs, 0);
+  assert.equal(result.subtrahendBs, 0);
 });
 
 test('code 003 applies 34% to 90% of the non-resident professional fee', () => {
@@ -79,11 +80,11 @@ test('monthly ISLR accumulation applies the sustraendo only once across invoices
 test('monthly ISLR accumulation carries the threshold across invoices without repeating the sustraendo', async () => {
   const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
   const first = calculateMonthlyIslrRetention(2000, [], concept('002'));
-  assert.deepEqual(first, { rate: 3, subtrahendBs: 107.5, withheldAmountBs: 0 });
+  assert.deepEqual(first, { rate: 3, subtrahendBs: 0, withheldAmountBs: 0 });
   const second = calculateMonthlyIslrRetention(2000, [
     { baseAmountBs: 2000, subtrahendBs: first.subtrahendBs, withheldAmountBs: first.withheldAmountBs }
   ], concept('002'));
-  assert.deepEqual(second, { rate: 3, subtrahendBs: 0, withheldAmountBs: 12.5 });
+  assert.deepEqual(second, { rate: 3, subtrahendBs: 107.5, withheldAmountBs: 12.5 });
 });
 
 test('monthly ISLR accumulation rejects historical withholding that exceeds the cumulative calculation', async () => {
