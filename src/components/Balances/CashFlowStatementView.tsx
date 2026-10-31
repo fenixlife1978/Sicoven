@@ -1,7 +1,8 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { buildCashFlowReport, CashFlowSection } from '../../types/cashFlowStatement';
-import { CashFlowActivity } from '../../types/accounting';
+import { CashFlowActivity, CashFlowIndirectTreatment } from '../../types/accounting';
+import { buildCashFlowIndirectReport } from '../../types/cashFlowIndirectStatement';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { ArrowLeft, Printer, Wallet, AlertTriangle, CheckCircle2 } from 'lucide-react';
 
@@ -22,7 +23,7 @@ const SECTION_LABELS: Record<CashFlowSection, string> = {
 };
 
 export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, isStorageReady, waitForPersistence } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, setAccountCashFlowIndirectTreatment, isStorageReady, waitForPersistence } = useAccounting();
   const availableYears = useMemo(() => {
     const years = journalEntries.filter(entry => /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
       .map(entry => Number(entry.date.slice(0, 4)));
@@ -34,6 +35,31 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
     () => buildCashFlowReport(journalEntries, accounts, bankAccounts, currentCompany.id, Number(year)),
     [journalEntries, accounts, bankAccounts, currentCompany.id, year]
   );
+  const indirectReport = useMemo(
+    () => buildCashFlowIndirectReport(journalEntries, accounts, bankAccounts, currentCompany.id, Number(year)),
+    [journalEntries, accounts, bankAccounts, currentCompany.id, year]
+  );
+  const indirectCandidates = useMemo(() => accounts.filter(account =>
+    account.isMovement && ['ACTIVO', 'PASIVO', 'INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
+    journalEntries.some(entry => entry.date.startsWith(year) && entry.items.some(item => item.accountCode === account.code))
+  ).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })), [accounts, journalEntries, year]);
+  const INDIRECT_TREATMENT_LABELS: Record<CashFlowIndirectTreatment, string> = {
+    NON_CASH_EXPENSE_ADD_BACK: 'Gasto no monetario: sumar',
+    NON_CASH_INCOME_DEDUCT: 'Ingreso no monetario: restar',
+    OPERATING_ASSET_INCREASE_DEDUCT: 'Activo operativo: aumento resta',
+    OPERATING_LIABILITY_INCREASE_ADD: 'Pasivo operativo: aumento suma',
+    EXCLUDE: 'Excluir expresamente'
+  };
+  const handleIndirectClassify = async (code: string, value: CashFlowIndirectTreatment) => {
+    try {
+      setAccountCashFlowIndirectTreatment(code, value);
+      setMessage('Guardando tratamiento indirecto de la cuenta ' + code + ' en SQLite…');
+      await waitForPersistence();
+      setMessage('SQLite confirmó el tratamiento indirecto de la cuenta ' + code + '.');
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar el tratamiento indirecto en SQLite.');
+    }
+  };
   const money = (bs: number, usd: number) => <span className="text-right font-mono">
     <span>{formatBs(bs)}</span><span className="block text-[10px] text-slate-500">{formatUsd(usd)}</span>
   </span>;
@@ -141,10 +167,57 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
       </table></div> : <p className="p-6 text-center text-xs text-slate-500">No hay flujos clasificados para mostrar.</p>}
     </section>
 
+    <section className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="font-bold text-slate-900">Estado de Flujos de Efectivo — método indirecto</h2>
+          <p className="mt-1 text-xs text-slate-500">Parte del resultado del ejercicio, incorpora ajustes no monetarios y variaciones de capital de trabajo. Inversión y financiación conservan la clasificación directa de movimientos de efectivo.</p>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          <span className={indirectReport.isReconciled ? 'rounded-full bg-emerald-100 px-3 py-1 text-emerald-800' : 'rounded-full bg-amber-100 px-3 py-1 text-amber-900'}>{indirectReport.isReconciled ? 'Conciliado' : 'No conciliado'}</span>
+          <span className={indirectReport.isFullyClassified ? 'rounded-full bg-emerald-100 px-3 py-1 text-emerald-800' : 'rounded-full bg-amber-100 px-3 py-1 text-amber-900'}>{indirectReport.isFullyClassified ? 'Clasificación completa' : 'Clasificación pendiente'}</span>
+        </div>
+      </div>
+      <div className="mt-4 overflow-x-auto">
+        <table className="min-w-[680px] w-full text-xs">
+          <thead className="bg-slate-100"><tr><th className="p-2 text-left">Concepto</th><th className="p-2 text-right">Bs.</th><th className="p-2 text-right">USD</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            <tr><td className="p-2 font-semibold">Resultado neto del ejercicio</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.netIncomeBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.netIncomeUsd)}</td></tr>
+            <tr><td className="p-2">Ajustes no monetarios netos</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.nonCashAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.nonCashAdjustmentsUsd)}</td></tr>
+            <tr><td className="p-2">Variaciones del capital de trabajo</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.workingCapitalAdjustmentsBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.workingCapitalAdjustmentsUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Flujo neto de actividades operativas</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.operatingCashFlowBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.operatingCashFlowUsd)}</td></tr>
+            <tr><td className="p-2">Actividades de inversión</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.investingCashFlowBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.investingCashFlowUsd)}</td></tr>
+            <tr><td className="p-2">Actividades de financiación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.financingCashFlowBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.financingCashFlowUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Variación neta calculada</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.netChangeBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.netChangeUsd)}</td></tr>
+            <tr><td className="p-2">Efectivo inicial</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.openingCashBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.openingCashUsd)}</td></tr>
+            <tr className="bg-slate-50"><td className="p-2 font-bold">Efectivo final calculado / según mayor</td><td className="p-2 text-right font-mono font-bold">{formatBs(indirectReport.closingCashBs)} / {formatBs(indirectReport.ledgerClosingCashBs)}</td><td className="p-2 text-right font-mono font-bold">{formatUsd(indirectReport.closingCashUsd)} / {formatUsd(indirectReport.ledgerClosingCashUsd)}</td></tr>
+            <tr><td className="p-2">Diferencia de conciliación</td><td className="p-2 text-right font-mono">{formatBs(indirectReport.reconciliationDifferenceBs)}</td><td className="p-2 text-right font-mono">{formatUsd(indirectReport.reconciliationDifferenceUsd)}</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div className="mt-4 rounded-lg border border-slate-200 p-3">
+        <h3 className="text-sm font-bold text-slate-900">Ajustes no monetarios y capital de trabajo</h3>
+        <p className="mt-1 text-xs text-slate-500">Cada cuenta debe clasificarse por su naturaleza real. Las depreciaciones, amortizaciones, provisiones, deterioros y otros ajustes solo se suman/restan cuando están identificados expresamente en la cuenta; no se deducen por el nombre.</p>
+        <div className="mt-3 space-y-2">
+          {indirectCandidates.map(account => <div key={account.code} className="grid grid-cols-1 items-center gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-[1fr_300px]">
+            <div><span className="font-mono text-xs text-slate-500">{account.code}</span><span className="ml-2 text-sm font-medium text-slate-800">{account.name}</span></div>
+            <select value={account.cashFlowIndirectTreatment || 'EXCLUDE'} onChange={event => handleIndirectClassify(account.code, event.target.value as CashFlowIndirectTreatment)} className="rounded-lg border border-slate-300 bg-white p-2 text-xs" disabled={!isStorageReady}>
+              {(Object.keys(INDIRECT_TREATMENT_LABELS) as CashFlowIndirectTreatment[]).map(treatment => <option key={treatment} value={treatment}>{INDIRECT_TREATMENT_LABELS[treatment]}</option>)}
+            </select>
+          </div>)}
+          {!indirectCandidates.length && <p className="py-4 text-center text-xs text-slate-500">No hay cuentas con movimientos en el ejercicio seleccionado.</p>}
+        </div>
+      </div>
+      {indirectReport.adjustments.length > 0 && <div className="mt-4 overflow-x-auto"><table className="min-w-[700px] w-full text-xs">
+        <thead className="bg-slate-100"><tr><th className="p-2 text-left">Cuenta</th><th className="p-2 text-right">Saldo inicial Bs.</th><th className="p-2 text-right">Saldo final Bs.</th><th className="p-2 text-right">Ajuste Bs.</th><th className="p-2 text-right">Ajuste USD</th></tr></thead>
+        <tbody className="divide-y divide-slate-100">{indirectReport.adjustments.map(row => <tr key={row.accountCode}><td className="p-2">{row.accountCode} · {row.accountName}</td><td className="p-2 text-right font-mono">{formatBs(row.openingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.closingBalanceBs)}</td><td className="p-2 text-right font-mono">{formatBs(row.adjustmentBs)}</td><td className="p-2 text-right font-mono">{formatUsd(row.adjustmentUsd)}</td></tr>)}</tbody>
+      </table></div>}
+    </section>
+
     <section className="rounded-xl border border-amber-300 bg-amber-50 p-4 text-xs text-amber-950">
       <div className="flex items-start gap-2"><AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" /><div>
         <p className="font-bold">Límite de alcance normativo</p>
-        <p className="mt-1">Este informe presenta el método directo con base en movimientos de efectivo contabilizados y clasificación expresa de contrapartidas. El método indirecto no se presenta todavía: requiere clasificar y conciliar ajustes no monetarios, depreciaciones, provisiones y variaciones de capital de trabajo. Las transferencias internas entre cuentas de efectivo no se presentan como flujos de operación, inversión o financiación.</p>
+        <p className="mt-1">El método directo se obtiene de movimientos contabilizados de caja y bancos. El método indirecto se reconstruye desde el resultado neto, ajustes no monetarios y variaciones expresamente clasificadas de capital de trabajo; inversión y financiación reutilizan los flujos directos clasificados. Ningún ajuste se presume por el nombre de una cuenta. Las transferencias internas entre equivalentes de efectivo se excluyen de los flujos externos.</p>
       </div></div>
     </section>
   </div>;
