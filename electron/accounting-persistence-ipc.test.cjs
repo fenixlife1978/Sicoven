@@ -188,7 +188,7 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
     assert.equal(details.referenceDoc, opening.referenceDoc);
     assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
     const types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
-    assert.deepEqual(types, ['journal_entry_posted', 'accounting_year_opening_posted', 'state_saved']);
+    assert.deepEqual(types, ['journal_entry_posted', 'accounting_year_opening_posted', 'accounting_period_closed', 'state_saved']);
   } finally {
     harness.db.close();
   }
