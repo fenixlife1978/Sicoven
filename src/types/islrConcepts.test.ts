@@ -142,7 +142,7 @@ test('ISLR T-2 applies the progressive marginal brackets at 2,000 and 3,000 UT',
 test('ISLR T-2 is progressive rather than applying one flat rate to the whole base', () => {
   const atBoundary = calculateIslrTariff2Ut(3000);
   const aboveBoundary = calculateIslrTariff2Ut(3001);
-  assert.equal(aboveBoundary - atBoundary, 0.34);
+  assert.ok(Math.abs((aboveBoundary - atBoundary) - 0.34) < 1e-9);
   assert.throws(() => calculateIslrTariff2Ut(-1), /base anual/);
   assert.throws(() => calculateIslrTariff2Ut(Number.NaN), /base anual/);
 });
