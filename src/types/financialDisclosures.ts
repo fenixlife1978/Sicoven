@@ -65,29 +65,46 @@ export function buildDisclosureAccountMovements(
   companyId: string,
   fiscalYear: number
 ): DisclosureAccountMovement[] {
+  if (!companyId.trim()) throw new Error('La empresa del anexo cuantitativo no es válida.');
+  if (!Number.isInteger(fiscalYear) || fiscalYear < 1900 || fiscalYear > 9999) {
+    throw new Error('El ejercicio del anexo cuantitativo no es válido.');
+  }
+
   const start = `${fiscalYear}-01-01`;
   const end = `${fiscalYear}-12-31`;
   const scoped = entries.filter(entry =>
     entry.companyId === companyId && entry.date >= start && entry.date <= end && entry.type !== 'CIERRE'
   );
+  const accountTypes = new Map(accounts.map(account => [account.code, account.type]));
   const byCode = new Map<string, DisclosureAccountMovement>();
   for (const entry of scoped) {
     for (const line of entry.items) {
+      if (!line.accountCode || !accountTypes.has(line.accountCode)) {
+        throw new Error(`El asiento ${entry.id} contiene una cuenta inexistente en el anexo cuantitativo.`);
+      }
+      const amounts = [
+        ['debitBs', line.debitBs], ['creditBs', line.creditBs],
+        ['debitUsd', line.debitUsd], ['creditUsd', line.creditUsd]
+      ] as const;
+      for (const [field, amount] of amounts) {
+        if (!Number.isFinite(amount) || amount < 0) {
+          throw new Error(`El asiento ${entry.id}, cuenta ${line.accountCode}: ${field} debe ser un importe finito y no negativo.`);
+        }
+      }
       const row = byCode.get(line.accountCode) || {
         accountCode: line.accountCode,
         accountName: line.accountName,
         debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
         balanceBs: 0, balanceUsd: 0, entryIds: []
       };
-      row.debitBs += Number(line.debitBs || 0);
-      row.creditBs += Number(line.creditBs || 0);
-      row.debitUsd += Number(line.debitUsd || 0);
-      row.creditUsd += Number(line.creditUsd || 0);
+      row.debitBs += line.debitBs;
+      row.creditBs += line.creditBs;
+      row.debitUsd += line.debitUsd;
+      row.creditUsd += line.creditUsd;
       if (!row.entryIds.includes(entry.id)) row.entryIds.push(entry.id);
       byCode.set(line.accountCode, row);
     }
   }
-  const accountTypes = new Map(accounts.map(account => [account.code, account.type]));
   for (const row of byCode.values()) {
     const type = accountTypes.get(row.accountCode);
     const creditNormal = type === 'INGRESOS' || type === 'PASIVO' || type === 'PATRIMONIO';
