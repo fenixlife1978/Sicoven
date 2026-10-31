@@ -65,6 +65,17 @@ describe('cash flow indirect method', () => {
     assert.throws(() => buildCashFlowIndirectReport([], accounts, banks, '', 2026));
   });
 
+  it('rejects non-finite monetary values instead of silently converting them to zero', () => {
+    const invalid = entry('invalid-amount', '2026-01-02', [
+      line('1.1.1.01', Number.NaN, 0, 1, 0),
+      line('4.1.1', 0, 1, 0, 1)
+    ]);
+    assert.throws(
+      () => buildCashFlowIndirectReport([invalid], accounts, banks, 'co-1', 2026),
+      /importe no finito/
+    );
+  });
+
   it('does not silently mark unknown income and balance accounts as classified', () => {
     const incomplete = accounts.map(account => account.code === '4.1.1'
       ? { ...account, cashFlowActivity: undefined, cashFlowIndirectTreatment: undefined }
