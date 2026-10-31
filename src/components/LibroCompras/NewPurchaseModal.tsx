@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
-import { ISLR_CONCEPTS, calculateIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
+import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
 
@@ -11,7 +11,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, products, movements, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
+  const { currentCompany, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
@@ -66,7 +66,20 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   let islrRate = 0;
 
   if (applyIslr && selectedConcept && taxableBaseBs > 0) {
-    const calc = calculateIslrRetention(taxableBaseBs, selectedConcept);
+    const supplierKey = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+    const monthKey = String(invoiceDate || '').slice(0, 7);
+    const priorOperations = purchases.filter(item =>
+      !item.isCancelled &&
+      item.documentType === '01' &&
+      String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
+      item.islrConceptCode === selectedConcept.code &&
+      String(item.invoiceDate || '').slice(0, 7) === monthKey
+    ).map(item => ({
+      baseAmountBs: item.taxableBaseBs,
+      withheldAmountBs: item.islrWithheldBs || 0,
+      subtrahendBs: item.islrSubtrahendBs || 0
+    }));
+    const calc = calculateMonthlyIslrRetention(taxableBaseBs, priorOperations, selectedConcept);
     islrRate = calc.rate;
     islrSubtrahendBs = calc.subtrahendBs;
     islrWithheldBs = calc.withheldAmountBs;
