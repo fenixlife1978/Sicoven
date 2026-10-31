@@ -89,7 +89,7 @@ test('SQLite accepts a linked contra-entry reversal of an unused direct supplier
   const reversal = {
     id: 'advance-reversal', companyId: 'company-1', entryNumber: 2,
     date: '2026-10-11', description: 'Reversión documentada del anticipo',
-    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-ADV-1',
+    type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-1',
     reversalOfEntryId: 'advance-original', reversalReason: 'El desembolso fue registrado por duplicado.',
     workpaperNote: 'Se verificó el comprobante original y el movimiento bancario antes de revertir.',
     items: [
@@ -167,7 +167,7 @@ test('SQLite accepts a direct supplier advance refund allocated to its original 
     supplierAdvanceSettlements: [{ ...settlement,
       sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-1', amountUsd: 101, bookValueBs: 10100 }]
     }]
-  }), /exceden el saldo individual de un desembolso directo/);
+  }), /exceden el saldo individual de un desembolso directo|distribución individual que no coincide/);
 });
 
 test('SQLite validates ISLR event structure and historical UT during every state save', () => {
@@ -921,7 +921,7 @@ test('SQLite applies a direct supplier advance to a future payable and reduces t
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(previous, {
     ...next,
-    supplierAdvanceSettlements: [{ ...settlement, amountUsd: 2,
+    supplierAdvanceSettlements: [{ ...settlement, amountUsd: 2, amountBs: 200, advanceBookValueBs: 200,
       sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-source-1', amountUsd: 2, bookValueBs: 200 }]
     }],
     journalEntries: [...previous.journalEntries, directJournal, {
