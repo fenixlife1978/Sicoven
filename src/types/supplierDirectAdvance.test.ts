@@ -47,6 +47,39 @@ describe('supplier direct advances', () => {
     assert.equal(validateSupplierDirectAdvanceDraft({ ...draft, paymentCurrency: 'USD', paidAmount: 12.5 }, 'company-1', accounts), null);
   });
 
+  it('combines credit-note balances and direct disbursements without mixing companies', () => {
+    const { calculateOutstandingSupplierAdvance } = require('./supplierAdvance') as typeof import('./supplierAdvance');
+    const creditNote = {
+      id: 'note-1', companyId: 'company-1', documentType: '03',
+      supplierRif: 'J-12345678-9', supplierName: 'Proveedor',
+      supplierAdvanceUsd: 50, supplierAdvanceBs: 5000, isCancelled: false
+    } as any;
+    const direct = advance('direct-1');
+    const balance = calculateOutstandingSupplierAdvance(
+      'J-12345678-9', [creditNote],
+      [{ id: 'settlement-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+        kind: 'REFUND_RECEIVED', amountUsd: 30, amountBs: 3000, advanceBookValueBs: 3000,
+        isReversed: false } as any],
+      'company-1', [direct, advance('other-company', { companyId: 'company-2' })]
+    );
+    assert.equal(balance.totalCreditUsd, 150);
+    assert.equal(balance.totalCreditBs, 15000);
+    assert.equal(balance.outstandingUsd, 120);
+    assert.equal(balance.outstandingBs, 12000);
+    assert.equal(balance.creditNoteCount, 1);
+    assert.equal(balance.directAdvanceCount, 1);
+  });
+
+  it('requires documentary support even when the payment reference is present', () => {
+    const draft = {
+      supplierRif: 'J-12345678-9', supplierName: 'Proveedor', date: '2026-10-01',
+      amountUsd: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+      paymentCurrency: 'BS' as const, paidAmount: 10000, reference: 'TRX-001',
+      support: ''
+    };
+    assert.match(validateSupplierDirectAdvanceDraft(draft, 'company-1', accounts) || '', /soporte/);
+  });
+
   it('allocates partial and total applications FIFO at each source historical book value', () => {
     const sources = [
       advance('a1', { amountUsd: 40, bookValueBs: 3600, bcvRate: 90, date: '2026-10-01' }),
