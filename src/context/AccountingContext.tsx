@@ -3,6 +3,7 @@ import {
   Company,
   Account,
   CashFlowActivity,
+  CashFlowIndirectTreatment,
   JournalEntry,
   PurchaseRecord,
   getPurchaseAccountCreditDate,
@@ -72,6 +73,7 @@ interface AccountingContextType {
   accounts: Account[];
   addAccount: (account: Account) => void;
   setAccountCashFlowActivity: (accountCode: string, activity: CashFlowActivity) => void;
+  setAccountCashFlowIndirectTreatment: (accountCode: string, treatment: CashFlowIndirectTreatment) => void;
 
   // Asientos
   journalEntries: JournalEntry[];
@@ -856,6 +858,33 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
     setAccounts(prev => prev.map(item => item.code === accountCode
       ? { ...item, cashFlowActivity: activity }
+      : item
+    ));
+  };
+
+  const setAccountCashFlowIndirectTreatment = (accountCode: string, treatment: CashFlowIndirectTreatment) => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se guardó el tratamiento indirecto.');
+    }
+    const account = accounts.find(item => item.code === accountCode);
+    if (!account || !account.isMovement) throw new Error('Seleccione una cuenta contable imputable existente.');
+    if (!['NON_CASH_EXPENSE_ADD_BACK', 'NON_CASH_INCOME_DEDUCT', 'OPERATING_ASSET_INCREASE_DEDUCT', 'OPERATING_LIABILITY_INCREASE_ADD', 'EXCLUDE'].includes(treatment)) {
+      throw new Error('El tratamiento del método indirecto no es válido.');
+    }
+    if (treatment === 'NON_CASH_EXPENSE_ADD_BACK' && !['COSTOS', 'GASTOS'].includes(account.type)) {
+      throw new Error('Solo una cuenta de costos o gastos puede clasificarse como ajuste no monetario de gasto.');
+    }
+    if (treatment === 'NON_CASH_INCOME_DEDUCT' && account.type !== 'INGRESOS') {
+      throw new Error('Solo una cuenta de ingresos puede clasificarse como ingreso no monetario.');
+    }
+    if (treatment === 'OPERATING_ASSET_INCREASE_DEDUCT' && account.type !== 'ACTIVO') {
+      throw new Error('La variación de capital de trabajo como activo requiere una cuenta de activo.');
+    }
+    if (treatment === 'OPERATING_LIABILITY_INCREASE_ADD' && account.type !== 'PASIVO') {
+      throw new Error('La variación de capital de trabajo como pasivo requiere una cuenta de pasivo.');
+    }
+    setAccounts(prev => prev.map(item => item.code === accountCode
+      ? { ...item, cashFlowIndirectTreatment: treatment }
       : item
     ));
   };
@@ -4015,6 +4044,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         accounts,
         addAccount,
         setAccountCashFlowActivity,
+        setAccountCashFlowIndirectTreatment,
         journalEntries: journalEntries.filter(e => e.companyId === currentCompany.id),
         addJournalEntry,
         deleteJournalEntry,
