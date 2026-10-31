@@ -22,6 +22,8 @@ export interface Company {
 
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
 
+export type CashFlowActivity = 'EFECTIVO_EQUIVALENTE' | 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'NO_MONETARIO' | 'SIN_CLASIFICAR';
+
 export interface Account {
   code: string; // e.g. "1.1.1.01"
   name: string;
@@ -29,6 +31,8 @@ export interface Account {
   level: number; // 1 to 5
   isMovement: boolean; // Solo las cuentas de movimiento aceptan asientos
   parentCode?: string;
+  /** Clasificación explícita usada por el Estado de Flujos de Efectivo; opcional para compatibilidad histórica. */
+  cashFlowActivity?: CashFlowActivity;
 }
 
 export interface JournalEntryItem {
