@@ -154,3 +154,40 @@ test('SQLite audit records direct supplier advance posting and its linked revers
     harness.db.close();
   }
 });
+
+test('SQLite audit records an accounting year opening as a dedicated event in the same snapshot transaction', () => {
+  const harness = createHarness();
+  try {
+    const opening = {
+      id: 'opening-entry-1', companyId: 'company-1', entryNumber: 1,
+      date: '2027-01-01', description: 'Asiento de apertura del ejercicio',
+      type: 'APERTURA', bcvRate: 100, referenceDoc: 'APERTURA:company-1:2027-01-01',
+      items: [
+        { accountCode: '1.1.1', accountName: 'Banco', debitBs: 1000, creditBs: 0, debitUsd: 10, creditUsd: 0 },
+        { accountCode: '3.1.1', accountName: 'Patrimonio', debitBs: 0, creditBs: 1000, debitUsd: 0, creditUsd: 10 }
+      ],
+      createdAt: '2027-01-01T08:00:00.000Z'
+    };
+    const snapshot = {
+      ...emptyState(),
+      companies: [{ id: 'company-1', name: 'Empresa de prueba', closedThroughDate: '2026-12-31' }],
+      accounts: [
+        { code: '1.1.1', name: 'Banco', type: 'ACTIVO', isMovement: true },
+        { code: '3.1.1', name: 'Patrimonio', type: 'PATRIMONIO', isMovement: true }
+      ],
+      journalEntries: [opening]
+    };
+    persistAccountingSnapshot(harness.db, snapshot);
+    const event = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='accounting_year_opening_posted'").get();
+    assert.ok(event);
+    const details = JSON.parse(event.details_json);
+    assert.equal(details.entryId, opening.id);
+    assert.equal(details.companyId, opening.companyId);
+    assert.equal(details.openingDate, opening.date);
+    assert.equal(details.referenceDoc, opening.referenceDoc);
+    const types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
+    assert.deepEqual(types, ['journal_entry_posted', 'accounting_year_opening_posted', 'state_saved']);
+  } finally {
+    harness.db.close();
+  }
+});
