@@ -85,7 +85,7 @@ test('rejects a second reversal of an event already reversed in persisted histor
   });
   assert.throws(() => validateIslrFiscalEventLedger(
     [original, firstReversal], [original, firstReversal, secondReversal], eligible
-  ), /ya reversado/);
+  ), /supera la base pendiente/);
 });
 
 test('preserves legacy duplicate sequences while rejecting new collisions', () => {
