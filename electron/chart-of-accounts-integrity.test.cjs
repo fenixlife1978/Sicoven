@@ -26,6 +26,14 @@ test('SQLite integrity rejects a new account beneath a movement account', () => 
   );
 });
 
+test('SQLite integrity rejects inserting an intermediate parent above historical children', () => {
+  const intermediate = { code: '1.1.1', name: 'Caja y bancos', type: 'ACTIVO', level: 3, isMovement: false, parentCode: '1.1' };
+  assert.throws(
+    () => validateNewAccountCatalogEntries([root, group], [root, group, intermediate, leaf]),
+    /nivel intermedio/
+  );
+});
+
 test('SQLite integrity rejects duplicate account codes', () => {
   assert.throws(
     () => validateNewAccountCatalogEntries([], [root, root]),
