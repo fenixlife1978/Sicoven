@@ -494,6 +494,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierAdvanceSettlements(prev => prev.map(settlement => settlement.companyId === currentCompany.id && settlement.journalEntryId === source.id
       ? { ...settlement, isReversed: true, reversedByJournalEntryId: reversal.id }
       : settlement));
+    setSupplierDirectAdvances(prev => prev.map(advance => advance.companyId === currentCompany.id && advance.journalEntryId === source.id
+      ? { ...advance, isReversed: true, reversedByJournalEntryId: reversal.id }
+      : advance));
     if (bankReadiness.pairs.length > 0) {
       const reconciledAt = new Date().toISOString();
       const pairByOriginal = new Map(bankReadiness.pairs.map(pair => [pair.originalStatementId, pair]));
