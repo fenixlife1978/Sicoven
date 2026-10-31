@@ -773,10 +773,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const credited = asArray(nextState.purchases).filter(item => item.companyId === original.companyId && item.originalPurchaseId === original.id)
       .reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
+    const advanceApplied = asArray(nextState.supplierAdvanceSettlements).filter(item =>
+      item.companyId === original.companyId && item.kind === 'APPLIED_TO_PURCHASE' &&
+      item.targetPurchaseId === original.id && !item.isReversed)
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const originalNetUsd = Number(original.totalAmountUsd) -
       Number(original.vatWithheldUsd || 0) - Number(original.islrWithheldUsd || 0);
-    if (paid + credited > originalNetUsd + 0.005) {
-      throw new Error('SQLite rechazó la nota de crédito: pagos más notas superan el principal neto de CxP original.');
+    if (paid + credited + advanceApplied > originalNetUsd + 0.005) {
+      throw new Error('SQLite rechazó la nota de crédito: pagos, notas y anticipos aplicados superan el principal neto de CxP original.');
     }
   }
   for (const movement of newSupplierReturns) {
