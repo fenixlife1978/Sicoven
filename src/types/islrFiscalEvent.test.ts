@@ -87,3 +87,21 @@ test('rejects a second reversal of an event already reversed in persisted histor
     [original, firstReversal], [original, firstReversal, secondReversal], eligible
   ), /ya reversado/);
 });
+
+test('preserves legacy duplicate sequences while rejecting new collisions', () => {
+  const legacyOne = event({ id: 'legacy-1', sequence: 7 });
+  const legacyTwo = event({ id: 'legacy-2', sequence: 7 });
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(
+    [legacyOne, legacyTwo], [legacyOne, legacyTwo], eligible
+  ));
+  assert.throws(() => validateIslrFiscalEventLedger(
+    [legacyOne, legacyTwo],
+    [legacyOne, legacyTwo, event({ id: 'new-collision', sequence: 7 })],
+    eligible
+  ), /secuencia.*duplicada/);
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(
+    [legacyOne, legacyTwo],
+    [legacyOne, legacyTwo, event({ id: 'new-sequence', sequence: 8 })],
+    eligible
+  ));
+});
