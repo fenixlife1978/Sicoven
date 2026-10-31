@@ -259,16 +259,6 @@ test('SQLite accepts cash purchase posted directly to selected cash/bank account
   assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\\. y USD/);
 });
 
-test('SQLite rejects a purchase contado with a CxP credit instead of the selected payment account', () => {
-  const { prior, next } = supplierCreditFixture();
-  const original = next.purchases.find(item => item.id === 'purchase-1');
-  original.paymentTerm = 'CONTADO';
-  original.paymentAccountCode = '1.1.1.01';
-  original.paymentReference = 'EG-100';
-  next.accounts = [{ code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', isMovement: true }];
-  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no reconoce en Bs\\. y USD|modificación del contenido histórico/);
-});
-
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',

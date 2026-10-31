@@ -109,7 +109,7 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
     const selected = asArray(accounts).find(account => String(account.code) === payableAccountCode);
     const name = String(selected?.name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
     const eligible = selected?.type === 'ACTIVO' && selected?.isMovement === true &&
-      (/\\b(CAJA|BANCO|BANCOS|EFECTIVO|EQUIVALENTES DE EFECTIVO)\\b/.test(name) || /^1\\.1\\.1(?:\\.|$)/.test(payableAccountCode));
+      (/\b(CAJA|BANCO|BANCOS|EFECTIVO|EQUIVALENTES DE EFECTIVO)\b/.test(name) || /^1\.1\.1(?:\.|$)/.test(payableAccountCode));
     if (!eligible || payableAccounts.length !== 0 || !String(purchase.paymentReference || '').trim()) return false;
   } else {
     if (payableAccounts.length !== 1) return false;
