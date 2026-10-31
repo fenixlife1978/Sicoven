@@ -64,3 +64,31 @@ test('rejects invalid bases and malformed concept parameters', () => {
   assert.throws(() => calculateIslrRetention(-1, concept('002')), /base de cálculo/);
   assert.throws(() => calculateIslrRetention(100, { ...concept('002'), basePercentage: 101 }), /parámetros/);
 });
+
+
+test('monthly ISLR accumulation applies the sustraendo only once across invoices', async () => {
+  const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
+  const first = calculateMonthlyIslrRetention(10000, [], concept('002'));
+  assert.deepEqual(first, { rate: 3, subtrahendBs: 107.5, withheldAmountBs: 192.5 });
+  const second = calculateMonthlyIslrRetention(10000, [
+    { baseAmountBs: 10000, subtrahendBs: first.subtrahendBs, withheldAmountBs: first.withheldAmountBs }
+  ], concept('002'));
+  assert.deepEqual(second, { rate: 3, subtrahendBs: 0, withheldAmountBs: 300 });
+});
+
+test('monthly ISLR accumulation carries the threshold across invoices without repeating the sustraendo', async () => {
+  const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
+  const first = calculateMonthlyIslrRetention(2000, [], concept('002'));
+  assert.deepEqual(first, { rate: 3, subtrahendBs: 107.5, withheldAmountBs: 0 });
+  const second = calculateMonthlyIslrRetention(2000, [
+    { baseAmountBs: 2000, subtrahendBs: first.subtrahendBs, withheldAmountBs: first.withheldAmountBs }
+  ], concept('002'));
+  assert.deepEqual(second, { rate: 3, subtrahendBs: 0, withheldAmountBs: 12.5 });
+});
+
+test('monthly ISLR accumulation rejects historical withholding that exceeds the cumulative calculation', async () => {
+  const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
+  assert.throws(() => calculateMonthlyIslrRetention(100, [
+    { baseAmountBs: 100, withheldAmountBs: 99, subtrahendBs: 107.5 }
+  ], concept('002')), /no concilia/i);
+});
