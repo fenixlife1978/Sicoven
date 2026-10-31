@@ -125,6 +125,12 @@ export interface PurchaseRecord {
   islrRate?: number;
   islrSubtrahendBs?: number;
   islrWithheldBs?: number;
+  /** Clasificación fiscal declarada/seleccionada; no inferirla del prefijo RIF. */
+  islrBeneficiaryType?: 'PN' | 'PJ';
+  islrResidency?: 'RESIDENT' | 'NON_RESIDENT' | 'DOMICILED' | 'NON_DOMICILED';
+  islrBasePercentage?: number;
+  islrUnitTaxValueBs?: number;
+  islrFormulaFactor?: number;
   // Moneda extranjera
   bcvRate: number;
   totalAmountUsd: number;
@@ -315,6 +321,8 @@ export interface IslrConcept {
   isResident: boolean;
   rate: number; // porcentaje ej 3% o 5%
   appliesSubtrahend: boolean;
+  /** Porcentaje de la base de la operación sujeto a retención. */
+  basePercentage: number;
   minBaseUt?: number;
 }
 
@@ -341,6 +349,10 @@ export interface IslrRetentionVoucher {
   bcvRate: number;
   baseAmountUsd: number;
   withheldAmountUsd: number;
+  /** Parámetros históricos de cálculo usados al emitir el comprobante. */
+  unitTaxValueBs?: number;
+  formulaFactor?: number;
+  basePercentage?: number;
   requiresFiscalCorrection?: boolean;
   correctionEntryId?: string;
   /** Todos los asientos correctivos asociados al comprobante; correctionEntryId conserva el último para compatibilidad. */

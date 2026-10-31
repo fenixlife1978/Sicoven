@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
-import { ISLR_CONCEPTS, calculateIslrRetention } from '../../data/islrConcepts';
+import { ISLR_CONCEPTS, calculateIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
 
@@ -32,8 +32,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [retentionRate, setRetentionRate] = useState<number>(isSpecial ? currentCompany.defaultIvaRetentionRate : 0);
 
   // ISLR Withholding
-  const [applyIslr, setApplyIslr] = useState<boolean>(true);
-  const [islrConceptCode, setIslrConceptCode] = useState<string>('011');
+  const [applyIslr, setApplyIslr] = useState<boolean>(false);
+  const [islrConceptCode, setIslrConceptCode] = useState<string>('');
 
   // Currency
   const [bcvRate, setBcvRate] = useState<number>(currentCompany.bcvRate || 0);
@@ -96,6 +96,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     e.preventDefault();
     if (!supplierRif.trim() || !supplierName.trim() || !invoiceNumber.trim()) {
       window.alert('Completa el RIF, nombre del proveedor y número de factura.');
+      return;
+    }
+    if (applyIslr && !selectedConcept) {
+      window.alert('Selecciona un concepto ISLR válido. No se aplicará una retención por defecto ni se inferirá la condición fiscal a partir del RIF.');
       return;
     }
     if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
@@ -427,10 +431,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                     Concepto de Retención Oficial:
                   </label>
                   <select
+                    required
                     value={islrConceptCode}
                     onChange={e => setIslrConceptCode(e.target.value)}
                     className="w-full px-3 py-1.5 border border-slate-300 rounded-lg text-xs focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                   >
+                    <option value="">Seleccione el concepto que corresponde a la operación…</option>
                     {ISLR_CONCEPTS.map(c => (
                       <option key={c.code} value={c.code}>
                         Cod. {c.code} ({c.rate}%) - {c.description}
@@ -441,6 +447,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
                 <div className="grid grid-cols-2 gap-3 bg-purple-50 p-2.5 rounded-lg border border-purple-200 text-xs">
                   <div>
+                    <span className="text-[11px] text-purple-800 block">U.T. aplicada / factor:</span>
+                    <span className="font-mono font-bold text-purple-900">Bs. {VALOR_UNIDAD_TRIBUTARIA_BS.toFixed(2)} / {ISLR_FORMULA_FACTOR}</span>
+                  </div>
+                  <div>
                     <span className="text-[11px] text-purple-800 block">Sustraendo Legal (Bs.):</span>
                     <span className="font-mono font-bold text-purple-900">{formatBs(islrSubtrahendBs)}</span>
                   </div>
@@ -449,6 +459,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                     <span className="font-mono font-bold text-purple-900">{formatBs(islrWithheldBs)}</span>
                   </div>
                 </div>
+                <p className="text-[11px] text-purple-900">Catálogo parcial verificado. Los conceptos con tarifa acumulativa/progresiva y otros códigos aún no implementados no se ofrecen. La base utilizada es la base imponible de esta factura; confirma que corresponda al concepto fiscal.</p>
               </div>
             )}
           </div>

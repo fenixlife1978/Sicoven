@@ -14,6 +14,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
+import { ISLR_CONCEPTS, calculateIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
   INITIAL_JOURNAL_ENTRIES,
@@ -1270,6 +1271,26 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
       throw new Error('Las retenciones no pueden superar el total de la factura.');
     }
+    if (Number(purchaseData.islrWithheldBs || 0) > 0) {
+      const concept = ISLR_CONCEPTS.find(item => item.code === purchaseData.islrConceptCode);
+      if (!concept || purchaseData.islrBeneficiaryType !== concept.category ||
+          purchaseData.islrResidency !== (concept.category === 'PN'
+            ? (concept.isResident ? 'RESIDENT' : 'NON_RESIDENT')
+            : (concept.isResident ? 'DOMICILED' : 'NON_DOMICILED'))) {
+        throw new Error('La retención ISLR requiere un concepto vigente y la clasificación fiscal explícita del beneficiario.');
+      }
+      if (purchaseData.islrUnitTaxValueBs !== VALOR_UNIDAD_TRIBUTARIA_BS ||
+          purchaseData.islrFormulaFactor !== ISLR_FORMULA_FACTOR ||
+          purchaseData.islrBasePercentage !== concept.basePercentage) {
+        throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
+      }
+      const expectedIslr = calculateIslrRetention(purchaseData.taxableBaseBs, concept);
+      if (Math.abs(expectedIslr.withheldAmountBs - Number(purchaseData.islrWithheldBs)) > 0.01 ||
+          Math.abs(expectedIslr.subtrahendBs - Number(purchaseData.islrSubtrahendBs || 0)) > 0.01 ||
+          Math.abs(expectedIslr.rate - Number(purchaseData.islrRate || 0)) > 0.001) {
+        throw new Error('El importe ISLR no coincide con la fórmula, base, tasa y sustraendo del concepto seleccionado.');
+      }
+    }
 
     const companyPurchases = purchases.filter(p => p.companyId === currentCompany.id);
     const companyKey = currentCompany.id;
@@ -1484,8 +1505,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
-        isPersonNatural: purchaseData.supplierRif.toUpperCase().startsWith('V') || purchaseData.supplierRif.toUpperCase().startsWith('E'),
-        isResident: true,
+        isPersonNatural: purchaseData.islrBeneficiaryType === 'PN',
+        isResident: purchaseData.islrResidency === 'RESIDENT' || purchaseData.islrResidency === 'DOMICILED',
         conceptCode: purchaseData.islrConceptCode || '012',
         conceptDescription: purchaseData.islrConceptName || 'Servicios en General (5%)',
         invoiceNumber: purchaseData.invoiceNumber,
@@ -1497,7 +1518,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         withheldAmountBs: purchaseData.islrWithheldBs,
         bcvRate: rate,
         baseAmountUsd: purchaseData.taxableBaseUsd,
-        withheldAmountUsd: purchaseData.islrWithheldUsd || (purchaseData.islrWithheldBs / rate)
+        withheldAmountUsd: purchaseData.islrWithheldUsd || (purchaseData.islrWithheldBs / rate),
+        unitTaxValueBs: purchaseData.islrUnitTaxValueBs,
+        formulaFactor: purchaseData.islrFormulaFactor,
+        basePercentage: purchaseData.islrBasePercentage
       };
       setIslrVouchers(prev => [...prev, islrVoucher]);
     }
