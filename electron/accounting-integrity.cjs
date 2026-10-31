@@ -887,7 +887,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     const directAdvanceById = new Map(asArray(nextState.supplierDirectAdvances).map(item => [String(item.id), item]));
     const sourceDirectAdvances = directAllocations.map(allocation => directAdvanceById.get(String(allocation.directAdvanceId)));
-    if (sourceDirectAdvances.some(source => !source || source.companyId !== companyId || source.isReversed ||
+    if (sourceDirectAdvances.some(source => !source || source.companyId !== companyId || (source.isReversed && !settlement.isReversed) ||
         String(source.supplierRif || '').trim().toUpperCase() !== rif ||
         Number(source.amountUsd || 0) <= 0)) {
       throw new Error('SQLite rechazó una liquidación vinculada a un anticipo directo inexistente, reversado o de otra empresa/proveedor.');
