@@ -93,3 +93,18 @@ test('SENIAT XML keeps legacy purchase and voucher fallback when no fiscal event
   })], '202610', []);
   assert.equal((xml.match(/<DetalleRetencion>/g) || []).length, 2);
 });
+
+test('SENIAT export does not reclassify an event-backed purchase into its invoice month', () => {
+  const event: IslrFiscalEvent = {
+    id: 'e-next-month', companyId: 'c1', supplierRif: 'J-98765432-1', conceptCode: '002',
+    fiscalDate: '2026-11-10', sequence: 1, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: 1000 }],
+    basePercentage: 100, unitTaxValueBs: 43, withheldAmountBs: 30,
+    journalEntryId: 'j1', createdAt: '2026-11-10T10:00:00.000Z'
+  };
+  const invoiceMonth = generateSeniatIslrOperationsXml(company, [purchase()], [], '202610', [event]);
+  const eventMonth = generateSeniatIslrOperationsXml(company, [purchase()], [], '202611', [event]);
+  assert.doesNotMatch(invoiceMonth, /<DetalleRetencion>/);
+  assert.match(eventMonth, /<FechaOperacion>10\/11\/2026<\/FechaOperacion>/);
+  assert.match(eventMonth, /<MontoOperacion>1000\.00<\/MontoOperacion>/);
+});

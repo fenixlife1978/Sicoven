@@ -99,21 +99,26 @@ function buildIslrOperationRows(
   period: string, events?: IslrFiscalEvent[]
 ): IslrOperationRow[] {
   const purchaseById = new Map(purchases.map(p => [p.id, p]));
-  const eventPurchaseIds = new Set<string>();
+  const eventPurchaseIds = new Set((events || [])
+    .filter(event => event.companyId === company.id)
+    .flatMap(event => event.allocations.map(allocation => allocation.purchaseId)));
   const rows: IslrOperationRow[] = [];
   for (const event of events || []) {
     if (event.companyId !== company.id || event.fiscalDate.slice(0, 7).replace('-', '') !== period || event.kind === 'REVERSAL') continue;
     for (const allocation of event.allocations) {
       const purchase = purchaseById.get(allocation.purchaseId);
       if (!purchase) continue;
-      eventPurchaseIds.add(purchase.id);
+      const eventBaseTotal = event.allocations.reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const allocationWithheld = eventBaseTotal > 0
+        ? Math.round((Number(event.withheldAmountBs) * Number(allocation.baseAmountBs) / eventBaseTotal + Number.EPSILON) * 100) / 100
+        : 0;
       rows.push({
         supplierRif: event.supplierRif, invoiceNumber: purchase.invoiceNumber,
         controlNumber: purchase.controlNumber, invoiceDate: event.fiscalDate,
         conceptCode: event.conceptCode, baseAmountBs: Number(allocation.baseAmountBs),
         retentionRate: Number(purchase.islrRate || 0),
         subtrahendBs: Number(purchase.islrSubtrahendBs || 0),
-        withheldAmountBs: Number(purchase.islrWithheldBs || 0),
+        withheldAmountBs: allocationWithheld,
         key: 'EVENT:' + event.id + ':' + allocation.purchaseId
       });
     }
@@ -133,7 +138,7 @@ function buildIslrOperationRows(
     });
   }
   const known = new Set(rows.map(row => row.key));
-  const eventVoucherIds = new Set((events || []).filter(event => event.voucherId).map(event => event.voucherId));
+  const eventVoucherIds = new Set((events || []).filter(event => event.companyId === company.id && event.voucherId).map(event => event.voucherId));
   for (const voucher of vouchers) {
     const key = [voucher.supplierRif, voucher.invoiceNumber, voucher.invoiceDate, voucher.conceptCode].join('|');
     const linkedPurchase = purchases.find(p => p.companyId === company.id && p.supplierRif === voucher.supplierRif &&
