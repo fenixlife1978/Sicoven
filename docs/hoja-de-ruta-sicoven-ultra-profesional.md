@@ -31,6 +31,7 @@
 | 6.3. Cierre y apertura de ejercicios integrados | [#23](https://github.com/fenixlife1978/Sicoven/pull/23) | `1232800fc543a3672fe4dd92367af1dff6edd4fe` | CI escritorio/Windows y upgrade con conservación SQLite satisfactorios |
 | 6.4. Integridad del Balance General en doble moneda y aislamiento multiempresa | [#24](https://github.com/fenixlife1978/Sicoven/pull/24) | `275ab32b16f3b7e402dace923a0769cff5aceeac` | CI escritorio/Windows satisfactorios; validaciones Bs/USD y aislamiento |
 | 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge y post-merge escritorio/Windows SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
+| 2.1. Corrección del corte acumulado de balances históricos | [#27](https://github.com/fenixlife1978/Sicoven/pull/27) | `9d8147e52b3e9be7c470c281537ddaf8e59c8692` | CI escritorio `41235602359` y Windows `41235602352` SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -45,6 +46,18 @@ Los cinco subbloques están fusionados en `main`:
 - **6.5 — PR #25:** exportación PDF horizontal de estados financieros con columnas nativas separadas en Bs. y USD, sin convertir una moneda en la otra.
 
 **Estado:** los PR #21 a #25 están cerrados y fusionados. Los CI posteriores a PR #25 de escritorio y Windows terminaron SUCCESS. El run Windows `41234017655` completó compilación NSIS, verificación del instalador, upgrade 1.0.6→1.0.7 con conservación de SQLite y carga del artefacto. El artefacto permanece sin publicar como release. No publicar instalador ni release.
+
+### Bloque 2.1 — Comparativos históricos y corte acumulado — integrado
+
+- **PR #27:** corrige la selección temporal de movimientos en los balances históricos.
+- El Estado de Situación utiliza los movimientos acumulados de la empresa hasta el cierre del ejercicio seleccionado, incluidos los asientos de cierre.
+- El Estado de Resultados conserva la actividad del ejercicio seleccionado y excluye los asientos de cierre.
+- El resultado acumulado/del ejercicio se incorpora al patrimonio presentado en ambas monedas.
+- Se añadieron pruebas para corte acumulado, selección anual, cierres, fechas futuras y aislamiento por empresa.
+- CI escritorio `41235602359` y Windows `41235602352`: SUCCESS sobre el SHA `cdfc432b0f4330a1ca303e82e6a348d3ab655e32`. Windows completó la compilación NSIS, upgrade real 1.0.6→1.0.7, conservación de SQLite y carga del artefacto.
+- Commit de integración en `main`: `9d8147e52b3e9be7c470c281537ddaf8e59c8692`.
+
+**Límite:** este subbloque corrige la lógica de los comparativos históricos existentes; no completa por sí solo el Estado de Flujos de Efectivo ni el Estado de Cambios en el Patrimonio. El Bloque 2 permanece abierto hasta implementar y validar los cuatro estados financieros y sus notas/revelaciones conforme al marco aplicable.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
