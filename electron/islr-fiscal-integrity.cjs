@@ -40,11 +40,15 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   const reversed = new Set(next
     .filter(event => oldById.has(String(event.id)) && event.kind === 'REVERSAL')
     .map(event => String(event.reversalOfEventId || '')));
-  const sequences = new Set();
+  // Reservar secuencias históricas como claves ocupadas, sin rechazar
+  // duplicados preexistentes de datos legacy. Solo se validan eventos nuevos.
+  const sequences = new Set(previous
+    .filter(event => event && event.companyId && isValidDate(event.fiscalDate) &&
+      Number.isInteger(event.sequence) && event.sequence > 0)
+    .map(event => [event.companyId, event.fiscalDate, event.sequence].join('|')));
   for (const event of next) {
     const id = String(event?.id || '');
-    // La unicidad se aplica al libro completo, incluidos eventos históricos.
-    // No revalidamos la estructura legacy, pero tampoco permitimos colisiones nuevas.
+    if (oldById.has(id)) continue;
     if (event && event.companyId && isValidDate(event.fiscalDate) &&
         Number.isInteger(event.sequence) && event.sequence > 0) {
       const sequenceKey = [event.companyId, event.fiscalDate, event.sequence].join('|');
@@ -53,7 +57,6 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       }
       sequences.add(sequenceKey);
     }
-    if (oldById.has(id)) continue;
     if (!id || !event.companyId || !event.supplierRif || !event.conceptCode ||
         !isValidDate(event.fiscalDate) || !Number.isInteger(event.sequence) || event.sequence <= 0 ||
         !['PAYMENT', 'ACCOUNT_CREDIT', 'REVERSAL'].includes(event.kind) ||
