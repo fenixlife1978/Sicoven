@@ -211,7 +211,8 @@ function validateNewAccountCatalogEntries(previousAccounts, nextAccounts) {
       .sort((a, b) => String(b.code).length - String(a.code).length);
     const parent = parents[0];
     if (!parent || account.parentCode !== parent.code || parent.isMovement ||
-        parent.type !== account.type || !code.startsWith(parent.code + '.')) {
+        Number(account.level) - Number(parent.level) > 2 || parent.type !== account.type ||
+        !code.startsWith(parent.code + '.')) {
       throw new Error('SQLite rechazó la cuenta nueva: debe tener una cuenta padre agrupadora, compatible y correctamente enlazada.');
     }
   }
