@@ -187,7 +187,10 @@ export function buildCashFlowIndirectReport(
   const unclassifiedPnl = accounts.some(account =>
     account.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
-    account.cashFlowActivity !== 'OPERACION' && (!account.cashFlowIndirectTreatment || !isTreatmentCompatible(account))
+    account.cashFlowActivity !== 'OPERACION' && !(
+      (account.type === 'INGRESOS' && account.cashFlowIndirectTreatment === 'NON_CASH_INCOME_DEDUCT') ||
+      (['COSTOS', 'GASTOS'].includes(account.type) && account.cashFlowIndirectTreatment === 'NON_CASH_EXPENSE_ADD_BACK')
+    )
   );
   const unclassifiedBalanceChanges = accounts.some(account =>
     account.isMovement && ['ACTIVO', 'PASIVO'].includes(account.type) &&
