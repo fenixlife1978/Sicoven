@@ -43,7 +43,7 @@ test('exige cuenta patrimonial imputable para trasladar resultados', () => {
     line('1.1.1', 100, 0, 1, 0), line('4.1.1', 0, 100, 0, 1)
   ])];
   assert.throws(() => buildOpeningEntryItems({
-    companyId: 'co-1', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
     accounts, journalEntries: journal
   }), /cuenta imputable de patrimonio/);
 });
@@ -53,7 +53,7 @@ test('rechaza asientos históricos descuadrados y aperturas duplicadas', () => {
     line('1.1.1', 100, 0, 1, 0), line('2.1.1', 0, 90, 0, 0.9)
   ])];
   assert.throws(() => buildOpeningEntryItems({
-    companyId: 'co-1', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
     accounts, journalEntries: unbalanced
   }), /no cuadra/);
   const duplicate = entry('open-1', '2027-01-01', [
@@ -61,7 +61,7 @@ test('rechaza asientos históricos descuadrados y aperturas duplicadas', () => {
   ]);
   duplicate.type = 'APERTURA';
   assert.throws(() => buildOpeningEntryItems({
-    companyId: 'co-1', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
     accounts, journalEntries: [duplicate]
   }), /Ya existe un asiento de apertura/);
 });
@@ -75,7 +75,7 @@ test('no mezcla empresas ni movimientos posteriores al corte', () => {
   ]);
   other.companyId = 'co-2';
   assert.throws(() => buildOpeningEntryItems({
-    companyId: 'co-1', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
     accounts, journalEntries: [later, other]
   }), /No existen saldos/);
 });
