@@ -171,7 +171,7 @@ export function allocateSupplierAdvanceCreditNotes(
       directAllocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0);
     if (Math.abs(combinedUsd - roundUsd(settlement.amountUsd)) > 0.00001 ||
         Math.abs(combinedBs - roundBs(settlement.advanceBookValueBs ?? settlement.amountBs)) > 0.02) {
-      throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no concilia con la suma de sus orígenes de anticipo.');
+      throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no es conciliable: no coincide con la suma de sus orígenes de anticipo.');
     }
     const allocationError = validateSupplierAdvanceCreditNoteAllocations(
       allocations,
