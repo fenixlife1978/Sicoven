@@ -70,7 +70,7 @@ Los cinco subbloques están fusionados en `main`:
 - CI escritorio `41237562263` y Windows `41237562281`: SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y verificación de conservación de SQLite.
 - Commit de integración en `main`: `48e48bd6d4a1958125a8663759c8c244e361623d`.
 
-**Estado del Bloque 2:** el Estado de Situación Financiera, el Estado de Resultados y los comparativos históricos tienen avances integrados. El Estado de Cambios en el Patrimonio está en desarrollo en el PR #30; el Estado de Flujos de Efectivo y las notas/revelaciones continúan pendientes. No declarar terminado el bloque hasta cerrar todos esos componentes y sus conciliaciones.
+**Estado del Bloque 2:** el Estado de Situación Financiera, el Estado de Resultados y los comparativos históricos tienen avances integrados. El Estado de Cambios en el Patrimonio está en desarrollo en el PR #32; el Estado de Flujos de Efectivo y las notas/revelaciones continúan pendientes. No declarar terminado el bloque hasta cerrar todos esos componentes y sus conciliaciones.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
