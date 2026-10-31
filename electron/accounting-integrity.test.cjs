@@ -37,6 +37,50 @@ test('SQLite rejects reuse of a lower unused journal sequence number', () => {
   ));
 });
 
+
+test('SQLite validates ISLR event structure and historical UT during every state save', () => {
+  const invalidUtEvent = {
+    id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', fiscalDate: '2025-07-10', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 9, withheldAmountBs: 0,
+    journalEntryId: 'entry-1', createdAt: '2025-07-10T12:00:00.000Z'
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(), { ...emptyState([sourceEntry()]), islrFiscalEvents: [invalidUtEvent] }
+  ), /snapshot de UT ISLR/);
+});
+
+test('SQLite rejects ISLR events linked to a missing invoice', () => {
+  const event = {
+    id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'missing-purchase', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'entry-1', createdAt: '2026-10-01T12:00:00.000Z'
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(), { ...emptyState([sourceEntry()]), islrFiscalEvents: [event] }
+  ), /factura inexistente/);
+});
+
+test('SQLite prevents ISLR allocations above taxable plus exempt invoice base', () => {
+  const purchase = {
+    id: 'purchase-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    documentType: '01', taxableBaseBs: 800, exemptAmountBs: 200, isCancelled: false
+  };
+  const event = {
+    id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 1000.02 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'entry-1', createdAt: '2026-10-01T12:00:00.000Z'
+  };
+  assert.throws(() => validateAccountingSnapshot(
+    emptyState(), { ...emptyState([sourceEntry()]), purchases: [purchase], islrFiscalEvents: [event] }
+  ), /superior a la base de la factura/);
+});
+
 test('SQLite rejects physical deletion of a posted journal entry', () => {
   assert.throws(
     () => validateAccountingSnapshot(emptyState([sourceEntry()]), emptyState([])),

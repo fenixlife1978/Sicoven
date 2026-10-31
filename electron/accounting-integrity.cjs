@@ -1,3 +1,5 @@
+const { validateIslrFiscalEventLedger } = require('./islr-fiscal-integrity.cjs');
+
 function asArray(value) {
   return Array.isArray(value) ? value : [];
 }
@@ -170,6 +172,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   // Los eventos fiscales ISLR son un libro auxiliar inmutable; las correcciones se registran como reversión.
   assertAppendOnlyCollection(priorState, nextState, 'islrFiscalEvents');
+  validateIslrFiscalEventLedger(priorState, nextState);
   const nextBankRows = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
   for (const oldRow of asArray(priorState.bankStatementMovements)) {
     const nextRow = nextBankRows.get(String(oldRow.id));
