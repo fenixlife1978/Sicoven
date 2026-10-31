@@ -1716,17 +1716,20 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     const payableAccountCodes = [...new Set((sourcePurchaseEntry?.items || [])
       .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
       .map(item => String(item.accountCode)))];
-    if (payableAccountCodes.length !== 1) {
-      throw new Error('No se pudo identificar de forma inequívoca la cuenta auxiliar de CxP del asiento original. La devolución requiere conciliación manual.');
+    const cashPurchase = purchase.paymentTerm === 'CONTADO';
+    if ((!cashPurchase && payableAccountCodes.length !== 1) || (cashPurchase && payableAccountCodes.length !== 0)) {
+      throw new Error('La factura original no concilia con su modalidad de pago: se esperaba una única CxP para crédito o ninguna para contado.');
     }
     const payableAccountCode = payableAccountCodes[0];
-    const balance = getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
+    const balance = cashPurchase ? undefined : getCreditBalance(purchase.id, 'PURCHASE_PAYMENT');
+    // Una factura pagada al contado no tiene deuda exigible: toda la nota queda
+    // como saldo a favor del proveedor, nunca como reducción de una CxP inexistente.
     const supplierCredit = allocateSupplierCredit(
       valuation.netPayableReductionUsd, valuation.netPayableReductionBs,
-      balance.outstandingUsd, valuation.bcvRate
+      balance?.outstandingUsd ?? 0, valuation.bcvRate
     );
     const inventoryAccountCodes = [...new Set(draftLines.map(line => line.product.inventoryAccountCode || '1.1.4.01'))];
-    const requiredAccounts = [payableAccountCode, ...inventoryAccountCodes];
+    const requiredAccounts = [...(cashPurchase ? [] : [payableAccountCode]), ...inventoryAccountCodes];
     if (supplierCredit.supplierAdvanceBs > 0.02) requiredAccounts.push('1.1.2.03');
     if (valuation.vatAmountBs > 0) requiredAccounts.push('1.1.3.01');
     if (valuation.vatWithheldBs > 0) requiredAccounts.push('2.1.2.03');
@@ -1745,6 +1748,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       debitBs, creditBs, debitUsd: toUsd(debitBs), creditUsd: toUsd(creditBs), description
     });
     if (supplierCredit.appliedToPayableBs > 0.02) {
+      if (!payableAccountCode) throw new Error('La nota de crédito de contado no puede reducir una CxP inexistente.');
       items.push(line(payableAccountCode, supplierCredit.appliedToPayableBs, 0, 'Disminución de CxP por nota de crédito ' + request.creditNoteNumber));
     }
     if (supplierCredit.supplierAdvanceBs > 0.02) {

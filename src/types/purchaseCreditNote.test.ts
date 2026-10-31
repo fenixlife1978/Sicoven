@@ -221,3 +221,11 @@ test('rechaza existencia negativa o no numérica', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({ currentStock: Number.NaN })), /existencia actual/);
   assert.throws(() => calculatePurchaseCreditNote(draft({ currentStock: -1 })), /existencia actual/);
 });
+
+test('calcula nota de crédito de factura pagada al contado sin crear CxP', () => {
+  const cashPurchase = { ...purchase, paymentTerm: 'CONTADO' as const, paymentAccountCode: '1.1.1.01', paymentReference: 'EG-100' };
+  const result = calculatePurchaseCreditNote(draft({ purchase: cashPurchase }));
+  assert.equal(result.netPayableReductionBs, 106.48);
+  assert.equal(result.netPayableReductionUsd, 1.0648);
+  assert.equal(result.lines.length, 1);
+});

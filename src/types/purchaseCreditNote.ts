@@ -73,7 +73,7 @@ export function calculatePurchaseCreditNote(draft: PurchaseCreditNoteDraft): Pur
   const { purchase, products } = draft;
   const rate = Number(purchase.bcvRate);
   if (purchase.documentType !== '01' || purchase.isCancelled) throw new Error('La factura original no está vigente o no es una factura ordinaria.');
-  if (purchase.paymentTerm !== 'CREDITO') throw new Error('Por ahora solo se admiten devoluciones de facturas a crédito; contado requiere conciliación de caja/bancos o saldo a favor.');
+  // Tanto contado como crédito admiten notas de crédito; la contrapartida se determina al contabilizar.
   if (!purchase.inventoryLines?.length) throw new Error('La factura no conserva líneas de inventario estructuradas.');
   if (!Array.isArray(draft.lines) || draft.lines.length === 0) throw new Error('Agregue al menos un artículo a la nota de crédito.');
   if (!isValidIsoDate(draft.returnDate) || !isValidIsoDate(purchase.invoiceDate) || draft.returnDate < purchase.invoiceDate) {

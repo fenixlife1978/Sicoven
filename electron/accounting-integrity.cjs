@@ -529,10 +529,14 @@ function validateAccountingSnapshot(previousState, nextState) {
     const sourcePayableAccounts = [...new Set(asArray(sourceEntryForPayable?.items)
       .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
       .map(item => String(item.accountCode)))];
-    if (sourcePayableAccounts.length !== 1) {
-      throw new Error('SQLite rechazó la nota de crédito: no se identifica una única cuenta auxiliar CxP en la factura original.');
+    const cashOriginalPurchase = original.paymentTerm === 'CONTADO';
+    if ((!cashOriginalPurchase && sourcePayableAccounts.length !== 1) ||
+        (cashOriginalPurchase && sourcePayableAccounts.length !== 0)) {
+      throw new Error('SQLite rechazó la nota de crédito: la cuenta de contrapartida no concilia con la modalidad de pago de la factura original.');
     }
-    const sourcePayableAccountCode = sourcePayableAccounts[0];
+    // Para contado no existe auxiliar CxP; el crédito recuperable se registra
+    // íntegramente como anticipo a favor del proveedor (1.1.2.03).
+    const sourcePayableAccountCode = sourcePayableAccounts[0] || '';
     const sourceLines = Array.isArray(original.inventoryLines) ? original.inventoryLines : [];
     const sourceProducts = asArray(nextState.products);
     for (const sourceLine of sourceLines) {
