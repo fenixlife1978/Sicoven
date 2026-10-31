@@ -105,7 +105,7 @@ export function buildCashFlowReport(
     ...bankAccounts.filter(bank => bank.companyId === companyId).map(bank => bank.accountCode),
     ...accounts.filter(account => account.isMovement && (
       account.cashFlowActivity === 'EFECTIVO_EQUIVALENTE' ||
-      account.code === '1.1.1.01' || account.code === '1.1.1.02'
+      account.code.startsWith('1.1.1.')
     )).map(account => account.code)
   ]);
   const annualOpenings = companyEntries.filter(entry => isAnnualOpening(entry, year));
