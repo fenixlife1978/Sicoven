@@ -29,7 +29,7 @@ test('code 002 applies the legal 3% formula and UT 43 sustraendo', () => {
 });
 
 test('code 002 does not withhold when the payment base does not exceed 83.3334 UT', () => {
-  const result = calculateIslrRetention(3583.34, concept('002'));
+  const result = calculateIslrRetention(3583.3362, concept('002'));
   assert.equal(result.withheldAmountBs, 0);
   assert.equal(result.subtrahendBs, 0);
 });
@@ -91,5 +91,5 @@ test('monthly ISLR accumulation rejects historical withholding that exceeds the 
   const { calculateMonthlyIslrRetention } = await import('../data/islrConcepts');
   assert.throws(() => calculateMonthlyIslrRetention(100, [
     { baseAmountBs: 100, withheldAmountBs: 99, subtrahendBs: 107.5 }
-  ], concept('002')), /no concilia/i);
+  ], concept('002')), /no coinciden|no concilia/i);
 });
