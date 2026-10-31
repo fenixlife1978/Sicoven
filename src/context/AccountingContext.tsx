@@ -3306,7 +3306,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       bankAccounts,
       bankStatementMovements,
       creditSettlements,
-      supplierAdvanceSettlements
+      supplierAdvanceSettlements,
+      islrFiscalEvents
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -3340,6 +3341,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const importBackupJson = (jsonData: string): boolean => {
     try {
       const data = JSON.parse(jsonData);
+      // Los respaldos anteriores a la incorporación del libro fiscal siguen siendo legibles.
+      // Los respaldos nuevos deben transportar íntegro el historial ISLR.
+      const islrFiscalEvents: IslrFiscalEvent[] = data?.islrFiscalEvents === undefined
+        ? []
+        : data.islrFiscalEvents;
+      if (!Array.isArray(islrFiscalEvents) || islrFiscalEvents.some((event: any) =>
+        !event || typeof event.id !== 'string' || !event.id.trim() ||
+        typeof event.companyId !== 'string' || !event.companyId.trim() ||
+        typeof event.supplierRif !== 'string' || !event.supplierRif.trim() ||
+        typeof event.journalEntryId !== 'string' || !event.journalEntryId.trim()
+      )) {
+        throw new Error('El respaldo contiene eventos fiscales ISLR incompletos o inválidos.');
+      }
       const requiredCollections = [
         'companies', 'accounts', 'journalEntries', 'purchases', 'sales', 'products',
         'movements', 'vatVouchers', 'islrVouchers', 'bankAccounts', 'bankStatementMovements'
@@ -3514,6 +3528,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setBankStatementMovements(data.bankStatementMovements);
       setCreditSettlements(settlements);
       setSupplierAdvanceSettlements(advanceSettlements);
+      setIslrFiscalEvents(islrFiscalEvents);
       setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
