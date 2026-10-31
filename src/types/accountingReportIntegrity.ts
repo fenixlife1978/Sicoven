@@ -18,6 +18,37 @@ export interface AccountMovementTotals {
 
 export type BalanceNature = 'DEUDOR' | 'ACREEDOR';
 
+export interface BalanceSheetTotals {
+  totalAssetsBs: number;
+  totalLiabilitiesAndEquityBs: number;
+  totalAssetsUsd: number;
+  totalLiabilitiesAndEquityUsd: number;
+}
+
+/** Keep report calculations isolated to the selected company's ledger. */
+export function filterEntriesByCompany<T extends { companyId: string }>(
+  entries: T[],
+  companyId: string
+): T[] {
+  return entries.filter(entry => entry.companyId === companyId);
+}
+
+/** The statement of financial position must reconcile independently in both currencies. */
+export function isBalanceSheetBalanced(
+  totals: BalanceSheetTotals,
+  toleranceBs = 0.05,
+  toleranceUsd = 0.000005
+): boolean {
+  if (!Number.isFinite(toleranceBs) || toleranceBs < 0 ||
+      !Number.isFinite(toleranceUsd) || toleranceUsd < 0) return false;
+  const values = Object.values(totals);
+  if (values.some(value => !Number.isFinite(value))) return false;
+  return (
+    Math.abs(totals.totalAssetsBs - totals.totalLiabilitiesAndEquityBs) < toleranceBs &&
+    Math.abs(totals.totalAssetsUsd - totals.totalLiabilitiesAndEquityUsd) < toleranceUsd
+  );
+}
+
 /** An account is active if it has movement in either presentation currency. */
 export function hasAccountMovement(totals: AccountMovementTotals): boolean {
   return [
