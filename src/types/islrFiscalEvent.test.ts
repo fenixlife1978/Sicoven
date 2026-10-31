@@ -159,3 +159,20 @@ test('rejects a credit-note reversal above the combined unreversed fiscal base',
   const second = event({ id: 'credit-1', sequence: 2, allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 600 }], withheldAmountBs: 60 });
   assert.throws(() => allocateIslrFiscalReversal([first, second], 'purchase-1', 1000.02), /supera la base ISLR pendiente/);
 });
+
+test('isolates identical invoice IDs across companies in ISLR balances and reversal allocation', () => {
+  const companyOne = event({ id: 'event-c1', companyId: 'company-1',
+    allocations: [{ purchaseId: 'shared-purchase-id', baseAmountBs: 80 }] });
+  const companyTwo = event({ id: 'event-c2', companyId: 'company-2',
+    allocations: [{ purchaseId: 'shared-purchase-id', baseAmountBs: 80 }] });
+  const eligibleByCompany = {
+    'company-1|shared-purchase-id': 100,
+    'company-2|shared-purchase-id': 100
+  };
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger([], [companyOne, companyTwo], eligibleByCompany));
+  const reversal = allocateIslrFiscalReversal(
+    [companyOne, companyTwo], 'shared-purchase-id', 50, 'company-1'
+  );
+  assert.equal(reversal.length, 1);
+  assert.equal(reversal[0].originalEvent.id, 'event-c1');
+});
