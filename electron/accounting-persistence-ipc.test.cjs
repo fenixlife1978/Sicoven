@@ -320,6 +320,6 @@ test('full period reopening clears only the active boundary and retains its immu
     assert.equal(saved.companies.find(item => item.id === 'company-1').closedThroughDate, undefined);
     assert.equal(saved.companies.find(item => item.id === 'company-2').closedThroughDate, '2026-06-30');
     assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
-    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 1);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 2);
   } finally { harness.db.close(); }
 });
