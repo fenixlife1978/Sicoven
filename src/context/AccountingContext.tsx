@@ -3490,6 +3490,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankStatementMovements([]);
     setCreditSettlements([]);
     setSupplierAdvanceSettlements([]);
+    setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
     setDisplayCurrency('DUAL');
   };
