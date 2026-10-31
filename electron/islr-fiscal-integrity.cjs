@@ -1,13 +1,13 @@
 'use strict';
 
 function isValidDate(value) {
-  if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+  if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
   const date = new Date(value + 'T00:00:00.000Z');
   return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
 }
 
 function getVerifiedUt(period) {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) return null;
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(String(period || ''))) return null;
   if (period >= '2025-07') return 43;
   if (period >= '2023-06') return 9;
   if (period >= '2022-05') return 0.4;
@@ -43,6 +43,7 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   const sequences = new Set();
   for (const event of next) {
     const id = String(event?.id || '');
+    if (oldById.has(id)) continue;
     if (!id || !event.companyId || !event.supplierRif || !event.conceptCode ||
         !isValidDate(event.fiscalDate) || !Number.isInteger(event.sequence) || event.sequence <= 0 ||
         !['PAYMENT', 'ACCOUNT_CREDIT', 'REVERSAL'].includes(event.kind) ||

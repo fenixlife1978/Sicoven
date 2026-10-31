@@ -1086,17 +1086,24 @@ test('SQLite preserves legacy company history instead of allowing demo-ID deleti
 test('SQLite preserves the ISLR fiscal event ledger as append-only history', () => {
   const fiscalEvent = {
     id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
-    conceptCode: '005', fiscalDate: '2026-10-10', sequence: 1, kind: 'PAYMENT',
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'PAYMENT',
     allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }],
     basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
-    journalEntryId: 'journal-1', createdAt: '2026-10-10T10:00:00.000Z'
+    journalEntryId: 'entry-1', createdAt: '2026-10-01T10:00:00.000Z'
   };
-  const prior = { ...emptyState(), islrFiscalEvents: [fiscalEvent] };
+  const purchase = {
+    id: 'purchase-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    documentType: '01', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false
+  };
+  const prior = { ...emptyState([sourceEntry()]), purchases: [purchase], islrFiscalEvents: [fiscalEvent] };
+  const secondEntry = { ...sourceEntry(), id: 'entry-2', entryNumber: 2 };
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
-    ...emptyState(), islrFiscalEvents: [fiscalEvent, { ...fiscalEvent, id: 'islr-event-2', sequence: 2, journalEntryId: 'journal-2' }]
+    ...emptyState([sourceEntry(), secondEntry]), purchases: [purchase],
+    islrFiscalEvents: [fiscalEvent, { ...fiscalEvent, id: 'islr-event-2', sequence: 2, journalEntryId: 'entry-2' }]
   }));
-  assert.throws(() => validateAccountingSnapshot(prior, emptyState()), /eliminación del registro histórico en islrFiscalEvents/);
+  assert.throws(() => validateAccountingSnapshot(prior, emptyState([sourceEntry()])), /eliminación del registro histórico en islrFiscalEvents/);
   assert.throws(() => validateAccountingSnapshot(prior, {
-    ...emptyState(), islrFiscalEvents: [{ ...fiscalEvent, withheldAmountBs: 10 }]
+    ...emptyState([sourceEntry()]), purchases: [purchase],
+    islrFiscalEvents: [{ ...fiscalEvent, withheldAmountBs: 10 }]
   }), /modificación de un registro histórico en islrFiscalEvents/);
 });
