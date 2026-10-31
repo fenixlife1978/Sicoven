@@ -2,8 +2,11 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validatePurchaseSettlementMode, validatePurchasePaymentDate } from './purchaseSettlement';
 
-test('bloquea contado mientras no exista conciliación con caja/banco', () => {
-  assert.match(validatePurchaseSettlementMode('CONTADO') || '', /cuenta de caja\/banco/);
+test('bloquea contado hasta completar el asiento contra una cuenta contable documentada', () => {
+  const error = validatePurchaseSettlementMode('CONTADO') || '';
+  assert.match(error, /cuenta contable de efectivo o banco/);
+  assert.match(error, /No se registró la compra/);
+  assert.doesNotMatch(error, /caja registradora|POS|terminal/i);
 });
 
 test('permite crédito para su circuito de CxP', () => {
@@ -14,9 +17,8 @@ test('mantiene compatibilidad con registros históricos sin condición explícit
   assert.equal(validatePurchaseSettlementMode(undefined), null);
 });
 
-
-test('blocks a supplier payable settlement dated before account-credit recognition', () => {
-  assert.match(validatePurchasePaymentDate('2026-10-09', '2026-10-10') || '', /anticipo a proveedor/);
+test('bloquea un pago anterior al abono en cuenta sin afirmar que ya existe el flujo de anticipos', () => {
+  assert.match(validatePurchasePaymentDate('2026-10-09', '2026-10-10') || '', /anticipos directos a proveedores aún no está disponible/);
 });
 
 test('allows supplier payable settlements on or after account-credit recognition', () => {
