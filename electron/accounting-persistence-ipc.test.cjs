@@ -128,7 +128,7 @@ test('SQLite audit records direct supplier advance posting and its linked revers
     const reversal = {
       id: 'direct-advance-reversal', companyId: 'company-1', entryNumber: 2,
       date: '2026-10-11', description: 'Reversión documentada del anticipo',
-      type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-ADV-AUDIT-1',
+      type: 'AJUSTE', bcvRate: 100, referenceDoc: 'REV-1',
       reversalOfEntryId: original.id, reversalReason: 'Desembolso duplicado verificado.',
       workpaperNote: 'Se verificó el comprobante original antes de revertir.',
       items: [
