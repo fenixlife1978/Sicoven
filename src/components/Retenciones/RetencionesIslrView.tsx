@@ -4,7 +4,6 @@ import {
   FileText,
   Download,
   Eye,
-  Trash2,
   Code,
   Search,
   CheckCircle2,
@@ -20,13 +19,24 @@ import {
 } from '../../utils/seniatGenerators';
 
 export const RetencionesIslrView: React.FC = () => {
-  const { currentCompany, islrVouchers, deleteIslrVoucher, displayCurrency } = useAccounting();
+  const { currentCompany, islrVouchers, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<IslrRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
+  const [selectedPeriod, setSelectedPeriod] = useState('');
   const [showXmlPreview, setShowXmlPreview] = useState(false);
 
-  const filteredVouchers = islrVouchers
+  const availablePeriods = [...new Set(islrVouchers
+    .filter(v => v.companyId === currentCompany.id)
+    .map(v => v.period))].sort((a, b) => b.localeCompare(a));
+  const activePeriod = availablePeriods.includes(selectedPeriod)
+    ? selectedPeriod
+    : (availablePeriods[0] || '');
+  const periodVouchers = islrVouchers
+    .filter(v => v.companyId === currentCompany.id && v.period === activePeriod)
+    .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
+
+  const filteredVouchers = periodVouchers
     .filter(v => {
       if (searchTerm.trim()) {
         const term = searchTerm.toLowerCase();
@@ -42,25 +52,25 @@ export const RetencionesIslrView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = filteredVouchers.some(voucher => voucher.requiresFiscalCorrection);
-  const totalRetenidoBs = filteredVouchers.reduce((s, v) => s + v.withheldAmountBs, 0);
-  const totalRetenidoUsd = filteredVouchers.reduce((s, v) => s + v.withheldAmountUsd, 0);
-  const totalBaseBs = filteredVouchers.reduce((s, v) => s + v.baseAmountBs, 0);
+  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection);
+  const totalRetenidoBs = periodVouchers.reduce((s, v) => s + v.withheldAmountBs, 0);
+  const totalRetenidoUsd = periodVouchers.reduce((s, v) => s + v.withheldAmountUsd, 0);
+  const totalBaseBs = periodVouchers.reduce((s, v) => s + v.baseAmountBs, 0);
 
-  const generatedXml = generateSeniatIslrXml(currentCompany, filteredVouchers);
-  const generatedTxt = generateSeniatIslrTxt(currentCompany, filteredVouchers);
+  const generatedXml = generateSeniatIslrXml(currentCompany, periodVouchers);
+  const generatedTxt = generateSeniatIslrTxt(currentCompany, periodVouchers);
 
   const handleDownloadXml = () => {
     if (hasPendingFiscalCorrection) {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (filteredVouchers.length === 0) {
+    if (periodVouchers.length === 0) {
       alert('No hay retenciones de ISLR para generar el archivo XML.');
       return;
     }
     const cleanR = cleanRif(currentCompany.rif);
-    const period = filteredVouchers[0]?.period || `${currentCompany.fiscalYear}10`;
+    const period = activePeriod;
     downloadFile(generatedXml, `RetencionesISLR_${cleanR}_${period}.xml`, 'application/xml;charset=utf-8');
   };
 
@@ -69,12 +79,12 @@ export const RetencionesIslrView: React.FC = () => {
       alert('Exportación bloqueada: hay comprobantes afectados por notas de crédito o reversiones. Registre y concilie la rectificación fiscal antes de generar el archivo SENIAT.');
       return;
     }
-    if (filteredVouchers.length === 0) {
+    if (periodVouchers.length === 0) {
       alert('No hay retenciones de ISLR para generar el archivo TXT.');
       return;
     }
     const cleanR = cleanRif(currentCompany.rif);
-    const period = filteredVouchers[0]?.period || `${currentCompany.fiscalYear}10`;
+    const period = activePeriod;
     downloadFile(generatedTxt, `RetencionesISLR_${cleanR}_${period}.txt`);
   };
 
@@ -203,8 +213,30 @@ export const RetencionesIslrView: React.FC = () => {
           </div>
         )}
 
+        {/* Fiscal period selection: exports include the full period, not search results. */}
+        <div className="pt-5 border-t border-slate-200 mt-6 flex flex-col sm:flex-row sm:items-end gap-3">
+          <label className="flex flex-col gap-1 text-xs font-semibold text-slate-700">
+            Período fiscal de exportación
+            <select
+              value={activePeriod}
+              onChange={e => setSelectedPeriod(e.target.value)}
+              disabled={availablePeriods.length === 0}
+              className="min-w-44 px-3 py-2 border border-slate-300 rounded-lg bg-white text-slate-800"
+            >
+              {availablePeriods.length === 0 ? (
+                <option value="">Sin períodos registrados</option>
+              ) : availablePeriods.map(period => (
+                <option key={period} value={period}>{period}</option>
+              ))}
+            </select>
+          </label>
+          <p className="text-[11px] text-slate-500">
+            XML, TXT y totales incluyen todos los comprobantes del período seleccionado. La búsqueda solo filtra la tabla.
+          </p>
+        </div>
+
         {/* Search */}
-        <div className="pt-6 border-t border-slate-200 mt-6">
+        <div className="pt-4">
           <div className="relative max-w-md">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
             <input
@@ -293,17 +325,6 @@ export const RetencionesIslrView: React.FC = () => {
                         >
                           <Eye className="w-3.5 h-3.5" />
                           Ver
-                        </button>
-                        <button
-                          onClick={() => {
-                            if (confirm(`¿Eliminar comprobante N° ${v.voucherNumber}?`)) {
-                              deleteIslrVoucher(v.id);
-                            }
-                          }}
-                          className="p-1 text-slate-400 hover:text-rose-600 transition cursor-pointer"
-                          title="Eliminar comprobante"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
