@@ -1,6 +1,0 @@
-{
-  "name": "SICOVEN - Sistema Contable VEN-NIF & SENIAT",
-  "description": "Sistema contable integral multi-empresa bajo normativas SENIAT y VEN-NIF en Bs. y USD. Incluye Diario, Mayor, Balances, Libros de Compra y Venta, Inventario, Retenciones IVA e ISLR y generador de archivos TXT/XML.",
-  "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}

@@ -3,6 +3,13 @@ import { getIslrUnitTaxValueForPeriod } from '../data/islrConcepts';
 export type IslrFiscalTrigger = 'PAYMENT' | 'ACCOUNT_CREDIT';
 export type IslrFiscalEventKind = IslrFiscalTrigger | 'REVERSAL';
 
+/** The fiscal event follows the first legal trigger represented by the purchase mode. */
+export function resolvePurchaseIslrFiscalTrigger(
+  paymentTerm?: 'CONTADO' | 'CREDITO'
+): IslrFiscalTrigger {
+  return paymentTerm === 'CONTADO' ? 'PAYMENT' : 'ACCOUNT_CREDIT';
+}
+
 /** Importe bruto elegible del documento asignado a este evento, antes de aplicar basePercentage. */
 export interface IslrFiscalAllocation {
   purchaseId: string;
