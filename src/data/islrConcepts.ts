@@ -82,13 +82,31 @@ export const VALOR_UNIDAD_TRIBUTARIA_BS = 43.00;
 /** Factor literal del Art. 9, parágrafo segundo, del Decreto 1.808. */
 export const ISLR_FORMULA_FACTOR = 83.3334;
 
-export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcept): {
+/**
+ * UT aplicable al período mensual, según el valor vigente al inicio del mes.
+ * La providencia de junio de 2025 rige desde el 02/06/2025, por lo que junio
+ * conserva UT 9 y julio 2025 inicia con UT 43. No se extrapolan valores
+ * anteriores a noviembre de 2021, cuando cambió la escala monetaria.
+ */
+export function getIslrUnitTaxValueForPeriod(period: string): number | null {
+  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) return null;
+  if (period >= '2025-07') return 43;
+  if (period >= '2023-06') return 9;
+  if (period >= '2022-05') return 0.4;
+  if (period >= '2021-11') return 0.02;
+  return null;
+}
+
+export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcept, unitTaxValueBs: number = VALOR_UNIDAD_TRIBUTARIA_BS): {
   rate: number;
   subtrahendBs: number;
   withheldAmountBs: number;
 } {
   if (!Number.isFinite(baseAmountBs) || baseAmountBs < 0) {
     throw new Error('La base de cálculo ISLR debe ser un importe finito no negativo.');
+  }
+  if (!Number.isFinite(unitTaxValueBs) || unitTaxValueBs <= 0) {
+    throw new Error('No existe un valor de Unidad Tributaria válido para el período ISLR seleccionado.');
   }
   if (!concept || !Number.isFinite(concept.rate) || concept.rate < 0 ||
       !Number.isFinite(concept.basePercentage) || concept.basePercentage <= 0 ||
@@ -98,11 +116,11 @@ export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcep
 
   const taxableBase = baseAmountBs * (concept.basePercentage / 100);
   const minimumBase = concept.minBaseUt
-    ? VALOR_UNIDAD_TRIBUTARIA_BS * concept.minBaseUt
+    ? unitTaxValueBs * concept.minBaseUt
     : 0;
   const thresholdNotReached = concept.appliesSubtrahend && baseAmountBs <= minimumBase;
   const subtrahend = concept.appliesSubtrahend && !thresholdNotReached
-    ? VALOR_UNIDAD_TRIBUTARIA_BS * ISLR_FORMULA_FACTOR * (concept.rate / 100)
+    ? unitTaxValueBs * ISLR_FORMULA_FACTOR * (concept.rate / 100)
     : 0;
   const rawWithheld = thresholdNotReached
     ? 0
@@ -124,12 +142,13 @@ export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcep
 export function calculateMonthlyIslrRetention(
   currentBaseAmountBs: number,
   previousOperations: Array<{ baseAmountBs: number; withheldAmountBs?: number; subtrahendBs?: number }>,
-  concept: IslrConcept
+  concept: IslrConcept,
+  unitTaxValueBs: number = VALOR_UNIDAD_TRIBUTARIA_BS
 ): { rate: number; subtrahendBs: number; withheldAmountBs: number } {
   if (!Array.isArray(previousOperations)) {
     throw new Error('El historial mensual ISLR no tiene un formato válido.');
   }
-  if (!concept.appliesSubtrahend) return calculateIslrRetention(currentBaseAmountBs, concept);
+  if (!concept.appliesSubtrahend) return calculateIslrRetention(currentBaseAmountBs, concept, unitTaxValueBs);
 
   const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
   let previousBase = 0;
@@ -146,18 +165,18 @@ export function calculateMonthlyIslrRetention(
     previousWithheld += withheld;
     previousSubtrahend += subtrahend;
   }
-  const previousCumulative = calculateIslrRetention(previousBase, concept);
+  const previousCumulative = calculateIslrRetention(previousBase, concept, unitTaxValueBs);
   if (Math.abs(previousCumulative.withheldAmountBs - previousWithheld) > 0.01) {
     throw new Error('Las retenciones históricas del proveedor no coinciden con el cálculo acumulado mensual. Se requiere rectificación antes de continuar.');
   }
   // Compatibilidad segura con registros antiguos: antes se guardaba el sustraendo
   // aunque la base no superara el umbral; en ese caso nunca llegó a aplicarse.
   const appliedPriorSubtrahend = previousCumulative.subtrahendBs;
-  if (previousBase > 0 && previousBase > (concept.minBaseUt || 0) * VALOR_UNIDAD_TRIBUTARIA_BS &&
+  if (previousBase > 0 && previousBase > (concept.minBaseUt || 0) * unitTaxValueBs &&
       Math.abs(previousSubtrahend - appliedPriorSubtrahend) > 0.01) {
     throw new Error('El sustraendo histórico del proveedor no coincide con el cálculo acumulado mensual. Se requiere rectificación antes de continuar.');
   }
-  const cumulative = calculateIslrRetention(previousBase + currentBaseAmountBs, concept);
+  const cumulative = calculateIslrRetention(previousBase + currentBaseAmountBs, concept, unitTaxValueBs);
   const incrementalWithheld = roundMoney(cumulative.withheldAmountBs - previousWithheld);
   const incrementalSubtrahend = roundMoney(cumulative.subtrahendBs - appliedPriorSubtrahend);
   if (incrementalWithheld < -0.01 || incrementalSubtrahend < -0.01) {
