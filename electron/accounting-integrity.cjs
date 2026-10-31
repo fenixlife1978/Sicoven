@@ -66,7 +66,7 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
 
 function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts = []) {
   if (!purchase || !entry || entry.type !== 'COMPRA' || entry.companyId !== purchase.companyId ||
-      entry.date !== purchase.invoiceDate ||
+      entry.date !== String(purchase.accountCreditDate || purchase.invoiceDate) ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
         ('FAC-' + String(purchase.invoiceNumber || '')).trim().toUpperCase().replace(/\s+/g, '')) return false;
   const taxableBase = Number(purchase.taxableBaseBs);
@@ -97,7 +97,15 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts 
       if (!code || !Number.isFinite(amount) || amount <= 0) return false;
       inventoryByAccount.set(code, (inventoryByAccount.get(code) || 0) + amount);
     }
-  } else inventoryByAccount.set('1.1.4.01', base);
+  } else {
+    // Las facturas sin detalle de inventario se registran como gasto operativo
+    // en el flujo actual. Se conserva compatibilidad con asientos históricos
+    // que ya fueron contabilizados contra inventario.
+    const expenseDebit = asArray(entry.items).some(item =>
+      String(item.accountCode) === '6.1.1.04' && Number(item.debitBs || 0) > 0);
+    if (expenseDebit) inventoryByAccount.set('6.1.1.04', base);
+    else inventoryByAccount.set('1.1.4.01', base);
+  }
   const items = asArray(entry.items);
   const cashPurchase = purchase.paymentTerm === 'CONTADO';
   const payableAccounts = [...new Set(items

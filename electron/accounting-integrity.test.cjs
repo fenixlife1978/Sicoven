@@ -259,6 +259,34 @@ test('SQLite accepts cash purchase posted directly to selected cash/bank account
   assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\\. y USD/);
 });
 
+test('SQLite accepts cash expense purchase with effective payment/account-credit date different from invoice date', () => {
+  const purchase = {
+    id: 'purchase-cash-expense', companyId: 'company-1',
+    invoiceDate: '2026-10-09', accountCreditDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '102', documentType: '01',
+    totalAmountBs: 232, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 32,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2.32, taxableBaseUsd: 2, vatAmountUsd: 0.32, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-cash-expense-entry',
+    paymentTerm: 'CONTADO', paymentAccountCode: '1.1.1.01', paymentReference: 'TRF-102'
+  };
+  const entry = {
+    id: 'purchase-cash-expense-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra contado gasto', type: 'COMPRA',
+    bcvRate: 100, referenceDoc: 'FAC-102',
+    items: [
+      { accountCode: '6.1.1.04', accountName: 'Honorarios Profesionales', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA Crédito Fiscal', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '1.1.1.01', accountName: 'Caja Principal', debitBs: 0, creditBs: 232, debitUsd: 0, creditUsd: 2.32 }
+    ],
+    createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const account = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(
+    emptyState(), { ...emptyState([entry]), accounts: [account], purchases: [purchase] }
+  ));
+});
+
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',
