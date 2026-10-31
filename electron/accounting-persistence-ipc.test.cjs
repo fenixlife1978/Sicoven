@@ -213,10 +213,20 @@ function closedCompanyState() {
   };
 }
 
+function persistClosedCompanyFixture(db) {
+  const state = closedCompanyState();
+  const openState = {
+    ...state,
+    companies: state.companies.map(({ closedThroughDate, ...company }) => company)
+  };
+  persistAccountingSnapshot(db, openState);
+  persistAccountingSnapshot(db, state);
+}
+
 test('period reopening IPC requires an authenticated active administrator', () => {
   const unauthorized = createHarness({ validSession: false });
   try {
-    persistAccountingSnapshot(unauthorized.db, closedCompanyState());
+    persistClosedCompanyFixture(unauthorized.db);
     assert.throws(() => unauthorized.reopenHandler({}, 'expired-session', {
       companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.'
     }), /Sesión no válida/);
@@ -236,7 +246,7 @@ test('period reopening IPC requires an authenticated active administrator', () =
     getActiveSession: () => ({ id: 2, username: 'operator', role: 'operator' })
   });
   try {
-    persistAccountingSnapshot(nonAdminDb, closedCompanyState());
+    persistClosedCompanyFixture(nonAdminDb);
     assert.throws(() => handlers.get('sicoven:reopen-accounting-period')({}, 'valid', {
       companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.'
     }), /solo un administrador/);
@@ -246,7 +256,7 @@ test('period reopening IPC requires an authenticated active administrator', () =
 test('period reopening requires a reason and an effective earlier date', () => {
   const harness = createHarness();
   try {
-    persistAccountingSnapshot(harness.db, closedCompanyState());
+    persistClosedCompanyFixture(harness.db);
     assert.throws(() => harness.reopenHandler({}, 'valid-session', {
       companyId: 'company-1', reopenedThroughDate: '2026-12-31', reason: 'Reapertura válida por ajuste.'
     }), /anterior al cierre vigente/);
