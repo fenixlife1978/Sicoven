@@ -47,12 +47,18 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     setDisclosureError('');
     setDisclosureSaving(true);
     try {
+      const sourceAccountCodes = [...new Set(disclosureAccounts.split(',').map(value => value.trim()).filter(Boolean))];
+      const sourceEntryIds = [...new Set(disclosureEntries.split(',').map(value => value.trim()).filter(Boolean))];
+      const unknownAccounts = sourceAccountCodes.filter(code => !accounts.some(account => account.code === code));
+      const invalidEntries = sourceEntryIds.filter(id => !journalEntries.some(entry => entry.id === id && entry.companyId === currentCompany.id && entry.date >= year + '-01-01' && entry.date <= year + '-12-31' && entry.type !== 'CIERRE'));
+      if (unknownAccounts.length) throw new Error('Cuentas fuente inexistentes: ' + unknownAccounts.join(', '));
+      if (invalidEntries.length) throw new Error('Asientos fuente inexistentes, de otra empresa o fuera del ejercicio: ' + invalidEntries.join(', '));
       const nextNumber = Math.max(0, ...yearDisclosures.map(note => note.noteNumber)) + 1;
       await saveFinancialDisclosure({
         fiscalYear: Number(year), noteNumber: nextNumber, title: disclosureTitle.trim(),
         kind: disclosureKind, body: disclosureBody.trim(), status: disclosureStatus,
-        sourceAccountCodes: [...new Set(disclosureAccounts.split(',').map(value => value.trim()).filter(Boolean))],
-        sourceEntryIds: [...new Set(disclosureEntries.split(',').map(value => value.trim()).filter(Boolean))]
+        sourceAccountCodes,
+        sourceEntryIds
       });
       setDisclosureTitle(''); setDisclosureBody(''); setDisclosureAccounts(''); setDisclosureEntries('');
     } catch (error) {
@@ -139,6 +145,17 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       [],
       ['Cuenta patrimonial', 'Saldo inicial Bs.', 'Saldo inicial USD', 'Movimientos Bs.', 'Movimientos USD', 'Saldo final Bs.', 'Saldo final USD'],
       ...equityReport.rows.map(r => [r.accountCode, r.openingBs.toFixed(2), r.openingUsd.toFixed(6), r.movementBs.toFixed(2), r.movementUsd.toFixed(6), r.closingBs.toFixed(2), r.closingUsd.toFixed(6)]),
+      [],
+      [],
+      ['NOTAS Y REVELACIONES', 'Número', 'Categoría', 'Estado', 'Título', 'Contenido', 'Cuentas fuente', 'Asientos fuente'],
+      ...yearDisclosures.map(note => [note.noteNumber, note.kind, note.status, note.title, note.body, note.sourceAccountCodes.join(', '), note.sourceEntryIds.join(', ')]),
+      [],
+      ['ANEXO CUANTITATIVO - MOVIMIENTOS POR CUENTA', 'Cuenta', 'Debe Bs.', 'Haber Bs.', 'Neto Bs.', 'Debe USD', 'Haber USD', 'Neto USD', 'Asientos'],
+      ...disclosureMovements.map(row => {
+        const account = accounts.find(item => item.code === row.accountCode);
+        const creditNormal = account?.type === 'INGRESOS' || account?.type === 'PASIVO' || account?.type === 'PATRIMONIO';
+        return [row.accountCode + ' - ' + row.accountName, row.debitBs.toFixed(2), row.creditBs.toFixed(2), (creditNormal ? row.creditBs-row.debitBs : row.debitBs-row.creditBs).toFixed(2), row.debitUsd.toFixed(6), row.creditUsd.toFixed(6), (creditNormal ? row.creditUsd-row.debitUsd : row.debitUsd-row.creditUsd).toFixed(6), row.entryIds.length];
+      }),
       [],
       ['Fecha', 'Asiento', 'Tipo', 'Cuenta', 'Concepto', 'Neto Bs.', 'Neto USD'],
       ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), m.netUsd.toFixed(6)]),
