@@ -157,3 +157,27 @@ test('preserva seis decimales USD al distribuir un anticipo de Bs. 106.48 a tasa
   ]);
   assert.equal(validateSupplierAdvanceCreditNoteAllocations(allocations, ['nc-precise'], 1.0648, 106.48), null);
 });
+
+test('reconstruye el FIFO de notas junto con liquidaciones mixtas y directas previas', () => {
+  const directOnly = {
+    id: 'direct-only', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: ['direct-1'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-1', amountUsd: 5, bookValueBs: 500 }],
+    kind: 'REFUND_RECEIVED' as const, date: '2026-10-29', amountUsd: 5,
+    amountBs: 500, advanceBookValueBs: 500, bcvRate: 100,
+    journalEntryId: 'entry-direct', createdAt: '2026-10-29T10:00:00.000Z'
+  };
+  const mixed = {
+    ...directOnly, id: 'mixed', sourceCreditNoteIds: ['nc-1'],
+    sourceCreditNoteAllocations: [{ creditNoteId: 'nc-1', amountUsd: 2, bookValueBs: 200 }],
+    sourceDirectAdvanceIds: ['direct-2'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-2', amountUsd: 3, bookValueBs: 300 }],
+    amountUsd: 5, amountBs: 500, advanceBookValueBs: 500,
+    journalEntryId: 'entry-mixed'
+  };
+  assert.deepEqual(allocateSupplierAdvanceCreditNotes(
+    [{ id: 'nc-1', amountUsd: 10, bookValueBs: 1000 }],
+    [directOnly, mixed], 'company-1', 'J-12345678-9', 8
+  ), [{ creditNoteId: 'nc-1', amountUsd: 8, bookValueBs: 800 }]);
+});
