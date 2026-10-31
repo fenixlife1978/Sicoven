@@ -146,9 +146,20 @@ export function calculateMonthlyIslrRetention(
     previousWithheld += withheld;
     previousSubtrahend += subtrahend;
   }
+  const previousCumulative = calculateIslrRetention(previousBase, concept);
+  if (Math.abs(previousCumulative.withheldAmountBs - previousWithheld) > 0.01) {
+    throw new Error('Las retenciones históricas del proveedor no coinciden con el cálculo acumulado mensual. Se requiere rectificación antes de continuar.');
+  }
+  // Compatibilidad segura con registros antiguos: antes se guardaba el sustraendo
+  // aunque la base no superara el umbral; en ese caso nunca llegó a aplicarse.
+  const appliedPriorSubtrahend = previousCumulative.subtrahendBs;
+  if (previousBase > 0 && previousBase > (concept.minBaseUt || 0) * VALOR_UNIDAD_TRIBUTARIA_BS &&
+      Math.abs(previousSubtrahend - appliedPriorSubtrahend) > 0.01) {
+    throw new Error('El sustraendo histórico del proveedor no coincide con el cálculo acumulado mensual. Se requiere rectificación antes de continuar.');
+  }
   const cumulative = calculateIslrRetention(previousBase + currentBaseAmountBs, concept);
   const incrementalWithheld = roundMoney(cumulative.withheldAmountBs - previousWithheld);
-  const incrementalSubtrahend = roundMoney(cumulative.subtrahendBs - previousSubtrahend);
+  const incrementalSubtrahend = roundMoney(cumulative.subtrahendBs - appliedPriorSubtrahend);
   if (incrementalWithheld < -0.01 || incrementalSubtrahend < -0.01) {
     throw new Error('El acumulado ISLR no concilia con las retenciones/sustraendos previamente registrados. No se permite continuar sin rectificación fiscal.');
   }
