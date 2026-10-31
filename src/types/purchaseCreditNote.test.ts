@@ -168,15 +168,26 @@ test('rechaza líneas de factura duplicadas o con cantidades y costos inválidos
 test('bloquea devoluciones cuando la retención ISLR original usa sustraendo', () => {
   const naturalPersonPurchase = {
     ...purchase,
+    taxableBaseBs: 10000,
+    vatAmountBs: 1600,
+    totalAmountBs: 11600,
     islrConceptCode: '002',
     islrConceptName: 'Honorarios profesionales a persona natural residente',
     islrRate: 3,
     islrSubtrahendBs: 107.50,
-    islrWithheldBs: 192.50
+    islrWithheldBs: 192.50,
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 5000 }]
   };
-  assert.throws(() => calculatePurchaseCreditNote(draft({
-    purchase: naturalPersonPurchase
-  })), /tiene sustraendo; el prorrateo automático no es fiscalmente fiable/);
+  const highCostProduct = { ...product, avgCostBs: 5000, lastCostBs: 5000 };
+  const highCostMovement = { ...originalMovement, unitCostBs: 5000, totalCostBs: 10000 };
+  assert.throws(() => calculatePurchaseCreditNote({
+    ...draft({ purchase: naturalPersonPurchase, product: highCostProduct }),
+    lines: [{
+      product: highCostProduct, originalMovement: highCostMovement,
+      quantity: 1, previouslyReturnedQuantity: 0,
+      currentStock: 2, currentAverageCostBs: 5000
+    }]
+  }), /tiene sustraendo; el prorrateo automático no es fiscalmente fiable/);
 });
 
 test('rechaza importes fiscales y retenciones incoherentes', () => {
