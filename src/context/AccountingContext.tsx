@@ -3720,7 +3720,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           const target = data.purchases.find((p: any) => p.id === item.targetPurchaseId && p.companyId === item.companyId && p.documentType === '01' && p.paymentTerm === 'CREDITO');
           return !target || String(target.supplierRif).trim().toUpperCase() !== String(item.supplierRif).trim().toUpperCase();
         }
-        return !data.bankAccounts.some((b: any) => b.companyId === item.companyId && b.accountCode === item.treasuryAccountCode);
+        const bank = data.bankAccounts.some((b: any) => b.companyId === item.companyId &&
+          b.accountCode === item.treasuryAccountCode && b.currency === 'BS');
+        const cashAccount = accountByCode.get(String(item.treasuryAccountCode || '').toLowerCase());
+        const validCash = item.treasuryAccountCode === '1.1.1.01' &&
+          cashAccount?.type === 'ACTIVO' && cashAccount.isMovement === true;
+        return !bank && !validCash;
       })) throw new Error('El respaldo contiene liquidaciones de anticipos duplicadas, inválidas o sin documento/asiento/tesorería verificable.');
       const advanceConsumedByNote = new Map<string, { usd: number; bs: number }>();
       const advanceConsumedByDirect = new Map<string, { usd: number; bs: number }>();
