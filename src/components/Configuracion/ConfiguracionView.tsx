@@ -35,6 +35,7 @@ export const ConfiguracionView: React.FC = () => {
     exportBackupJson,
     restoreBackupJson,
     closeAccountingPeriod,
+    reopenAccountingPeriod,
     createAccountingYearOpening,
     accounts,
     journalEntries,
@@ -52,6 +53,15 @@ export const ConfiguracionView: React.FC = () => {
     return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
   });
   const [periodCloseBusy, setPeriodCloseBusy] = useState(false);
+  const [reopenThroughDate, setReopenThroughDate] = useState(() => {
+    if (!currentCompany.closedThroughDate) return '';
+    const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+    date.setUTCDate(date.getUTCDate() - 1);
+    return date.toISOString().slice(0, 10);
+  });
+  const [reopenReason, setReopenReason] = useState('');
+  const [reopenBusy, setReopenBusy] = useState(false);
+  const [reopenError, setReopenError] = useState<string | null>(null);
   const [openingPeriodStart, setOpeningPeriodStart] = useState(() => String(currentCompany.fiscalYear) + '-01-01');
   const [openingPeriodEnd, setOpeningPeriodEnd] = useState(currentCompany.closedThroughDate || (String(currentCompany.fiscalYear) + '-12-31'));
   const [openingDate, setOpeningDate] = useState(() => {
@@ -100,6 +110,18 @@ export const ConfiguracionView: React.FC = () => {
       return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
     })());
   }, [currentCompany]);
+
+  React.useEffect(() => {
+    if (!currentCompany.closedThroughDate) {
+      setReopenThroughDate('');
+    } else {
+      const previous = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+      previous.setUTCDate(previous.getUTCDate() - 1);
+      setReopenThroughDate(previous.toISOString().slice(0, 10));
+    }
+    setReopenReason('');
+    setReopenError(null);
+  }, [currentCompany.id, currentCompany.closedThroughDate]);
 
   React.useEffect(() => {
     const start = String(currentCompany.fiscalYear) + '-01-01';
@@ -292,6 +314,36 @@ export const ConfiguracionView: React.FC = () => {
       alert(error instanceof Error ? error.message : 'SQLite no confirmó el cierre contable. No continúe hasta revisar el estado de almacenamiento.');
     } finally {
       setPeriodCloseBusy(false);
+    }
+  };
+
+  const handleReopenAccountingPeriod = async () => {
+    if (!currentCompany.closedThroughDate) {
+      setReopenError('No existe un cierre vigente para esta empresa.');
+      return;
+    }
+    const reason = reopenReason.trim();
+    if (reason.length < 10) {
+      setReopenError('Explique el motivo de la reapertura con al menos 10 caracteres.');
+      return;
+    }
+    const target = reopenThroughDate.trim() || null;
+    const scope = target
+      ? 'Se conservará el bloqueo hasta ' + target + ' y se habilitarán operaciones posteriores.'
+      : 'Se reabrirá íntegramente el período, sin eliminar el registro histórico del cierre.';
+    if (!window.confirm('REAPERTURA FORMAL DE PERÍODO\n\nEmpresa: ' + currentCompany.name +
+        '\nCierre vigente: ' + currentCompany.closedThroughDate + '\n' + scope +
+        '\n\nMotivo: ' + reason + '\n\nLa operación quedará registrada en la bitácora inmutable. ¿Confirma?')) return;
+    setReopenBusy(true);
+    setReopenError(null);
+    try {
+      await reopenAccountingPeriod(target, reason);
+      setReopenReason('');
+      alert('Reapertura confirmada por SQLite. El cierre original y su historial permanecen conservados.');
+    } catch (error) {
+      setReopenError(error instanceof Error ? error.message : 'SQLite no confirmó la reapertura.');
+    } finally {
+      setReopenBusy(false);
     }
   };
 
@@ -567,6 +619,55 @@ export const ConfiguracionView: React.FC = () => {
             ? <><strong>Cierre vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
             : <><strong>Sin cierre registrado.</strong> La empresa todavía no tiene un período bloqueado.</>}
         </div>
+        {currentCompany.closedThroughDate && (
+          <div className="rounded-xl border border-rose-200 bg-rose-50/50 p-4 space-y-3">
+            <div>
+              <h4 className="text-xs font-bold text-rose-900">Reapertura formal y auditada</h4>
+              <p className="mt-1 text-[11px] text-rose-800">
+                Exclusiva del administrador autenticado. La fecha indicada será el nuevo límite de cierre; déjela vacía para reabrir todo el período. El cierre original nunca se elimina.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Mantener cerrado hasta (opcional)</label>
+                <input
+                  type="date"
+                  value={reopenThroughDate}
+                  max={(() => {
+                    const date = new Date(currentCompany.closedThroughDate + 'T00:00:00.000Z');
+                    date.setUTCDate(date.getUTCDate() - 1);
+                    return date.toISOString().slice(0, 10);
+                  })()}
+                  onChange={e => setReopenThroughDate(e.target.value)}
+                  disabled={reopenBusy || !isStorageReady}
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
+                />
+                <p className="mt-1 text-[10px] text-slate-500">Vacío = reapertura integral desde el inicio del historial.</p>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">Motivo obligatorio y soporte de referencia</label>
+                <textarea
+                  value={reopenReason}
+                  onChange={e => setReopenReason(e.target.value)}
+                  maxLength={1000}
+                  rows={3}
+                  disabled={reopenBusy || !isStorageReady}
+                  placeholder="Describa el error detectado, autorización y documento de soporte…"
+                  className="w-full rounded-lg border border-slate-300 px-3 py-2 text-xs disabled:bg-slate-100"
+                />
+              </div>
+            </div>
+            {reopenError && <p role="alert" className="rounded-lg border border-rose-300 bg-white p-2 text-xs text-rose-800">{reopenError}</p>}
+            <button
+              type="button"
+              onClick={handleReopenAccountingPeriod}
+              disabled={reopenBusy || !isStorageReady || reopenReason.trim().length < 10}
+              className="rounded-lg bg-rose-700 hover:bg-rose-800 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {reopenBusy ? 'Registrando reapertura en SQLite…' : 'Autorizar y registrar reapertura'}
+            </button>
+          </div>
+        )}
         {!isStorageReady && <p className="text-xs text-rose-700">El almacenamiento SQLite no está disponible. El cierre permanece deshabilitado.</p>}
       </div>
 
