@@ -77,8 +77,8 @@ describe('cash flow statement', () => {
   it('does not mark offsetting unclassified receipts and payments as complete', () => {
     const entries = [
       entry('unclassified-in', '2026-02-01', 'MANUAL', [
-        line('1.1.1.01', 'Caja principal', 0, 0, 0, 0),
-        line('3.1', 'Capital social', 0, 25, 0, 2.5)
+        line('1.1.1.01', 'Caja principal', 0, 25, 0, 2.5),
+        line('3.1', 'Capital social', 25, 0, 2.5, 0)
       ]),
       entry('unclassified-out', '2026-03-01', 'MANUAL', [
         line('1.1.1.01', 'Caja principal', 25, 0, 2.5, 0),
