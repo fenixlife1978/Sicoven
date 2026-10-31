@@ -900,7 +900,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
     const rif = String(draft.supplierRif || '').trim().toUpperCase();
     const operationKey = [
-      currentCompany.id, rif, draft.kind, draft.date, Math.round(Number(draft.amountUsd) * 100),
+      currentCompany.id, rif, draft.kind, draft.date, Math.round(Number(draft.amountUsd) * 1000000),
       Math.round(Number(draft.amountBs) * 100), draft.treasuryAccountCode || '',
       draft.targetPurchaseId || '', String(draft.reference || '').trim().toUpperCase()
     ].join('|');
@@ -911,7 +911,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       item.companyId === currentCompany.id && !item.isReversed &&
       String(item.supplierRif || '').trim().toUpperCase() === rif &&
       item.kind === draft.kind && item.date === draft.date &&
-      Math.round(Number(item.amountUsd) * 100) === Math.round(Number(draft.amountUsd) * 100) &&
+      Math.round(Number(item.amountUsd) * 1000000) === Math.round(Number(draft.amountUsd) * 1000000) &&
       (draft.reference?.trim()
         ? String(item.reference || '').trim().toUpperCase() === draft.reference.trim().toUpperCase()
         : !item.reference?.trim() && Math.round(Number(item.amountBs) * 100) === Math.round(Number(draft.amountBs) * 100) &&
@@ -952,7 +952,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
 
     // La descarga del anticipo se mide a su valor histórico en libros, no a la tasa del día.
-    const amountUsd = Math.round(draft.amountUsd * 100) / 100;
+    const amountUsd = Math.round((draft.amountUsd + Number.EPSILON) * 1000000) / 1000000;
 
     const advance = accounts.find(item => item.code === '1.1.2.03' && item.isMovement);
     let counterpartCode = draft.treasuryAccountCode!;
