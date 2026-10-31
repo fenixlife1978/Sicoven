@@ -342,6 +342,23 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
   }
 
+  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const priorPurchaseIdsForIntegrity = new Set(asArray(priorState.purchases).map(item => String(item.id)));
+  for (const purchase of asArray(nextState.purchases)) {
+    if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) || purchase.documentType !== '01') continue;
+    const duplicate = asArray(nextState.purchases).some(other =>
+      String(other.id) !== String(purchase.id) &&
+      other.companyId === purchase.companyId &&
+      other.documentType === '01' &&
+      normalizeDocument(other.invoiceNumber) === normalizeDocument(purchase.invoiceNumber) &&
+      normalizeRif(other.supplierRif) === normalizeRif(purchase.supplierRif)
+    );
+    if (duplicate) {
+      throw new Error('SQLite rechazó una factura de compra duplicada para el mismo proveedor, empresa y número de documento.');
+    }
+  }
+
   for (const collectionName of ['purchases', 'sales']) {
     const expectedEntryType = collectionName === 'sales' ? 'VENTA' : 'COMPRA';
     for (const document of asArray(nextState[collectionName])) {
@@ -382,22 +399,6 @@ function validateAccountingSnapshot(previousState, nextState) {
   // con que el formulario haya intentado agregar los movimientos.
   // No permitir que una importación de respaldo o una escritura directa del
   // snapshot salte las guardias del formulario/contexto para notas de crédito.
-  const normalizeDocument = value => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
-  const normalizeRif = value => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-  const priorPurchaseIdsForIntegrity = new Set(asArray(priorState.purchases).map(item => String(item.id)));
-  for (const purchase of asArray(nextState.purchases)) {
-    if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) || purchase.documentType !== '01') continue;
-    const duplicate = asArray(nextState.purchases).some(other =>
-      String(other.id) !== String(purchase.id) &&
-      other.companyId === purchase.companyId &&
-      other.documentType === '01' &&
-      normalizeDocument(other.invoiceNumber) === normalizeDocument(purchase.invoiceNumber) &&
-      normalizeRif(other.supplierRif) === normalizeRif(purchase.supplierRif)
-    );
-    if (duplicate) {
-      throw new Error('SQLite rechazó una factura de compra duplicada para el mismo proveedor, empresa y número de documento.');
-    }
-  }
   const priorMovementIdsForIntegrity = new Set(asArray(priorState.movements).map(item => String(item.id)));
   for (const purchase of asArray(nextState.purchases)) {
     if (priorPurchaseIdsForIntegrity.has(String(purchase.id)) ||
