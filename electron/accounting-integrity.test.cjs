@@ -93,8 +93,8 @@ test('SQLite accepts a linked contra-entry reversal of an unused direct supplier
     reversalOfEntryId: 'advance-original', reversalReason: 'El desembolso fue registrado por duplicado.',
     workpaperNote: 'Se verificó el comprobante original y el movimiento bancario antes de revertir.',
     items: [
-      { accountCode: '1.1.1.01', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
-      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 },
+      { accountCode: '1.1.1.01', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 }
     ], createdAt: '2026-10-11T10:00:00.000Z'
   };
   const source = {
@@ -931,7 +931,7 @@ test('SQLite applies a direct supplier advance to a future payable and reduces t
         { accountCode: '1.1.2.03', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
       ]
     }]
-  }), /exceden el saldo individual de un desembolso directo|superan el principal neto de CxP/);
+  }), /exceden el saldo individual de un desembolso directo|exceden los saldos de notas de crédito y desembolsos directos|superan el principal neto de CxP/);
 });
 
 test('SQLite reconciles the portion of a supplier credit note applied to AP and the excess recorded as an advance', () => {
