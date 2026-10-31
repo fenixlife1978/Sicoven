@@ -175,6 +175,49 @@ export function generateSeniatIslrTxt(company: Company, vouchers: IslrRetentionV
 }
 
 /**
+ * TXT auxiliar de operaciones ISLR: conserva la misma población del XML mensual,
+ * incluidas las operaciones cuyo importe retenido sea cero.
+ */
+export function generateSeniatIslrOperationsTxt(
+  company: Company,
+  purchases: PurchaseRecord[],
+  vouchers: IslrRetentionVoucher[],
+  period: string
+): string {
+  const rows = purchases
+    .filter(p => p.companyId === company.id && p.documentType === '01' && p.invoiceDate.slice(0, 7).replace('-', '') === period && p.islrConceptCode && !p.isCancelled)
+    .map(p => ({
+      supplierRif: p.supplierRif, invoiceNumber: p.invoiceNumber, controlNumber: p.controlNumber,
+      invoiceDate: p.invoiceDate, conceptCode: p.islrConceptCode as string,
+      baseAmountBs: Number(p.taxableBaseBs), retentionRate: Number(p.islrRate || 0),
+      subtrahendBs: Number(p.islrSubtrahendBs || 0), withheldAmountBs: Number(p.islrWithheldBs || 0),
+      key: [p.supplierRif, p.invoiceNumber, p.invoiceDate, p.islrConceptCode].join('|')
+    }));
+  const known = new Set(rows.map(row => row.key));
+  for (const voucher of vouchers) {
+    const key = [voucher.supplierRif, voucher.invoiceNumber, voucher.invoiceDate, voucher.conceptCode].join('|');
+    if (voucher.companyId !== company.id || voucher.period !== period || known.has(key)) continue;
+    rows.push({
+      supplierRif: voucher.supplierRif, invoiceNumber: voucher.invoiceNumber, controlNumber: voucher.controlNumber,
+      invoiceDate: voucher.invoiceDate, conceptCode: voucher.conceptCode,
+      baseAmountBs: Number(voucher.baseAmountBs), retentionRate: Number(voucher.retentionRate),
+      subtrahendBs: Number(voucher.subtrahendBs), withheldAmountBs: Number(voucher.withheldAmountBs), key
+    });
+    known.add(key);
+  }
+  rows.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.invoiceNumber.localeCompare(b.invoiceNumber));
+  return rows.map(row => {
+    const parts = row.invoiceDate.split('-');
+    const date = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : row.invoiceDate;
+    return [
+      cleanRif(company.rif), period, cleanRif(row.supplierRif), row.conceptCode.padStart(3, '0'),
+      row.invoiceNumber, row.controlNumber, date, row.baseAmountBs.toFixed(2),
+      row.retentionRate.toFixed(2), row.subtrahendBs.toFixed(2), row.withheldAmountBs.toFixed(2)
+    ].join('\\t');
+  }).join('\\r\\n');
+}
+
+/**
  * Descarga un archivo de texto en el navegador del usuario
  */
 export function downloadFile(content: string, fileName: string, contentType: string = 'text/plain;charset=utf-8') {
