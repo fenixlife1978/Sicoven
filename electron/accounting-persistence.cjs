@@ -110,6 +110,28 @@ function persistAccountingSnapshot(db, state) {
         }));
       }
     }
+    const oldDirectAdvances = new Map((Array.isArray(priorState.supplierDirectAdvances) ? priorState.supplierDirectAdvances : [])
+      .map(item => [String(item.id), item]));
+    for (const advance of (Array.isArray(state.supplierDirectAdvances) ? state.supplierDirectAdvances : [])) {
+      const oldAdvance = oldDirectAdvances.get(String(advance.id));
+      if (!oldAdvance) {
+        auditInsert.run('supplier_direct_advance_posted', JSON.stringify({
+          directAdvanceId: advance.id, companyId: advance.companyId,
+          supplierRif: advance.supplierRif, supplierName: advance.supplierName,
+          date: advance.date, amountUsd: advance.amountUsd, bookValueBs: advance.bookValueBs,
+          paymentCurrency: advance.paymentCurrency, paidAmount: advance.paidAmount,
+          treasuryAccountCode: advance.treasuryAccountCode,
+          reference: advance.reference, support: advance.support,
+          journalEntryId: advance.journalEntryId
+        }));
+      } else if (!oldAdvance.isReversed && advance.isReversed) {
+        auditInsert.run('supplier_direct_advance_reversed', JSON.stringify({
+          directAdvanceId: advance.id, companyId: advance.companyId,
+          journalEntryId: advance.journalEntryId,
+          reversedByJournalEntryId: advance.reversedByJournalEntryId || null
+        }));
+      }
+    }
     const oldAdvanceSettlements = new Map((Array.isArray(priorState.supplierAdvanceSettlements) ? priorState.supplierAdvanceSettlements : []).map(item => [String(item.id), item]));
     for (const settlement of (Array.isArray(state.supplierAdvanceSettlements) ? state.supplierAdvanceSettlements : [])) {
       const oldSettlement = oldAdvanceSettlements.get(String(settlement.id));
@@ -118,7 +140,10 @@ function persistAccountingSnapshot(db, state) {
           settlementId: settlement.id, companyId: settlement.companyId, supplierRif: settlement.supplierRif,
           kind: settlement.kind, amountBs: settlement.amountBs, amountUsd: settlement.amountUsd,
           journalEntryId: settlement.journalEntryId, targetPurchaseId: settlement.targetPurchaseId || null,
-          sourceCreditNoteIds: settlement.sourceCreditNoteIds || []
+          sourceCreditNoteIds: settlement.sourceCreditNoteIds || [],
+          sourceCreditNoteAllocations: settlement.sourceCreditNoteAllocations || [],
+          sourceDirectAdvanceIds: settlement.sourceDirectAdvanceIds || [],
+          sourceDirectAdvanceAllocations: settlement.sourceDirectAdvanceAllocations || []
         }));
       } else if (!oldSettlement.isReversed && settlement.isReversed) {
         auditInsert.run('supplier_advance_settlement_reversed', JSON.stringify({
