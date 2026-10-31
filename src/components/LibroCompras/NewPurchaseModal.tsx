@@ -559,7 +559,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               ...(igtfAmountBs > 0 ? [{name:'Gasto por IGTF', debit:igtfAmountBs, credit:0}] : []),
               ...(vatWithheldBs > 0 ? [{name:'Retención IVA por enterar', debit:0, credit:vatWithheldBs}] : []),
               ...(islrWithheldBs > 0 ? [{name:'Retención ISLR por enterar', debit:0, credit:islrWithheldBs}] : []),
-              {name:'Cuenta por pagar proveedor', debit:0, credit:Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs)}
+              {name: paymentTerm === 'CONTADO' ? (paymentAccounts.find(account => account.code === paymentAccountCode)?.name || 'Cuenta de Caja/Banco') : 'Cuenta por pagar proveedor', debit:0, credit:Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs)}
             ].map((line, index) => <div key={index} className="grid grid-cols-3 gap-2 text-slate-700"><span>{line.name}</span><span className="text-right font-mono">{formatBs(line.debit)}</span><span className="text-right font-mono">{formatBs(line.credit)}</span></div>)}
             <div className="grid grid-cols-3 gap-2 border-t border-sky-200 pt-2 font-bold"><span>Totales</span><span className="text-right font-mono">{formatBs(taxableBaseBs+exemptAmountBs+vatAmountBs+igtfAmountBs)}</span><span className="text-right font-mono">{formatBs(vatWithheldBs+islrWithheldBs+Math.max(0,totalAmountBs-vatWithheldBs-islrWithheldBs))}</span></div>
             <p className="text-[11px] text-slate-600">Vista previa estimada; la validación definitiva se ejecuta al guardar.</p>
