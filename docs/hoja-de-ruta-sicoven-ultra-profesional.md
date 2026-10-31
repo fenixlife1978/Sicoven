@@ -26,27 +26,25 @@
 | 4. Bloqueo de operaciones retroactivas | [#18](https://github.com/fenixlife1978/Sicoven/pull/18) | `da83c4cf557b0feb5376fdec8309e310b25554fb` | CI escritorio e instalador satisfactorios |
 | 5. Interfaz y persistencia confirmada del cierre | [#19](https://github.com/fenixlife1978/Sicoven/pull/19) | `56e044774154fbd92e06486671835e0655fa8498` | CI escritorio e instalador satisfactorios |
 | 6. Preparación validada del asiento de apertura | [#20](https://github.com/fenixlife1978/Sicoven/pull/20) | `0c0b511e7eacc39973762d28ff553a69981e8757` | Desktop run 41228459268 success; Windows installer run 41228459069 success |
+| 6.1. Integración de apertura contable confirmada en SQLite | [#21](https://github.com/fenixlife1978/Sicoven/pull/21) | `c81f5fb5daae9870269eb4acaa4bc96f11c5d4fa` | Fusionado; persistencia transaccional SQLite y confirmación explícita |
+| 6.2. Reapertura formal y auditable de períodos | [#22](https://github.com/fenixlife1978/Sicoven/pull/22) | `f016d10acbdc501be5d554ff9815de23858b1338` | CI escritorio/Windows y upgrade 1.0.6→1.0.7 con SQLite conservada satisfactorios |
+| 6.3. Cierre y apertura de ejercicios integrados | [#23](https://github.com/fenixlife1978/Sicoven/pull/23) | `1232800fc543a3672fe4dd92367af1dff6edd4fe` | CI escritorio/Windows y upgrade con conservación SQLite satisfactorios |
+| 6.4. Integridad del Balance General en doble moneda y aislamiento multiempresa | [#24](https://github.com/fenixlife1978/Sicoven/pull/24) | `275ab32b16f3b7e402dace923a0769cff5aceeac` | CI escritorio/Windows satisfactorios; validaciones Bs/USD y aislamiento |
+| 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge y post-merge escritorio/Windows SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
-### Próximo subbloque en ejecución — 6.1: integración controlada de apertura
+### Secuencia contable 6.1–6.5 — completada e integrada
 
-La función pura `buildOpeningEntryItems` ya prepara líneas de apertura en Bs/USD, pero deliberadamente no las persiste ni contabiliza. El trabajo siguiente integra el flujo completo sin automatismos:
+Los cinco subbloques están fusionados en `main`:
 
-- Presentar en Configuración un formulario de apertura por empresa y ejercicio, con fechas, selección expresa de cuenta patrimonial para resultados y vista previa de líneas/sumas en ambas monedas.
-- Exigir confirmación explícita antes de registrar el asiento; nunca crear una apertura al cambiar de ejercicio o al iniciar la aplicación.
-- Usar el mecanismo existente `addJournalEntry` y la persistencia transaccional SQLite; no escribir directamente desde la interfaz.
-- Validar empresa activa, período cerrado, fecha de apertura posterior al cierre, cuentas imputables, partida doble, importes válidos y ausencia de apertura duplicada.
-- Hacer idempotente la operación y evitar doble envío mientras SQLite confirma.
-- Registrar evento de auditoría específico de apertura sin sustituir ni debilitar el evento existente de asiento contabilizado.
-- Probar aislamiento multiempresa, Bs/USD, utilidad y pérdida, ejercicio previo, apertura duplicada, persistencia confirmada, fallo/rollback y auditoría.
-- Revisar el modelo real de autenticación/permisos antes de imponer restricciones nuevas. La instalación actual declara el rol único `admin`; el administrador semilla y su flujo permanecen intocables.
+- **6.1 — PR #21:** integración de apertura contable confirmada en SQLite. La apertura requiere confirmación explícita y persiste mediante el flujo transaccional existente.
+- **6.2 — PR #22:** reapertura formal y auditable de períodos, con registro append-only y conservación del cierre original e históricos.
+- **6.3 — PR #23:** cierre y apertura de ejercicios integrados, con controles de fechas, duplicidad, empresa y trazabilidad.
+- **6.4 — PR #24:** Balance General validado en Bs. y USD y filtrado por empresa antes del cálculo; pruebas de descuadres, aislamiento y valores no finitos.
+- **6.5 — PR #25:** exportación PDF horizontal de estados financieros con columnas nativas separadas en Bs. y USD, sin convertir una moneda en la otra.
 
-**Estado:** rama `feature/bloque-6-1-integracion-apertura` creada desde `main` en `0c0b511e7eacc39973762d28ff553a69981e8757`. Sin cambios funcionales fusionados todavía.
-
-### Reapertura formal — subbloque posterior 6.2
-
-No se debe reducir ni borrar `closedThroughDate` como mecanismo de reapertura. Diseñar un historial persistente de cierres y reaperturas, motivo obligatorio, identidad del usuario autenticado, validación de autorización, evento append-only `accounting_period_reopened`, y transacción SQLite. Conservar el cierre original y los asientos históricos. No implementar hasta haber trazado los permisos reales y las guardias existentes.
+**Estado:** los PR #21 a #25 están cerrados y fusionados. Los CI posteriores a PR #25 de escritorio y Windows terminaron SUCCESS. El run Windows `41234017655` completó compilación NSIS, verificación del instalador, upgrade 1.0.6→1.0.7 con conservación de SQLite y carga del artefacto. El artefacto permanece sin publicar como release. No publicar instalador ni release.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
