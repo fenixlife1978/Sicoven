@@ -273,7 +273,7 @@ test('period reopening requires a reason and an effective earlier date', () => {
 test('period reopening is transactional, company-scoped, audited and preserves closure and accounting history', () => {
   const harness = createHarness();
   try {
-    persistAccountingSnapshot(harness.db, closedCompanyState());
+    persistClosedCompanyFixture(harness.db);
     const result = harness.reopenHandler({}, 'valid-session', {
       companyId: 'company-1', reopenedThroughDate: '2026-09-30',
       reason: 'Se detectó un documento omitido; soporte de auditoría REF-2026-09.'
@@ -309,7 +309,7 @@ test('period reopening is transactional, company-scoped, audited and preserves c
 test('full period reopening clears only the active boundary and retains its immutable closure record', () => {
   const harness = createHarness();
   try {
-    persistAccountingSnapshot(harness.db, closedCompanyState());
+    persistClosedCompanyFixture(harness.db);
     const result = harness.reopenHandler({}, 'valid-session', {
       companyId: 'company-1', reopenedThroughDate: null,
       reason: 'Reapertura integral autorizada para corregir el ejercicio completo.'
