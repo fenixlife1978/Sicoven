@@ -1725,7 +1725,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ) + 1;
       islrEventSequenceRef.current[eventKey] = nextEventSequence;
       const fiscalEvent: IslrFiscalEvent = {
-        id: `islr-event-${purchaseId}`,
+        id: `islr-event-${currentCompany.id}-${purchaseId}`,
         companyId: currentCompany.id,
         supplierRif: purchaseData.supplierRif,
         conceptCode: purchaseData.islrConceptCode,
