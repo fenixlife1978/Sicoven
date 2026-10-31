@@ -71,10 +71,6 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
     if (expectedUt == null || Math.abs(expectedUt - Number(event.unitTaxValueBs)) > 0.000001) {
       throw new Error('SQLite rechazó el snapshot de UT ISLR porque no coincide con el valor histórico verificado para la fecha del evento.');
     }
-    const sequenceKey = [event.companyId, event.fiscalDate, event.sequence].join('|');
-    if (sequences.has(sequenceKey)) throw new Error('SQLite rechazó una secuencia de eventos ISLR duplicada para la empresa y fecha.');
-    sequences.add(sequenceKey);
-
     const journal = journalById.get(String(event.journalEntryId));
     if (!journal || journal.companyId !== event.companyId || journal.date !== event.fiscalDate) {
       throw new Error('SQLite rechazó un evento ISLR sin asiento contable enlazado a la misma empresa y fecha fiscal.');
