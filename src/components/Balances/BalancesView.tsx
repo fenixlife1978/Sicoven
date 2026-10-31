@@ -304,11 +304,17 @@ export const BalancesView: React.FC = () => {
     .reduce((result, entry) => {
       for (const item of entry.items) {
         const accountType = accounts.find(account => account.code === item.accountCode)?.type;
-        const sign = accountType === 'INGRESOS' || accountType === 'COSTOS' || accountType === 'GASTOS'
-          ? 1 : 0;
-        if (!sign) continue;
-        result.bs += Number(item.creditBs || 0) - Number(item.debitBs || 0);
-        result.usd += Number(item.creditUsd || 0) - Number(item.debitUsd || 0);
+        if (!['INGRESOS', 'COSTOS', 'GASTOS'].includes(accountType || '')) continue;
+        // Income increases equity with a credit; costs and expenses reduce it
+        // with a debit. Preserve the same sign convention in each currency.
+        const bsContribution = accountType === 'INGRESOS'
+          ? Number(item.creditBs || 0) - Number(item.debitBs || 0)
+          : Number(item.debitBs || 0) - Number(item.creditBs || 0);
+        const usdContribution = accountType === 'INGRESOS'
+          ? Number(item.creditUsd || 0) - Number(item.debitUsd || 0)
+          : Number(item.debitUsd || 0) - Number(item.creditUsd || 0);
+        result.bs += bsContribution;
+        result.usd += usdContribution;
       }
       return result;
     }, { bs: 0, usd: 0 });
