@@ -1,6 +1,6 @@
 const { validateAccountingSnapshot } = require('./accounting-integrity.cjs');
 
-function persistAccountingSnapshot(db, state) {
+function persistAccountingSnapshot(db, state, actor = null) {
   const json = JSON.stringify(state);
   if (json.length > 50 * 1024 * 1024) throw new Error('El respaldo supera el límite permitido');
   const save = db.transaction(() => {
@@ -27,6 +27,15 @@ function persistAccountingSnapshot(db, state) {
         reversalReason: entry.reversalReason || null, workpaperNote: entry.workpaperNote || null,
         priorPeriodAdjustment: Boolean(entry.priorPeriodAdjustment), totals
       }));
+      if (entry.type === 'APERTURA') {
+        auditInsert.run('accounting_year_opening_posted', JSON.stringify({
+          entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
+          openingDate: entry.date, referenceDoc: entry.referenceDoc || null,
+          description: entry.description,
+          actor: actor ? { userId: actor.id ?? null, username: actor.username || null } : null,
+          totals
+        }));
+      }
     }
     for (const collectionName of ['purchases', 'sales']) {
       const oldDocuments = new Map((Array.isArray(priorState[collectionName]) ? priorState[collectionName] : [])
@@ -180,9 +189,10 @@ function registerAccountingPersistenceHandler({ ipcMain, db, licenseView, getAct
   ipcMain.handle('sicoven:save-state', (_event, token, state) => {
     const licensing = licenseView();
     if (!licensing.authorized) throw new Error(licensing.message || 'Licencia no autorizada.');
-    if (!getActiveSession(token)) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
+    const actor = getActiveSession(token);
+    if (!actor) throw new Error('Sesión no válida. Inicie sesión para guardar datos contables.');
     if (!state || typeof state !== 'object' || Array.isArray(state)) throw new Error('Estado contable inválido');
-    return persistAccountingSnapshot(db, state);
+    return persistAccountingSnapshot(db, state, actor);
   });
 }
 

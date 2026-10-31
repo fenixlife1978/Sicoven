@@ -14,6 +14,40 @@
 - El flujo de inicio del administrador semilla queda expresamente fuera del alcance y no debe modificarse.
 - No reabrir los siete frentes funcionales ya aprobados salvo defecto concreto demostrado.
 
+## Estado de ejecución verificado — 31/10/2026
+
+### Bloques cerrados y fusionados en `main`
+
+| Bloque | PR | Commit de integración en `main` | Validación |
+|---|---:|---|---|
+| 1. Jerarquía del plan de cuentas VEN-NIF | [#14](https://github.com/fenixlife1978/Sicoven/pull/14) | `7548ffd7c5065acf6ae235e9f31e2ab8bbb68ef0` | CI escritorio e instalador satisfactorios |
+| 2. Integridad de cuentas imputables en Diario | [#16](https://github.com/fenixlife1978/Sicoven/pull/16) | `27f96be01fac69513b84eeec28d71b9c6f05a971` | CI escritorio e instalador; upgrade 1.0.6→1.0.7 conservó SQLite |
+| 3. Balance y Mayor en doble moneda | [#17](https://github.com/fenixlife1978/Sicoven/pull/17) | `c58e14448eeb4f9eb2edcd366dbf9b8b6e9bcf0a` | CI escritorio e instalador; upgrade conservó SQLite |
+| 4. Bloqueo de operaciones retroactivas | [#18](https://github.com/fenixlife1978/Sicoven/pull/18) | `da83c4cf557b0feb5376fdec8309e310b25554fb` | CI escritorio e instalador satisfactorios |
+| 5. Interfaz y persistencia confirmada del cierre | [#19](https://github.com/fenixlife1978/Sicoven/pull/19) | `56e044774154fbd92e06486671835e0655fa8498` | CI escritorio e instalador satisfactorios |
+| 6. Preparación validada del asiento de apertura | [#20](https://github.com/fenixlife1978/Sicoven/pull/20) | `0c0b511e7eacc39973762d28ff553a69981e8757` | Desktop run 41228459268 success; Windows installer run 41228459069 success |
+
+El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
+
+### Próximo subbloque en ejecución — 6.1: integración controlada de apertura
+
+La función pura `buildOpeningEntryItems` ya prepara líneas de apertura en Bs/USD, pero deliberadamente no las persiste ni contabiliza. El trabajo siguiente integra el flujo completo sin automatismos:
+
+- Presentar en Configuración un formulario de apertura por empresa y ejercicio, con fechas, selección expresa de cuenta patrimonial para resultados y vista previa de líneas/sumas en ambas monedas.
+- Exigir confirmación explícita antes de registrar el asiento; nunca crear una apertura al cambiar de ejercicio o al iniciar la aplicación.
+- Usar el mecanismo existente `addJournalEntry` y la persistencia transaccional SQLite; no escribir directamente desde la interfaz.
+- Validar empresa activa, período cerrado, fecha de apertura posterior al cierre, cuentas imputables, partida doble, importes válidos y ausencia de apertura duplicada.
+- Hacer idempotente la operación y evitar doble envío mientras SQLite confirma.
+- Registrar evento de auditoría específico de apertura sin sustituir ni debilitar el evento existente de asiento contabilizado.
+- Probar aislamiento multiempresa, Bs/USD, utilidad y pérdida, ejercicio previo, apertura duplicada, persistencia confirmada, fallo/rollback y auditoría.
+- Revisar el modelo real de autenticación/permisos antes de imponer restricciones nuevas. La instalación actual declara el rol único `admin`; el administrador semilla y su flujo permanecen intocables.
+
+**Estado:** rama `feature/bloque-6-1-integracion-apertura` creada desde `main` en `0c0b511e7eacc39973762d28ff553a69981e8757`. Sin cambios funcionales fusionados todavía.
+
+### Reapertura formal — subbloque posterior 6.2
+
+No se debe reducir ni borrar `closedThroughDate` como mecanismo de reapertura. Diseñar un historial persistente de cierres y reaperturas, motivo obligatorio, identidad del usuario autenticado, validación de autorización, evento append-only `accounting_period_reopened`, y transacción SQLite. Conservar el cierre original y los asientos históricos. No implementar hasta haber trazado los permisos reales y las guardias existentes.
+
 ## Capacidades preexistentes identificadas en la inspección inicial
 
 La inspección inicial de `main` confirma que el producto ya contiene:
