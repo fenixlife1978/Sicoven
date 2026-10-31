@@ -79,3 +79,26 @@ test('no mezcla empresas ni movimientos posteriores al corte', () => {
     accounts, journalEntries: [later, other]
   }), /No existen saldos/);
 });
+
+
+test('no vuelve a trasladar ingresos y gastos de ejercicios anteriores al resultado del nuevo período', () => {
+  const journal = [
+    entry('prior-income', '2025-12-30', [
+      line('1.1.1', 100, 0, 1, 0), line('4.1.1', 0, 100, 0, 1)
+    ]),
+    entry('prior-close', '2025-12-31', [
+      line('4.1.1', 100, 0, 1, 0), line('3.1.1', 0, 100, 0, 1)
+    ]),
+    entry('current-loss', '2026-06-30', [
+      line('6.1.1', 20, 0, 0.2, 0), line('1.1.1', 0, 20, 0, 0.2)
+    ])
+  ];
+  const items = buildOpeningEntryItems({
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31',
+    openingDate: '2027-01-01', accounts, journalEntries: journal,
+    retainedEarningsAccountCode: '3.1.1'
+  });
+  assert.equal(items.find(item => item.accountCode === '1.1.1')?.debitBs, 80);
+  assert.equal(items.find(item => item.accountCode === '3.1.1')?.creditBs, 80);
+  assert.equal(items.some(item => item.accountCode === '4.1.1' || item.accountCode === '6.1.1'), false);
+});
