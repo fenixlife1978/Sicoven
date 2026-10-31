@@ -13,7 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
-import { hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
+import { getUnclosedResultContribution, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
@@ -305,16 +305,15 @@ export const BalancesView: React.FC = () => {
       for (const item of entry.items) {
         const accountType = accounts.find(account => account.code === item.accountCode)?.type;
         if (!['INGRESOS', 'COSTOS', 'GASTOS'].includes(accountType || '')) continue;
-        // Income increases equity with a credit; costs and expenses reduce it
-        // with a debit. Preserve the same sign convention in each currency.
-        const bsContribution = accountType === 'INGRESOS'
-          ? Number(item.creditBs || 0) - Number(item.debitBs || 0)
-          : Number(item.debitBs || 0) - Number(item.creditBs || 0);
-        const usdContribution = accountType === 'INGRESOS'
-          ? Number(item.creditUsd || 0) - Number(item.debitUsd || 0)
-          : Number(item.debitUsd || 0) - Number(item.creditUsd || 0);
-        result.bs += bsContribution;
-        result.usd += usdContribution;
+        const contribution = getUnclosedResultContribution(
+          accountType,
+          Number(item.debitBs || 0),
+          Number(item.creditBs || 0),
+          Number(item.debitUsd || 0),
+          Number(item.creditUsd || 0)
+        );
+        result.bs += contribution.bs;
+        result.usd += contribution.usd;
       }
       return result;
     }, { bs: 0, usd: 0 });
