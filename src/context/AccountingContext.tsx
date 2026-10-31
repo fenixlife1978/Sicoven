@@ -314,6 +314,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const journalSequenceRef = useRef<Record<string, number>>({});
   const vatVoucherSequenceRef = useRef<Record<string, number>>({});
   const islrVoucherSequenceRef = useRef<Record<string, number>>({});
+  const islrEventSequenceRef = useRef<Record<string, number>>({});
   const [displayCurrency, setDisplayCurrency] = useState<'BS' | 'USD' | 'DUAL'>('DUAL');
   // El acceso de prueba se controla por la licencia de 24 horas, nunca por cantidad de acciones.
   // Se conserva este punto de compatibilidad para las operaciones existentes sin bloquearlas.
@@ -1526,7 +1527,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setVatVouchers(prev => [...prev, vatVoucher]);
     }
 
-    // 3. Si retuvo ISLR, crear comprobante oficial de retención de ISLR
+    // 3. Emitir comprobante cuando exista importe retenido.
+    let createdIslrVoucher: IslrRetentionVoucher | undefined;
     if (purchaseData.islrWithheldBs && purchaseData.islrWithheldBs > 0) {
       const islrVoucher: IslrRetentionVoucher = {
         id: `vouch-islr-${purchaseId}`,
@@ -1561,7 +1563,40 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         formulaFactor: purchaseData.islrFormulaFactor,
         basePercentage: purchaseData.islrBasePercentage
       };
+      createdIslrVoucher = islrVoucher;
       setIslrVouchers(prev => [...prev, islrVoucher]);
+    }
+
+    // La compra genera el abono en cuenta al reconocer el pasivo del proveedor.
+    // Se registra el evento fiscal con la fecha del asiento (no con la fecha del pago).
+    if (purchaseData.islrConceptCode && Number(purchaseData.taxableBaseBs) > 0) {
+      const fiscalDate = purchaseData.invoiceDate;
+      const eventKey = `${companyKey}:${fiscalDate}`;
+      const existingDayEvents = islrFiscalEvents.filter(event =>
+        event.companyId === currentCompany.id && event.fiscalDate === fiscalDate
+      );
+      const nextEventSequence = Math.max(
+        existingDayEvents.reduce((max, event) => Math.max(max, Number(event.sequence) || 0), 0),
+        islrEventSequenceRef.current[eventKey] || 0
+      ) + 1;
+      islrEventSequenceRef.current[eventKey] = nextEventSequence;
+      const fiscalEvent: IslrFiscalEvent = {
+        id: `islr-event-${purchaseId}`,
+        companyId: currentCompany.id,
+        supplierRif: purchaseData.supplierRif,
+        conceptCode: purchaseData.islrConceptCode,
+        fiscalDate,
+        sequence: nextEventSequence,
+        kind: 'ACCOUNT_CREDIT',
+        allocations: [{ purchaseId, baseAmountBs: Number(purchaseData.taxableBaseBs) }],
+        basePercentage: Number(purchaseData.islrBasePercentage),
+        unitTaxValueBs: Number(purchaseData.islrUnitTaxValueBs),
+        withheldAmountBs: Number(purchaseData.islrWithheldBs || 0),
+        journalEntryId: createdJournalEntry.id,
+        voucherId: createdIslrVoucher?.id,
+        createdAt: new Date().toISOString()
+      };
+      setIslrFiscalEvents(prev => [...prev, fiscalEvent]);
     }
 
     return finalPurchase;
