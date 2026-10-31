@@ -102,7 +102,9 @@ export interface PurchaseRecord {
   id: string;
   companyId: string;
   opNumber: number;
-  invoiceDate: string; // YYYY-MM-DD
+  invoiceDate: string; // YYYY-MM-DD, fecha original del documento
+  /** Fecha efectiva en que se reconoce/abona en cuenta el pasivo; ausente solo en históricos legacy. */
+  accountCreditDate?: string; // YYYY-MM-DD
   supplierRif: string; // e.g. "J-12345678-9"
   supplierName: string;
   supplierAddress?: string;
@@ -415,3 +417,8 @@ export interface BankReconciliationRecord {
   createdAt: string;
 }
 
+
+/** Fecha fiscal/contable del abono en cuenta; los registros históricos conservan invoiceDate como fallback. */
+export function getPurchaseAccountCreditDate(purchase: Pick<PurchaseRecord, 'invoiceDate' | 'accountCreditDate'>): string {
+  return purchase.accountCreditDate || purchase.invoiceDate;
+}

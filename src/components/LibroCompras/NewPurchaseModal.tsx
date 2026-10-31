@@ -4,6 +4,7 @@ import { ShoppingCart, X, Check, Calculator, ShieldCheck } from 'lucide-react';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../../data/islrConcepts';
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
+import { getPurchaseAccountCreditDate } from '../../types/accounting';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const { currentCompany, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
+  const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [supplierRif, setSupplierRif] = useState<string>('J-');
   const [supplierName, setSupplierName] = useState<string>('');
   const [supplierAddress, setSupplierAddress] = useState<string>('');
@@ -62,7 +64,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   // ISLR calculation
   const selectedConcept = ISLR_CONCEPTS.find(c => c.code === islrConceptCode);
   const normalizedSupplierRif = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-  const selectedMonthKey = String(invoiceDate || '').slice(0, 7);
+  const selectedMonthKey = String(accountCreditDate || '').slice(0, 7);
   const islrUnitTaxValueBs = getIslrUnitTaxValueForPeriod(selectedMonthKey);
   const hasCancelledPriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
     item.companyId === currentCompany.id &&
@@ -70,7 +72,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     item.isCancelled &&
     String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedSupplierRif &&
     item.islrConceptCode === selectedConcept?.code &&
-    String(item.invoiceDate || '').slice(0, 7) === selectedMonthKey
+    getPurchaseAccountCreditDate(item).slice(0, 7) === selectedMonthKey
   );
   const hasIncompletePriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
     item.companyId === currentCompany.id &&
@@ -89,14 +91,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   if (applyIslr && selectedConcept && taxableBaseBs > 0) {
     const supplierKey = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-    const monthKey = String(invoiceDate || '').slice(0, 7);
+    const monthKey = String(accountCreditDate || '').slice(0, 7);
     const priorOperations = purchases.filter(item =>
       item.companyId === currentCompany.id &&
       !item.isCancelled &&
       item.documentType === '01' &&
       String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
       item.islrConceptCode === selectedConcept.code &&
-      String(item.invoiceDate || '').slice(0, 7) === monthKey
+      getPurchaseAccountCreditDate(item).slice(0, 7) === monthKey
     ).map(item => ({
       baseAmountBs: item.taxableBaseBs,
       withheldAmountBs: item.islrWithheldBs,
@@ -189,6 +191,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       runAtomicInvoiceImport(() => {
       addPurchase({
       invoiceDate,
+      accountCreditDate,
       supplierRif: formatRif(supplierRif),
       supplierName: supplierName.trim().toUpperCase(),
       supplierAddress: supplierAddress.trim() || undefined,
@@ -317,7 +320,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">Tipo de Documento</label>
                 <select
@@ -339,6 +342,17 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   onChange={e => setInvoiceDate(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
+              </div>
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Fecha Abono en Cuenta *</label>
+                <input
+                  type="date"
+                  required
+                  value={accountCreditDate}
+                  onChange={e => setAccountCreditDate(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
+                />
+                <p className="text-[10px] text-slate-500 mt-1">Fecha de reconocimiento del pasivo; puede diferir de la emisión.</p>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">N° de Factura *</label>

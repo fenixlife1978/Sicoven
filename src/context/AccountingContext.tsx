@@ -4,6 +4,7 @@ import {
   Account,
   JournalEntry,
   PurchaseRecord,
+  getPurchaseAccountCreditDate,
   SaleRecord,
   InventoryProduct,
   InventoryMovement,
@@ -1210,13 +1211,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
     }
     // Validación de documento en la capa de dominio: no confiar solo en required del formulario.
-    if (currentCompany.closedThroughDate && purchaseData.invoiceDate <= currentCompany.closedThroughDate) {
+    if (currentCompany.closedThroughDate && (purchaseData.invoiceDate <= currentCompany.closedThroughDate || purchaseData.accountCreditDate! <= currentCompany.closedThroughDate)) {
       throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. Registre el documento en el período abierto o solicite una corrección formal.');
     }
-    if (!isValidIsoDate(purchaseData.invoiceDate) ||
+    if (!isValidIsoDate(purchaseData.invoiceDate) || !isValidIsoDate(purchaseData.accountCreditDate || '') ||
         !String(purchaseData.invoiceNumber || '').trim() ||
         !String(purchaseData.controlNumber || '').trim()) {
-      throw new Error('La compra requiere fecha válida, número de factura y número de control.');
+      throw new Error('La compra requiere fecha de emisión y fecha de abono en cuenta válidas, número de factura y número de control.');
     }
     if (!String(purchaseData.supplierName || '').trim() || !validateVenezuelanRif(purchaseData.supplierRif).isValid) {
       throw new Error('La compra requiere razón social y un RIF venezolano con estructura válida.');
@@ -1287,7 +1288,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('La retención ISLR requiere un concepto vigente y la clasificación fiscal explícita del beneficiario.');
       }
       const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-      const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
+      const monthKey = String(purchaseData.accountCreditDate || '').slice(0, 7);
       const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(monthKey);
       if (expectedUnitTaxValueBs == null || purchaseData.islrUnitTaxValueBs !== expectedUnitTaxValueBs ||
           purchaseData.islrFormulaFactor !== ISLR_FORMULA_FACTOR ||
@@ -1299,7 +1300,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         item.documentType === '01' &&
         String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
         item.islrConceptCode === concept.code &&
-        String(item.invoiceDate || '').slice(0, 7) === monthKey
+        getPurchaseAccountCreditDate(item).slice(0, 7) === monthKey
       );
       if (matchingMonthlyOperations.some(item => item.isCancelled)) {
         throw new Error('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
@@ -1340,12 +1341,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
     // Generar correlativo comprobante IVA si retiene
     let voucherNum = purchaseData.voucherNumber;
-    const period = purchaseData.invoiceDate.slice(0, 7).replace('-', '');
+    const vatPeriod = purchaseData.invoiceDate.slice(0, 7).replace('-', '');
+    const islrPeriod = purchaseData.accountCreditDate!.slice(0, 7).replace('-', '');
     if (purchaseData.vatWithheldBs > 0 && !voucherNum) {
       const year = parseInt(purchaseData.invoiceDate.slice(0, 4), 10);
       const month = parseInt(purchaseData.invoiceDate.slice(5, 7), 10);
-      const voucherKey = `${companyKey}:${period}`;
-      const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id && v.period === period).length;
+      const voucherKey = `${companyKey}:${vatPeriod}`;
+      const companyVouchersCount = vatVouchers.filter(v => v.companyId === currentCompany.id && v.period === vatPeriod).length;
       const voucherSequence = Math.max(companyVouchersCount, vatVoucherSequenceRef.current[voucherKey] || 0) + 1;
       vatVoucherSequenceRef.current[voucherKey] = voucherSequence;
       voucherNum = formatVoucherNumber(year, month, voucherSequence);
@@ -1469,7 +1471,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       id: `entry-pur-${companyKey}-${nextEntryNum}-${Date.now()}`,
       companyId: currentCompany.id,
       entryNumber: nextEntryNum,
-      date: purchaseData.invoiceDate,
+      date: purchaseData.accountCreditDate!,
       description: `Registro Factura de Compra N° ${purchaseData.invoiceNumber} - ${purchaseData.supplierName}`,
       type: 'COMPRA',
       bcvRate: rate,
@@ -1506,7 +1508,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyId: currentCompany.id,
         voucherNumber: voucherNum,
         date: purchaseData.invoiceDate,
-        period,
+        period: vatPeriod,
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
@@ -1535,14 +1537,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         id: `vouch-islr-${purchaseId}`,
         companyId: currentCompany.id,
         voucherNumber: (() => {
-          const voucherKey = `${companyKey}:${period}`;
-          const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === period).length;
+          const voucherKey = `${companyKey}:${islrPeriod}`;
+          const existingCount = islrVouchers.filter(v => v.companyId === currentCompany.id && v.period === islrPeriod).length;
           const sequence = Math.max(existingCount, islrVoucherSequenceRef.current[voucherKey] || 0) + 1;
           islrVoucherSequenceRef.current[voucherKey] = sequence;
-          return `ISLR-${period}-${String(sequence).padStart(6, '0')}`;
+          return `ISLR-${islrPeriod}-${String(sequence).padStart(6, '0')}`;
         })(),
-        date: purchaseData.invoiceDate,
-        period,
+        date: purchaseData.accountCreditDate!,
+        period: islrPeriod,
         supplierRif: purchaseData.supplierRif,
         supplierName: purchaseData.supplierName,
         supplierAddress: purchaseData.supplierAddress || 'Venezuela',
@@ -1571,7 +1573,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     // La compra genera el abono en cuenta al reconocer el pasivo del proveedor.
     // Se registra el evento fiscal con la fecha del asiento (no con la fecha del pago).
     if (purchaseData.islrConceptCode && Number(purchaseData.taxableBaseBs) > 0) {
-      const fiscalDate = purchaseData.invoiceDate;
+      const fiscalDate = purchaseData.accountCreditDate!;
       const eventKey = `${companyKey}:${fiscalDate}`;
       const existingDayEvents = islrFiscalEvents.filter(event =>
         event.companyId === currentCompany.id && event.fiscalDate === fiscalDate
