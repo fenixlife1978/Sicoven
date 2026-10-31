@@ -14,7 +14,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
-import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
+import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
   INITIAL_JOURNAL_ENTRIES,
@@ -1279,7 +1279,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             : (concept.isResident ? 'DOMICILED' : 'NON_DOMICILED'))) {
         throw new Error('La retención ISLR requiere un concepto vigente y la clasificación fiscal explícita del beneficiario.');
       }
-      if (purchaseData.islrUnitTaxValueBs !== VALOR_UNIDAD_TRIBUTARIA_BS ||
+      const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(monthKey);
+      if (expectedUnitTaxValueBs == null || purchaseData.islrUnitTaxValueBs !== expectedUnitTaxValueBs ||
           purchaseData.islrFormulaFactor !== ISLR_FORMULA_FACTOR ||
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
@@ -1314,7 +1315,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           withheldAmountBs: item.islrWithheldBs,
           subtrahendBs: item.islrSubtrahendBs
         })),
-        concept
+        concept,
+        expectedUnitTaxValueBs
       );
       if (Math.abs(expectedIslr.withheldAmountBs - Number(purchaseData.islrWithheldBs)) > 0.01 ||
           Math.abs(expectedIslr.subtrahendBs - Number(purchaseData.islrSubtrahendBs || 0)) > 0.01 ||
