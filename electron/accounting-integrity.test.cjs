@@ -256,7 +256,7 @@ test('SQLite accepts cash purchase posted directly to selected cash/bank account
   assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state));
   const invalid = structuredClone(state);
   invalid.purchases[0].paymentAccountCode = '2.1.1.01';
-  assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\\. y USD/);
+  assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\. y USD/);
 });
 
 test('SQLite accepts cash expense purchase with effective payment/account-credit date different from invoice date', () => {
