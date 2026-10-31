@@ -32,3 +32,31 @@ test('preserves duplicate legacy sequences when no new event is added', () => {
   };
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, previous));
 });
+
+test('reconciles account-credit ISLR event with purchase concept, base and journal retention', () => {
+  const purchase = {
+    id: 'p1', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', taxableBaseBs: 100, exemptAmountBs: 0,
+    isCancelled: false, islrConceptCode: '003', islrBasePercentage: 90,
+    islrUnitTaxValueBs: 43, islrWithheldBs: 5
+  };
+  const journal = {
+    id: 'j1', companyId: 'c1', date: '2026-10-01', type: 'COMPRA',
+    items: [{ accountCode: '2.1.2.04', debitBs: 0, creditBs: 5 }]
+  };
+  const fiscalEvent = {
+    id: 'e1', companyId: 'c1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1,
+    kind: 'ACCOUNT_CREDIT', allocations: [{ purchaseId: 'p1', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 5,
+    journalEntryId: 'j1', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(
+    { purchases: [purchase], journalEntries: [journal], islrFiscalEvents: [] },
+    { purchases: [purchase], journalEntries: [journal], islrFiscalEvents: [fiscalEvent] }
+  ));
+  assert.throws(() => validateIslrFiscalEventLedger(
+    { purchases: [purchase], journalEntries: [journal], islrFiscalEvents: [] },
+    { purchases: [purchase], journalEntries: [{ ...journal, items: [] }], islrFiscalEvents: [fiscalEvent] }
+  ), /asiento de compra no concilia/);
+});
