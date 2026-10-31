@@ -5,6 +5,7 @@ import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPer
 import { formatBs, formatUsd, cleanRif, formatRif } from '../../utils/formatters';
 import { calculatePurchaseIgtf, type PurchasePaymentMethod } from '../../types/purchaseTaxes';
 import { getPurchaseAccountCreditDate } from '../../types/accounting';
+import { isPurchasePaymentAccount } from '../../types/purchaseSettlement';
 
 interface NewPurchaseModalProps {
   isOpen: boolean;
@@ -12,7 +13,7 @@ interface NewPurchaseModalProps {
 }
 
 export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onClose }) => {
-  const { currentCompany, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
+  const { currentCompany, accounts, products, movements, purchases, addPurchase, addMovement, runAtomicInvoiceImport } = useAccounting();
 
   const [invoiceDate, setInvoiceDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [accountCreditDate, setAccountCreditDate] = useState<string>(new Date().toISOString().split('T')[0]);
@@ -43,6 +44,9 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
   const [linkInventory, setLinkInventory] = useState(false);
   const [inventoryLines, setInventoryLines] = useState<Array<{productId:string; quantity:string; unitCostBs:string}>>([{productId:'',quantity:'1',unitCostBs:''}]);
   const [paymentTerm, setPaymentTerm] = useState<'CONTADO' | 'CREDITO'>('CONTADO');
+  const [paymentAccountCode, setPaymentAccountCode] = useState<string>('');
+  const [paymentReference, setPaymentReference] = useState<string>('');
+  const paymentAccounts = accounts.filter(isPurchasePaymentAccount).sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
   const [creditDays, setCreditDays] = useState<number>(7);
   const [currencyPricingMode, setCurrencyPricingMode] = useState<'USD_FIJO' | 'BS_AJUSTABLE' | 'REVISION_MANUAL'>('USD_FIJO');
   const [fiscalAdjustmentMode, setFiscalAdjustmentMode] = useState<'IVA_ORIGINAL_DIF_CAMBIARIA' | 'AJUSTE_BASE_IVA' | 'REVISION_CONTADOR'>('REVISION_CONTADOR');
@@ -182,6 +186,12 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
         }
       }
     }
+    if (paymentTerm === 'CONTADO') {
+      if (!paymentAccounts.some(account => account.code === paymentAccountCode)) {
+        window.alert('Selecciona una cuenta de movimiento de Caja o Banco del Plan de Cuentas.'); return;
+      }
+      if (!paymentReference.trim()) { window.alert('Indica el número de comprobante, referencia bancaria o soporte del desembolso.'); return; }
+    }
     if (vatWithheldBs + islrWithheldBs > totalAmountBs + 0.005) {
       window.alert('Las retenciones no pueden superar el total de la factura.');
       return;
@@ -233,6 +243,8 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       islrWithheldUsd,
       notes: notes.trim() || undefined,
       paymentTerm,
+      paymentAccountCode: paymentTerm === 'CONTADO' ? paymentAccountCode : undefined,
+      paymentReference: paymentTerm === 'CONTADO' ? paymentReference.trim() : undefined,
       creditDays: paymentTerm === 'CREDITO' ? creditDays : 0,
       dueDate: paymentTerm === 'CREDITO' ? dueDate : invoiceDate,
       currencyPricingMode,
@@ -352,7 +364,7 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
                   onChange={e => setAccountCreditDate(e.target.value)}
                   className="w-full px-3 py-1.5 border border-slate-300 rounded-lg focus:ring-1 focus:ring-emerald-500 focus:outline-none"
                 />
-                <p className="text-[10px] text-slate-500 mt-1">Fecha de reconocimiento del pasivo; puede diferir de la emisión.</p>
+                <p className="text-[10px] text-slate-500 mt-1">{paymentTerm === 'CONTADO' ? 'Para contado, registra aquí la fecha efectiva del pago y su reconocimiento contable.' : 'Fecha de reconocimiento del pasivo; puede diferir de la emisión.'}</p>
               </div>
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">N° de Factura *</label>
@@ -557,10 +569,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
           <div className="p-3.5 bg-amber-50 border border-amber-200 rounded-xl space-y-3">
             <span className="font-bold text-slate-800 uppercase tracking-wider block">4. Condiciones de pago/cobro y ajuste cambiario</span>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div><label className="block font-semibold text-slate-700 mb-1">Condición de la operación</label><select value={paymentTerm} onChange={e => setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO" disabled>Contado (bloqueado hasta conciliar caja/banco)</option><option value="CREDITO">A crédito</option></select></div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Forma de pago</label><select value={paymentTerm} onChange={e => setPaymentTerm(e.target.value as 'CONTADO' | 'CREDITO')} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="CONTADO">Contado</option><option value="CREDITO">Crédito</option></select></div>
               {paymentTerm === 'CREDITO' && <div><label className="block font-semibold text-slate-700 mb-1">Plazo del crédito (días)</label><input type="number" min="1" max="3650" value={creditDays} onChange={e => setCreditDays(Math.max(1, Math.min(3650, Number(e.target.value) || 1)))} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><span className="text-[11px] text-slate-600">Vencimiento calculado: {dueDate}</span></div>}
             </div>
-            {paymentTerm === 'CONTADO' && <p className="text-xs text-amber-900 bg-amber-100 border border-amber-300 rounded-lg p-3">El registro de compras de contado está temporalmente bloqueado: aún falta implementar el asiento directo contra la cuenta contable de efectivo o bancaria seleccionada y asociar el soporte del desembolso. Selecciona “A crédito” únicamente si la factura realmente quedó pendiente con el proveedor. No registres como crédito una compra ya pagada.</p>}
+            {paymentTerm === 'CONTADO' && <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 rounded-lg border border-emerald-200 bg-emerald-50 p-3">
+              <div><label className="block font-semibold text-slate-700 mb-1">Cuenta contable de pago / origen del dinero *</label><select required value={paymentAccountCode} onChange={e => setPaymentAccountCode(e.target.value)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="">Selecciona Caja o Banco...</option>{paymentAccounts.map(account => <option key={account.code} value={account.code}>{account.code} · {account.name}</option>)}</select>{paymentAccounts.length === 0 && <p className="text-xs text-red-700 mt-1">No hay cuentas de Caja/Banco de movimiento disponibles en el Plan de Cuentas.</p>}</div>
+              <div><label className="block font-semibold text-slate-700 mb-1">Comprobante / referencia del pago *</label><input required value={paymentReference} onChange={e => setPaymentReference(e.target.value)} maxLength={200} placeholder="N.º de egreso, transferencia o soporte" className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"/><p className="text-[11px] text-slate-600 mt-1">Se conserva en la factura y en la descripción del asiento para auditoría.</p></div>
+              <p className="sm:col-span-2 text-xs text-emerald-900">El asiento acreditará esta cuenta por el neto pagado, después de las retenciones aplicables. No se crea una CxP ni se requiere una caja registradora.</p>
+            </div>}
             {paymentTerm === 'CREDITO' && <>
               <div><label className="block font-semibold text-slate-700 mb-1">Condición contractual del precio</label><select value={currencyPricingMode} onChange={e => setCurrencyPricingMode(e.target.value as typeof currencyPricingMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="USD_FIJO">Precio fijo en USD; liquidación según contrato</option><option value="BS_AJUSTABLE">Precio en Bs. ajustable por tasa BCV al liquidar</option><option value="REVISION_MANUAL">Otra condición; requiere revisión manual</option></select></div>
               <div><label className="block font-semibold text-slate-700 mb-1">Tratamiento del ajuste fiscal</label><select value={fiscalAdjustmentMode} onChange={e => setFiscalAdjustmentMode(e.target.value as typeof fiscalAdjustmentMode)} className="w-full px-3 py-2 border border-slate-300 rounded-lg bg-white"><option value="IVA_ORIGINAL_DIF_CAMBIARIA">Conservar IVA original y evaluar diferencia cambiaria</option><option value="AJUSTE_BASE_IVA">Evaluar ajuste de base e IVA mediante documento aplicable</option><option value="REVISION_CONTADOR">Revisión del contador antes de registrar ajuste fiscal</option></select></div>

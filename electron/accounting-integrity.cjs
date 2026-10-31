@@ -64,7 +64,7 @@ function assertAppendOnlyCollection(previousState, nextState, collectionName, mu
   }
 }
 
-function purchaseJournalMatchesInvoice(purchase, entry, products = []) {
+function purchaseJournalMatchesInvoice(purchase, entry, products = [], accounts = []) {
   if (!purchase || !entry || entry.type !== 'COMPRA' || entry.companyId !== purchase.companyId ||
       entry.date !== purchase.invoiceDate ||
       String(entry.referenceDoc || '').trim().toUpperCase().replace(/\s+/g, '') !==
@@ -99,11 +99,22 @@ function purchaseJournalMatchesInvoice(purchase, entry, products = []) {
     }
   } else inventoryByAccount.set('1.1.4.01', base);
   const items = asArray(entry.items);
+  const cashPurchase = purchase.paymentTerm === 'CONTADO';
   const payableAccounts = [...new Set(items
     .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
     .map(item => String(item.accountCode)))];
-  if (payableAccounts.length !== 1) return false;
-  const payableAccountCode = payableAccounts[0];
+  let payableAccountCode = '2.1.1.01';
+  if (cashPurchase) {
+    payableAccountCode = String(purchase.paymentAccountCode || '');
+    const selected = asArray(accounts).find(account => String(account.code) === payableAccountCode);
+    const name = String(selected?.name || '').normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').toUpperCase();
+    const eligible = selected?.type === 'ACTIVO' && selected?.isMovement === true &&
+      (/\\b(CAJA|BANCO|BANCOS|EFECTIVO|EQUIVALENTES DE EFECTIVO)\\b/.test(name) || /^1\\.1\\.[12](?:\\.|$)/.test(payableAccountCode));
+    if (!eligible || payableAccounts.length !== 0 || !String(purchase.paymentReference || '').trim()) return false;
+  } else {
+    if (payableAccounts.length !== 1) return false;
+    payableAccountCode = payableAccounts[0];
+  }
   const allowed = new Set([...inventoryByAccount.keys(), '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', payableAccountCode]);
   if (!items.length || !items.every(item => {
     const amounts = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
@@ -453,7 +464,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         !Number.isFinite(Number(inventoryDebitBs)) || Math.abs(money(inventoryDebitBs) - lineTotal) > 0.02 ||
         !Number.isFinite(Number(inventoryDebitUsd)) ||
         Math.abs(money(inventoryDebitUsd) - lineTotal / Number(purchase.bcvRate)) > 0.0001 ||
-        !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts)) {
+        !purchaseJournalMatchesInvoice(purchase, purchaseEntry, purchaseProducts, asArray(nextState.accounts))) {
       throw new Error('SQLite rechazó la compra: el asiento no reconoce en Bs. y USD el costo, IVA, IGTF, retenciones y CxP de la factura.');
     }
   }
@@ -566,7 +577,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       sourceEntry?.type === 'COMPRA' && sourceEntry.companyId === original.companyId &&
       Math.abs(sourceInventoryDebit - sourceLineTotal) <= 0.02 &&
       Math.abs(sourceInventoryDebitUsd - sourceLineTotal / sourceRate) <= 0.0001 &&
-      purchaseJournalMatchesInvoice(original, sourceEntry, asArray(nextState.products));
+      purchaseJournalMatchesInvoice(original, sourceEntry, asArray(nextState.products), asArray(nextState.accounts));
     const journal = nextById.get(String(note.journalEntryId));
     if (!sourceReconciles || !journal || journal.companyId !== note.companyId ||
         journal.type !== 'AJUSTE' || journal.date !== note.invoiceDate ||

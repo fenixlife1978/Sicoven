@@ -143,6 +143,10 @@ export interface PurchaseRecord {
   journalEntryId?: string;
   voucherNumber?: string; // Formato SENIAT: AAAAMMDDDDDDDD (14 caracteres)
   notes?: string;
+  /** Cuenta contable de origen utilizada en compras pagadas al contado. */
+  paymentAccountCode?: string;
+  /** Referencia del comprobante/soporte del desembolso de contado. */
+  paymentReference?: string;
   /** Medio declarado de pago; se conserva para auditoría de IGTF. */
   paymentMethod?: 'BS' | 'FOREIGN_CASH' | 'ZELLE' | 'INTERNATIONAL_TRANSFER' | 'CRYPTO';
   igtfApplicable?: boolean;

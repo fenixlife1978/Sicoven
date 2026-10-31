@@ -225,6 +225,50 @@ test('SQLite accepts a purchase only when invoice, inventory debit and Kardex li
   }
 });
 
+test('SQLite accepts cash purchase posted directly to selected cash/bank account with no payable', () => {
+  const purchase = {
+    id: 'purchase-cash', companyId: 'company-1', invoiceDate: '2026-10-10', accountCreditDate: '2026-10-10',
+    supplierRif: 'J-12345678-9', invoiceNumber: '101', documentType: '01',
+    totalAmountBs: 232, taxableBaseBs: 200, exemptAmountBs: 0, taxRate: 16, vatAmountBs: 32,
+    vatWithheldBs: 0, islrWithheldBs: 0, igtfAmountBs: 0, bcvRate: 100,
+    totalAmountUsd: 2.32, taxableBaseUsd: 2, vatAmountUsd: 0.32, vatWithheldUsd: 0,
+    islrWithheldUsd: 0, igtfAmountUsd: 0, journalEntryId: 'purchase-cash-entry',
+    paymentTerm: 'CONTADO', paymentAccountCode: '1.1.1.01', paymentReference: 'EG-0001',
+    inventoryLines: [{ productId: 'p-1', quantity: 2, unitCostBs: 100 }]
+  };
+  const entry = {
+    id: 'purchase-cash-entry', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Compra contado', type: 'COMPRA', bcvRate: 100, referenceDoc: 'FAC-101',
+    items: [
+      { accountCode: '1.1.4.01', accountName: 'Inventario', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+      { accountCode: '1.1.3.01', accountName: 'IVA Crédito Fiscal', debitBs: 32, creditBs: 0, debitUsd: 0.32, creditUsd: 0 },
+      { accountCode: '1.1.1.01', accountName: 'Caja Principal', debitBs: 0, creditBs: 232, debitUsd: 0, creditUsd: 2.32 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const movement = {
+    id: 'movement-cash', companyId: 'company-1', productId: 'p-1',
+    date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+    documentRef: 'FAC-101', counterpartyRif: 'J-12345678-9',
+    quantity: 2, unitCostBs: 100, unitCostUsd: 1, totalCostBs: 200, totalCostUsd: 2, bcvRate: 100
+  };
+  const account = { code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', level: 4, isMovement: true, parentCode: '1.1.1' };
+  const state = { ...emptyState([entry]), accounts: [account], purchases: [purchase], movements: [movement], products: [{ id: 'p-1', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' }] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), state));
+  const invalid = structuredClone(state);
+  invalid.purchases[0].paymentAccountCode = '2.1.1.01';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\\. y USD/);
+});
+
+test('SQLite rejects a purchase contado with a CxP credit instead of the selected payment account', () => {
+  const { prior, next } = supplierCreditFixture();
+  const original = next.purchases.find(item => item.id === 'purchase-1');
+  original.paymentTerm = 'CONTADO';
+  original.paymentAccountCode = '1.1.1.01';
+  original.paymentReference = 'EG-100';
+  next.accounts = [{ code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', isMovement: true }];
+  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no reconoce en Bs\\. y USD|modificación del contenido histórico/);
+});
+
 test('SQLite rejects a purchase when the inventory debit differs from its Kardex total', () => {
   const purchase = {
     id: 'purchase-new', companyId: 'company-1', invoiceDate: '2026-10-10',

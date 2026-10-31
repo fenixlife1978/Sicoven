@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validatePurchaseSettlementMode, validatePurchasePaymentDate } from './purchaseSettlement';
 
-test('bloquea contado hasta completar el asiento contra una cuenta contable documentada', () => {
-  const error = validatePurchaseSettlementMode('CONTADO') || '';
-  assert.match(error, /cuenta contable de efectivo o banco/);
-  assert.match(error, /No se registró la compra/);
-  assert.doesNotMatch(error, /caja registradora|POS|terminal/i);
+test('permite contado con cuenta de caja de movimiento y soporte documentado', () => {
+  const accounts = [{ code: '1.1.1.01', name: 'Caja Principal', type: 'ACTIVO', isMovement: true }];
+  assert.equal(validatePurchaseSettlementMode('CONTADO', '1.1.1.01', accounts, 'EG-0001'), null);
+});
+test('bloquea contado si falta cuenta válida o soporte del desembolso', () => {
+  const accounts = [
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true },
+    { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', isMovement: true }
+  ];
+  assert.match(validatePurchaseSettlementMode('CONTADO', '2.1.1.01', accounts, 'EG-0001') || '', /Caja o Banco/);
+  assert.match(validatePurchaseSettlementMode('CONTADO', '1.1.4.01', accounts, 'EG-0001') || '', /Caja o Banco/);
+  assert.match(validatePurchaseSettlementMode('CONTADO', '1.1.1.01', [{ code: '1.1.1.01', name: 'Caja', type: 'ACTIVO', isMovement: true }], '') || '', /comprobante/);
 });
 
 test('permite crédito para su circuito de CxP', () => {

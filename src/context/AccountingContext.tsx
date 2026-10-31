@@ -1177,7 +1177,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   // Registrar compra y generar asiento automático y comprobantes de retención
   const addPurchase = (purchaseData: Omit<PurchaseRecord, 'id' | 'companyId' | 'opNumber'>): PurchaseRecord => {
-    const settlementModeError = validatePurchaseSettlementMode(purchaseData.paymentTerm);
+    const settlementModeError = validatePurchaseSettlementMode(
+      purchaseData.paymentTerm, purchaseData.paymentAccountCode, accounts, purchaseData.paymentReference
+    );
     if (settlementModeError) throw new Error(settlementModeError);
     // Defensa de dominio: las compras nunca deben crear asientos con tasa o importes inválidos.
     if (!currentCompany) throw new Error('Selecciona una empresa antes de registrar la compra.');
@@ -1453,18 +1455,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       });
     }
 
-    // Haber: Cuenta por Pagar Proveedores (Monto Neto a cancelar)
-    const netPayableBs =
-      purchaseData.totalAmountBs - (purchaseData.vatWithheldBs || 0) - (purchaseData.islrWithheldBs || 0);
-
+    // Haber: crédito reconoce CxP; contado acredita directamente la cuenta
+    // de Caja/Banco seleccionada por el contador.
+    const netPayableBs = purchaseData.totalAmountBs - (purchaseData.vatWithheldBs || 0) - (purchaseData.islrWithheldBs || 0);
+    const cashPurchase = purchaseData.paymentTerm === 'CONTADO';
+    const paymentAccount = cashPurchase
+      ? accounts.find(account => account.code === purchaseData.paymentAccountCode && account.isMovement)
+      : undefined;
+    if (cashPurchase && !paymentAccount) throw new Error('La cuenta contable de pago de contado ya no está disponible en el Plan de Cuentas.');
     items.push({
-      accountCode: '2.1.1.01',
-      accountName: 'Cuentas por Pagar Proveedores Nacionales',
-      debitBs: 0,
-      creditBs: netPayableBs,
-      debitUsd: 0,
-      creditUsd: netPayableBs / rate,
-      description: `Neto a pagar Fac. ${purchaseData.invoiceNumber}`
+      accountCode: cashPurchase ? paymentAccount!.code : '2.1.1.01',
+      accountName: cashPurchase ? paymentAccount!.name : 'Cuentas por Pagar Proveedores Nacionales',
+      debitBs: 0, creditBs: netPayableBs, debitUsd: 0, creditUsd: netPayableBs / rate,
+      description: cashPurchase
+        ? `Pago contado Fac. ${purchaseData.invoiceNumber} · Soporte ${purchaseData.paymentReference}`
+        : `Neto a pagar Fac. ${purchaseData.invoiceNumber}`
     });
 
     const debitBs = items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
