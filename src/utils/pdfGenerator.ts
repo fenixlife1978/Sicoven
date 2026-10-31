@@ -452,66 +452,37 @@ export async function exportBalanceGeneralPdf(
 
   const tableBody: any[] = [];
 
-  // 1. ACTIVOS
-  tableBody.push([
-    { content: '1. ACTIVO', colSpan: 2, styles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold' } },
-    { content: formatBs(totals.totalActivoBs), styles: { fillColor: [16, 185, 129], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
+  // Cada importe se presenta desde su saldo nativo; no se convierte una moneda a otra.
+  const addSection = (label: string, bs: number, usd: number, color: number[]) => tableBody.push([
+    { content: label, colSpan: 2, styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold' } },
+    { content: formatBs(bs), styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } },
+    { content: formatUsd(usd), styles: { fillColor: color, textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
   ]);
-  for (const acc of activoAccounts) {
-    const bal = acc.adjustedDebitBs - acc.adjustedCreditBs;
-    tableBody.push([acc.code, acc.name, formatNumberVe(bal)]);
-  }
-
-  // 2. PASIVOS
-  tableBody.push([
-    { content: '2. PASIVO', colSpan: 2, styles: { fillColor: [14, 165, 233], textColor: [255, 255, 255], fontStyle: 'bold' } },
-    { content: formatBs(totals.totalPasivoBs), styles: { fillColor: [14, 165, 233], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
-  ]);
-  for (const acc of pasivoAccounts) {
-    const bal = acc.adjustedCreditBs - acc.adjustedDebitBs;
-    tableBody.push([acc.code, acc.name, formatNumberVe(bal)]);
-  }
-
-  // 3. PATRIMONIO
-  tableBody.push([
-    { content: '3. PATRIMONIO NETO', colSpan: 2, styles: { fillColor: [168, 85, 247], textColor: [255, 255, 255], fontStyle: 'bold' } },
-    { content: formatBs(totals.totalPatrimonioBs), styles: { fillColor: [168, 85, 247], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } }
-  ]);
-  for (const acc of patrimonioAccounts) {
-    const bal = acc.adjustedCreditBs - acc.adjustedDebitBs;
-    tableBody.push([acc.code, acc.name, formatNumberVe(bal)]);
-  }
-  tableBody.push([
-    '3.3.1.02',
-    'Resultado Neto del Ejercicio (Ganancia / Pérdida)',
-    formatNumberVe(totals.utilidadNetaBs)
+  const addAccount = (acc: any, bs: number, usd: number) => tableBody.push([acc.code, acc.name, formatNumberVe(bs), formatUsd(usd)]);
+  const addTotal = (label: string, bs: number, usd: number) => tableBody.push([
+    { content: label, colSpan: 2, styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } },
+    { content: formatBs(bs), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } },
+    { content: formatUsd(usd), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } }
   ]);
 
-  // TOTAL PASIVO + PATRIMONIO
-  tableBody.push([
-    { content: 'TOTAL PASIVO + PATRIMONIO NETO:', colSpan: 2, styles: { fillColor: [15, 23, 42], textColor: [255, 255, 255], fontStyle: 'bold', halign: 'right' } },
-    { content: formatBs(totals.totalPasivoPatrimonioBs), styles: { fillColor: [15, 23, 42], textColor: [56, 189, 248], fontStyle: 'bold', halign: 'right' } }
-  ]);
+  addSection('1. ACTIVO', totals.totalActivoBs, totals.totalActivoUsd, [16, 185, 129]);
+  for (const acc of activoAccounts) addAccount(acc, acc.adjustedDebitBs - acc.adjustedCreditBs, acc.adjustedDebitUsd - acc.adjustedCreditUsd);
+  addSection('2. PASIVO', totals.totalPasivoBs, totals.totalPasivoUsd, [14, 165, 233]);
+  for (const acc of pasivoAccounts) addAccount(acc, acc.adjustedCreditBs - acc.adjustedDebitBs, acc.adjustedCreditUsd - acc.adjustedDebitUsd);
+  addSection('3. PATRIMONIO NETO', totals.totalPatrimonioBs, totals.totalPatrimonioUsd, [168, 85, 247]);
+  for (const acc of patrimonioAccounts) addAccount(acc, acc.adjustedCreditBs - acc.adjustedDebitBs, acc.adjustedCreditUsd - acc.adjustedDebitUsd);
+  addAccount({ code: '3.3.1.02', name: 'Resultado Neto del Ejercicio (Ganancia / Pérdida)' }, totals.utilidadNetaBs, totals.utilidadNetaUsd);
+  addTotal('TOTAL PASIVO + PATRIMONIO NETO:', totals.totalPasivoPatrimonioBs, totals.totalPasivoPatrimonioUsd);
 
-  // ESTADO DE RESULTADOS SUMMARY
-  tableBody.push([
-    { content: 'ESTADO DE RESULTADOS DEL EJERCICIO (GANANCIAS Y PÉRDIDAS)', colSpan: 3, styles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' } }
-  ]);
-  tableBody.push(['4.1', '(+) Ingresos Operacionales y Ventas Netas', formatNumberVe(totals.totalIngresosBs)]);
-  tableBody.push(['5.1', '(-) Costo de Ventas', `-${formatNumberVe(totals.totalCostosBs)}`]);
-  tableBody.push([
-    { content: '(=) UTILIDAD BRUTA EN VENTAS:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } },
-    { content: formatNumberVe(totals.totalIngresosBs - totals.totalCostosBs), styles: { fontStyle: 'bold', halign: 'right' } }
-  ]);
-  tableBody.push(['6.1', '(-) Gastos Operacionales y de Administración', `-${formatNumberVe(totals.totalGastosBs)}`]);
-  tableBody.push([
-    { content: '(=) RESULTADO NETO INTEGRAL DEL EJERCICIO:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } },
-    { content: formatBs(totals.utilidadNetaBs), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }
-  ]);
-
+  tableBody.push([{ content: 'ESTADO DE RESULTADOS DEL EJERCICIO (GANANCIAS Y PÉRDIDAS)', colSpan: 4, styles: { fillColor: [51, 65, 85], textColor: [255, 255, 255], fontStyle: 'bold' } }]);
+  tableBody.push(['4.1', '(+) Ingresos Operacionales y Ventas Netas', formatNumberVe(totals.totalIngresosBs), formatUsd(totals.totalIngresosUsd)]);
+  tableBody.push(['5.1', '(-) Costo de Ventas', '-' + formatNumberVe(totals.totalCostosBs), '-' + formatUsd(totals.totalCostosUsd)]);
+  tableBody.push([{ content: '(=) UTILIDAD BRUTA EN VENTAS:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatBs(totals.totalIngresosBs - totals.totalCostosBs), styles: { fontStyle: 'bold', halign: 'right' } }, { content: formatUsd(totals.totalIngresosUsd - totals.totalCostosUsd), styles: { fontStyle: 'bold', halign: 'right' } }]);
+  tableBody.push(['6.1', '(-) Gastos Operacionales y de Administración', '-' + formatNumberVe(totals.totalGastosBs), '-' + formatUsd(totals.totalGastosUsd)]);
+  tableBody.push([{ content: '(=) RESULTADO NETO INTEGRAL DEL EJERCICIO:', colSpan: 2, styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249] } }, { content: formatBs(totals.utilidadNetaBs), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }, { content: formatUsd(totals.utilidadNetaUsd), styles: { fontStyle: 'bold', halign: 'right', fillColor: [241, 245, 249], textColor: [5, 150, 105] } }]);
   autoTable(doc, {
     startY,
-    head: [['Código', 'Denominación de la Cuenta', 'Monto en Bolívares (Bs.)']],
+    head: [['Código', 'Denominación de la Cuenta', 'Monto en Bolívares (Bs.)', 'Monto en Dólares (USD)']],
     body: tableBody,
     theme: 'grid',
     styles: { fontSize: 8, cellPadding: 2, font: 'helvetica' },
@@ -519,7 +490,8 @@ export async function exportBalanceGeneralPdf(
     columnStyles: {
       0: { cellWidth: 26, font: 'courier' },
       1: { cellWidth: 'auto' },
-      2: { cellWidth: 42, halign: 'right', font: 'courier', fontStyle: 'bold' }
+      2: { cellWidth: 48, halign: 'right', font: 'courier', fontStyle: 'bold' },
+      3: { cellWidth: 38, halign: 'right', font: 'courier', fontStyle: 'bold' }
     },
     margin: { left: 14, right: 14, bottom: 20 }
   });
