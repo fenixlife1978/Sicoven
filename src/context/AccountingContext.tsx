@@ -30,7 +30,6 @@ import {
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
 import { IslrFiscalEvent, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
-import { getIslrUnitTaxValueForPeriod } from '../data/islrConcepts';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
