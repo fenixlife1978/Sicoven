@@ -13,7 +13,9 @@ import {
   Scale,
   RefreshCw,
   Info,
-  AlertCircle
+  AlertCircle,
+  CalendarCheck,
+  LockKeyhole
 } from 'lucide-react';
 import { TaxpayerType } from '../../types/accounting';
 import { CompanyModal } from '../CompanyModal';
@@ -30,7 +32,9 @@ export const ConfiguracionView: React.FC = () => {
     resetToSampleData,
     resetFactoryData,
     exportBackupJson,
-    restoreBackupJson
+    restoreBackupJson,
+    closeAccountingPeriod,
+    isStorageReady
   } = useAccounting();
 
   const [isCompanyModalOpen, setIsCompanyModalOpen] = useState(false);
@@ -39,6 +43,11 @@ export const ConfiguracionView: React.FC = () => {
   const [factoryResetBusy, setFactoryResetBusy] = useState(false);
   const [factoryResetStage, setFactoryResetStage] = useState('');
   const [backupRestoreBusy, setBackupRestoreBusy] = useState(false);
+  const [periodCloseDate, setPeriodCloseDate] = useState(() => {
+    const now = new Date();
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+  });
+  const [periodCloseBusy, setPeriodCloseBusy] = useState(false);
 
   // Form state for current company editing
   const [name, setName] = useState(currentCompany.name);
@@ -70,6 +79,10 @@ export const ConfiguracionView: React.FC = () => {
     setEmail(currentCompany.email);
     setFiscalYear(currentCompany.fiscalYear);
     setBcvRate(String(currentCompany.bcvRate));
+    setPeriodCloseDate(currentCompany.closedThroughDate || (() => {
+      const now = new Date();
+      return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    })());
   }, [currentCompany]);
 
   const handleRifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,6 +180,28 @@ export const ConfiguracionView: React.FC = () => {
       alert('No se pudo leer el archivo de respaldo.');
     };
     reader.readAsText(file);
+  };
+
+  const handleCloseAccountingPeriod = async () => {
+    if (!periodCloseDate) {
+      alert('Seleccione la fecha hasta la cual desea cerrar la contabilidad.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'CIERRE CONTABLE DEL PERÍODO\\n\\nSe bloquearán en SQLite las nuevas operaciones retroactivas con fecha igual o anterior a ' +
+      periodCloseDate +
+      '. El cierre no puede retrocederse desde esta pantalla; una reapertura requerirá un procedimiento formal y auditado.\\n\\n¿Confirma el cierre?'
+    );
+    if (!confirmed) return;
+    setPeriodCloseBusy(true);
+    try {
+      await closeAccountingPeriod(periodCloseDate);
+      alert('Cierre contable guardado y confirmado por SQLite hasta el ' + periodCloseDate + '.');
+    } catch (error) {
+      alert(error instanceof Error ? error.message : 'SQLite no confirmó el cierre contable. No continúe hasta revisar el estado de almacenamiento.');
+    } finally {
+      setPeriodCloseBusy(false);
+    }
   };
 
   return (
@@ -398,6 +433,50 @@ export const ConfiguracionView: React.FC = () => {
             </button>
           </div>
         </form>
+      </div>
+
+      {/* Cierre contable y control de períodos */}
+      <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 space-y-4">
+        <div className="flex items-start gap-3">
+          <div className="rounded-xl bg-amber-50 border border-amber-200 p-2">
+            <LockKeyhole className="w-5 h-5 text-amber-700" />
+          </div>
+          <div className="min-w-0 flex-1">
+            <h3 className="font-bold text-sm text-slate-900">Cierre contable y bloqueo de períodos</h3>
+            <p className="text-xs text-slate-500 mt-1">
+              El cierre se registra en SQLite para esta empresa. Las nuevas operaciones retroactivas hasta la fecha cerrada serán rechazadas en la persistencia local.
+            </p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="md:col-span-2">
+            <label className="block text-xs font-semibold text-slate-700 mb-1">Cerrar operaciones hasta</label>
+            <input
+              type="date"
+              value={periodCloseDate}
+              min={currentCompany.closedThroughDate || undefined}
+              max={new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10)}
+              onChange={e => setPeriodCloseDate(e.target.value)}
+              disabled={periodCloseBusy || !isStorageReady}
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100"
+            />
+          </div>
+          <button
+            type="button"
+            onClick={handleCloseAccountingPeriod}
+            disabled={periodCloseBusy || !isStorageReady || !periodCloseDate}
+            className="flex items-center justify-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            <CalendarCheck className="w-4 h-4" />
+            {periodCloseBusy ? 'Confirmando en SQLite…' : currentCompany.closedThroughDate ? 'Actualizar fecha de cierre' : 'Cerrar período'}
+          </button>
+        </div>
+        <div className={`rounded-lg border p-3 text-xs ${currentCompany.closedThroughDate ? 'border-amber-200 bg-amber-50 text-amber-900' : 'border-slate-200 bg-slate-50 text-slate-600'}`}>
+          {currentCompany.closedThroughDate
+            ? <><strong>Cierre vigente:</strong> operaciones hasta {currentCompany.closedThroughDate}. La fecha solo puede avanzarse desde esta pantalla.</>
+            : <><strong>Sin cierre registrado.</strong> La empresa todavía no tiene un período bloqueado.</>}
+        </div>
+        {!isStorageReady && <p className="text-xs text-rose-700">El almacenamiento SQLite no está disponible. El cierre permanece deshabilitado.</p>}
       </div>
 
       <MigracionInteligente />
