@@ -30,7 +30,7 @@
 | 6.2. Reapertura formal y auditable de períodos | [#22](https://github.com/fenixlife1978/Sicoven/pull/22) | `f016d10acbdc501be5d554ff9815de23858b1338` | CI escritorio/Windows y upgrade 1.0.6→1.0.7 con SQLite conservada satisfactorios |
 | 6.3. Cierre y apertura de ejercicios integrados | [#23](https://github.com/fenixlife1978/Sicoven/pull/23) | `1232800fc543a3672fe4dd92367af1dff6edd4fe` | CI escritorio/Windows y upgrade con conservación SQLite satisfactorios |
 | 6.4. Integridad del Balance General en doble moneda y aislamiento multiempresa | [#24](https://github.com/fenixlife1978/Sicoven/pull/24) | `275ab32b16f3b7e402dace923a0769cff5aceeac` | CI escritorio/Windows satisfactorios; validaciones Bs/USD y aislamiento |
-| 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge escritorio/Windows y upgrade 1.0.6→1.0.7 con SQLite conservada satisfactorios; CI post-merge escritorio SUCCESS, Windows aún en NSIS |
+| 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge y post-merge escritorio/Windows SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -44,7 +44,7 @@ Los cinco subbloques están fusionados en `main`:
 - **6.4 — PR #24:** Balance General validado en Bs. y USD y filtrado por empresa antes del cálculo; pruebas de descuadres, aislamiento y valores no finitos.
 - **6.5 — PR #25:** exportación PDF horizontal de estados financieros con columnas nativas separadas en Bs. y USD, sin convertir una moneda en la otra.
 
-**Estado:** los PR #21 a #25 están cerrados y fusionados. El CI posterior a PR #25 de escritorio terminó SUCCESS. El CI posterior de Windows (run `41234017655`) continúa en el paso `Build Windows NSIS installer`, sin fallos reportados; aún debe completar verificación, upgrade, conservación SQLite y carga del artefacto. No publicar instalador ni release.
+**Estado:** los PR #21 a #25 están cerrados y fusionados. Los CI posteriores a PR #25 de escritorio y Windows terminaron SUCCESS. El run Windows `41234017655` completó compilación NSIS, verificación del instalador, upgrade 1.0.6→1.0.7 con conservación de SQLite y carga del artefacto. El artefacto permanece sin publicar como release. No publicar instalador ni release.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
