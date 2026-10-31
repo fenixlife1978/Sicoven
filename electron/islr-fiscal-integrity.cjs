@@ -91,7 +91,11 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
           Number(allocation.baseAmountBs) > eligibleBase + 0.01) {
         throw new Error('SQLite rechazó una asignación ISLR superior a la base de la factura antes del IVA.');
       }
-      if (event.kind === 'ACCOUNT_CREDIT') {
+      if (event.kind === 'ACCOUNT_CREDIT' && purchase.paymentTerm === 'CONTADO') {
+        throw new Error('SQLite rechazó un evento ACCOUNT_CREDIT para una compra de contado cuyo disparador fiscal es PAYMENT.');
+      }
+      const cashPurchasePayment = event.kind === 'PAYMENT' && purchase.paymentTerm === 'CONTADO';
+      if (event.kind === 'ACCOUNT_CREDIT' || cashPurchasePayment) {
         const purchaseBasePercentage = Number(purchase.islrBasePercentage);
         const purchaseUnitTaxValue = Number(purchase.islrUnitTaxValueBs);
         const purchaseWithheld = Number(purchase.islrWithheldBs);
@@ -108,7 +112,9 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       }
       allocationIds.add(String(allocation.purchaseId));
     }
-    if (event.kind === 'ACCOUNT_CREDIT') {
+    const cashPurchasePayment = event.kind === 'PAYMENT' &&
+      event.allocations.some(allocation => purchaseById.get(String(allocation.purchaseId))?.paymentTerm === 'CONTADO');
+    if (event.kind === 'ACCOUNT_CREDIT' || cashPurchasePayment) {
       if (Number(event.withheldAmountBs) > 0.01) {
         const voucher = event.voucherId ? voucherById.get(String(event.voucherId)) : null;
         const linkedPurchase = event.allocations.length === 1

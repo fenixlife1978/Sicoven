@@ -164,3 +164,36 @@ test('reconciles multiple partial ISLR source-event reversals against one credit
     }]
   }), /total de eventos revertidos/);
 });
+
+
+test('reconciles cash-purchase ISLR PAYMENT event against the cash purchase, voucher and purchase journal', () => {
+  const purchase = {
+    id: 'p-cash', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-CASH',
+    paymentTerm: 'CONTADO', taxableBaseBs: 100, exemptAmountBs: 0,
+    isCancelled: false, islrConceptCode: '003', islrBasePercentage: 90,
+    islrUnitTaxValueBs: 43, islrWithheldBs: 5
+  };
+  const journal = {
+    id: 'j-cash', companyId: 'c1', date: '2026-10-01', type: 'COMPRA',
+    items: [{ accountCode: '2.1.2.04', debitBs: 0, creditBs: 5 }]
+  };
+  const voucher = {
+    id: 'v-cash', companyId: 'c1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', invoiceNumber: 'F-CASH', invoiceDate: '2026-10-01',
+    baseAmountBs: 100, withheldAmountBs: 5
+  };
+  const fiscalEvent = {
+    id: 'e-cash', companyId: 'c1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1,
+    kind: 'PAYMENT', allocations: [{ purchaseId: 'p-cash', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 5,
+    journalEntryId: 'j-cash', voucherId: 'v-cash', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const previous = { purchases: [], journalEntries: [], islrVouchers: [], islrFiscalEvents: [] };
+  const next = { purchases: [purchase], journalEntries: [journal], islrVouchers: [voucher], islrFiscalEvents: [fiscalEvent] };
+  assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
+  assert.throws(() => validateIslrFiscalEventLedger(previous, {
+    ...next, islrFiscalEvents: [{ ...fiscalEvent, kind: 'ACCOUNT_CREDIT' }]
+  }), /ACCOUNT_CREDIT para una compra de contado/);
+});
