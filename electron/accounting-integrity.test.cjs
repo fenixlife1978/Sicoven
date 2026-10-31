@@ -1223,5 +1223,3 @@ test('SQLite rejects a cash-purchase credit note that posts any amount to a fict
   noteEntry.items.push({ accountCode: '2.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 });
   assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado|no revierte CxP|modalidad de pago/);
 });
-  assert.throws(() => validateAccountingSnapshot(prior, next), /asiento no está balanceado|no está balanceado o no revierte CxP/);
-});
