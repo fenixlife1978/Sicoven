@@ -1018,6 +1018,68 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
   }
 
+  // Direct supplier advances are append-only financial source records.
+  const directAdvances = asArray(nextState.supplierDirectAdvances);
+  const priorDirectAdvances = asArray(previousState.supplierDirectAdvances);
+  const priorDirectById = new Map(priorDirectAdvances.map(item => [String(item.id), item]));
+  const directIds = new Set();
+  const accountsByCode = new Map(asArray(nextState.accounts).map(item => [String(item.code), item]));
+  for (const advance of directAdvances) {
+    const id = String(advance.id || '');
+    const companyId = String(advance.companyId || '');
+    const rif = String(advance.supplierRif || '').trim().toUpperCase();
+    const amountUsd = Number(advance.amountUsd);
+    const bookValueBs = Number(advance.bookValueBs);
+    const rate = Number(advance.bcvRate);
+    const paidAmount = Number(advance.paidAmount);
+    const account = accountsByCode.get(String(advance.treasuryAccountCode || ''));
+    if (!id || directIds.has(id) || !companyId || !rif ||
+        !isValidIsoDate(advance.date) ||
+        !Number.isFinite(amountUsd) || amountUsd <= 0 ||
+        !Number.isFinite(bookValueBs) || bookValueBs <= 0 ||
+        !Number.isFinite(rate) || rate <= 0 ||
+        Math.abs(bookValueBs - money(amountUsd * rate)) > 0.02 ||
+        !['BS', 'USD'].includes(advance.paymentCurrency) ||
+        !Number.isFinite(paidAmount) || paidAmount <= 0 ||
+        Math.abs(paidAmount - (advance.paymentCurrency === 'USD' ? amountUsd : bookValueBs)) > 0.02 ||
+        !String(advance.reference || '').trim() ||
+        !account || account.type !== 'ACTIVO' || !account.isMovement ||
+        !String(account.code).startsWith('1.1.1.') ||
+        !String(advance.journalEntryId || '').trim()) {
+      throw new Error('SQLite rechazó un anticipo directo con proveedor, fecha, importes, moneda, referencia o cuenta de tesorería inválidos.');
+    }
+    directIds.add(id);
+    const journal = nextById.get(String(advance.journalEntryId));
+    const advanceAccount = accountsByCode.get('1.1.2.03');
+    const debitAdvanceBs = (journal?.items || []).filter(item => item.accountCode === '1.1.2.03')
+      .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
+    const debitAdvanceUsd = (journal?.items || []).filter(item => item.accountCode === '1.1.2.03')
+      .reduce((sum, item) => sum + Number(item.debitUsd || 0) - Number(item.creditUsd || 0), 0);
+    const treasuryCreditBs = (journal?.items || []).filter(item => item.accountCode === advance.treasuryAccountCode)
+      .reduce((sum, item) => sum + Number(item.creditBs || 0) - Number(item.debitBs || 0), 0);
+    const treasuryCreditUsd = (journal?.items || []).filter(item => item.accountCode === advance.treasuryAccountCode)
+      .reduce((sum, item) => sum + Number(item.creditUsd || 0) - Number(item.debitUsd || 0), 0);
+    if (!advanceAccount || advanceAccount.type !== 'ACTIVO' || !advanceAccount.isMovement ||
+        !journal || journal.companyId !== companyId || journal.type !== 'ANTICIPO_PROVEEDOR' ||
+        journal.date !== advance.date || journal.referenceDoc !== advance.reference ||
+        !Array.isArray(journal.items) || journal.items.length !== 2 ||
+        Math.abs(debitAdvanceBs - bookValueBs) > 0.02 ||
+        Math.abs(debitAdvanceUsd - amountUsd) > 0.0001 ||
+        Math.abs(treasuryCreditBs - bookValueBs) > 0.02 ||
+        Math.abs(treasuryCreditUsd - amountUsd) > 0.0001) {
+      throw new Error('SQLite rechazó un anticipo directo cuyo asiento no debita Anticipos a proveedores y acredita Caja/Banco por los importes exactos.');
+    }
+    const old = priorDirectById.get(id);
+    if (old && JSON.stringify(old) !== JSON.stringify(advance)) {
+      throw new Error('SQLite bloqueó la modificación de un anticipo directo histórico; debe corregirse mediante contra-asiento.');
+    }
+  }
+  for (const old of priorDirectAdvances) {
+    if (!directIds.has(String(old.id))) {
+      throw new Error('SQLite bloqueó la eliminación de un anticipo directo histórico; debe conservarse su trazabilidad.');
+    }
+  }
+
   return { priorEntries, nextEntries, priorById, nextById };
 }
 
