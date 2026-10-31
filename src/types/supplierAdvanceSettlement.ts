@@ -6,6 +6,18 @@ export interface SupplierAdvanceCreditNoteAllocation {
   bookValueBs: number;
 }
 
+export interface SupplierAdvanceDirectSource {
+  id: string;
+  amountUsd: number;
+  bookValueBs: number;
+}
+
+export interface SupplierAdvanceDirectAllocation {
+  directAdvanceId: string;
+  amountUsd: number;
+  bookValueBs: number;
+}
+
 export interface SupplierAdvanceCreditNoteSource {
   id: string;
   amountUsd: number;
@@ -20,6 +32,9 @@ export interface SupplierAdvanceSettlement {
   sourceCreditNoteIds: string[];
   /** Exact per-credit-note consumption; required for all newly posted settlements. */
   sourceCreditNoteAllocations?: SupplierAdvanceCreditNoteAllocation[];
+  /** Direct cash/bank disbursements funding this settlement. */
+  sourceDirectAdvanceIds?: string[];
+  sourceDirectAdvanceAllocations?: SupplierAdvanceDirectAllocation[];
   kind: SupplierAdvanceSettlementKind;
   date: string;
   amountUsd: number;
