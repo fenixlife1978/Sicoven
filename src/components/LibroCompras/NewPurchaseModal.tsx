@@ -61,6 +61,14 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
 
   // ISLR calculation
   const selectedConcept = ISLR_CONCEPTS.find(c => c.code === islrConceptCode);
+  const normalizedSupplierRif = String(supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+  const selectedMonthKey = String(invoiceDate || '').slice(0, 7);
+  const hasCancelledPriorIslrOperation = Boolean(selectedConcept) && purchases.some(item =>
+    item.isCancelled &&
+    String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === normalizedSupplierRif &&
+    item.islrConceptCode === selectedConcept?.code &&
+    String(item.invoiceDate || '').slice(0, 7) === selectedMonthKey
+  );
   let islrWithheldBs = 0;
   let islrSubtrahendBs = 0;
   let islrRate = 0;
@@ -113,6 +121,10 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
     }
     if (applyIslr && !selectedConcept) {
       window.alert('Selecciona un concepto ISLR válido. No se aplicará una retención por defecto ni se inferirá la condición fiscal a partir del RIF.');
+      return;
+    }
+    if (applyIslr && hasCancelledPriorIslrOperation) {
+      window.alert('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
       return;
     }
     if (!Number.isFinite(bcvRate) || bcvRate <= 0) {
