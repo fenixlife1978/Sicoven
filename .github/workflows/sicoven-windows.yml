@@ -1,0 +1,54 @@
+name: SICOVEN Windows validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sicoven-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-and-package:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout SICOVEN main
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: ""
+
+      - name: Install dependencies
+        run: npm ci --no-audit --no-fund
+
+      - name: Check TypeScript
+        run: npm run check:types
+
+      - name: Run automated tests
+        run: npm test
+
+      - name: Build application
+        run: npm run build
+
+      - name: Audit production assets
+        run: npm run audit:assets
+
+      - name: Build Windows NSIS installer
+        run: npm run dist
+
+      - name: Upload installer and build metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-Windows-Installer
+          path: |
+            release/SICOVEN-Setup-*.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 14

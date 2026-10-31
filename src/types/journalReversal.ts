@@ -1,0 +1,609 @@
+import type { Account, BankAccount, BankStatementMovement, InventoryMovement, InventoryProduct, JournalEntry, JournalEntryItem, PurchaseRecord, SaleRecord } from './accounting';
+
+/**
+ * Builds an immutable contra-entry by swapping debit/credit in both currencies.
+ * For prior-period adjustments, P&L accounts are mapped to an explicitly selected
+ * movement equity account; balance-sheet accounts retain their original accounts.
+ */
+export function buildReversalItems(
+  source: JournalEntry,
+  accounts: Account[],
+  priorPeriodAdjustment = false,
+  retainedEarningsAccountCode?: string
+): JournalEntryItem[] {
+  if (!source || !Array.isArray(source.items) || source.items.length < 2) {
+    throw new Error('El asiento original no contiene suficientes líneas para una reversión.');
+  }
+  const totals = source.items.reduce((sum, item) => {
+    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(Number);
+    if (values.some(value => !Number.isFinite(value) || value < 0) ||
+        (Number(item.debitBs) > 0 && Number(item.creditBs) > 0) ||
+        (Number(item.debitUsd) > 0 && Number(item.creditUsd) > 0)) {
+      throw new Error('El asiento original contiene líneas inválidas; no puede generarse una reversión certificada.');
+    }
+    sum.debitBs += Number(item.debitBs);
+    sum.creditBs += Number(item.creditBs);
+    sum.debitUsd += Number(item.debitUsd);
+    sum.creditUsd += Number(item.creditUsd);
+    return sum;
+  }, { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 });
+  if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
+      Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
+      totals.debitBs <= 0 || totals.debitUsd <= 0) {
+    throw new Error('El asiento original no cuadra simultáneamente en Bs. y USD; requiere conciliación antes de reversarlo.');
+  }
+  const accountByCode = new Map(accounts.map(account => [account.code, account]));
+  const retained = priorPeriodAdjustment
+    ? accounts.find(account => account.code === retainedEarningsAccountCode &&
+      account.type === 'PATRIMONIO' && account.isMovement)
+    : undefined;
+  if (priorPeriodAdjustment && !retained) {
+    throw new Error('Para AIA seleccione una cuenta de patrimonio de movimiento destinada a resultados acumulados.');
+  }
+  return source.items.map(item => {
+    const sourceAccount = accountByCode.get(item.accountCode);
+    if (!sourceAccount) throw new Error('No se encuentra la cuenta contable ' + item.accountCode + ' del asiento original.');
+    if (!sourceAccount.isMovement) throw new Error('La cuenta ' + item.accountCode + ' no admite movimientos; no puede recibir una reversión.');
+    const remap = priorPeriodAdjustment && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(sourceAccount.type);
+    const target = remap ? retained! : sourceAccount;
+    return {
+      accountCode: target.code,
+      accountName: target.name,
+      debitBs: item.creditBs,
+      creditBs: item.debitBs,
+      debitUsd: item.creditUsd,
+      creditUsd: item.debitUsd,
+      description: remap
+        ? 'AIA · ' + (item.description || item.accountName)
+        : 'Reversión · ' + (item.description || item.accountName)
+    };
+  });
+}
+
+
+export interface SaleInventoryReturnReadiness {
+  ready: boolean;
+  reason?: string;
+  originalMovementCount: number;
+  returnedMovementCount: number;
+}
+
+/**
+ * A full sale reversal may proceed only after every stock issue tied to that
+ * invoice has a complete customer-return movement and a balanced inventory/COGS
+ * entry. Partial returns remain blocked because this routine reverses the full
+ * invoice, not a partial credit note.
+ */
+export function validateSaleInventoryReturnReconciliation(input: {
+  companyId: string;
+  invoiceNumber: string;
+  source: JournalEntry;
+  movements: InventoryMovement[];
+  products: InventoryProduct[];
+  journalEntries: JournalEntry[];
+}): SaleInventoryReturnReadiness {
+  const { companyId, invoiceNumber, source, movements, products, journalEntries } = input;
+  const normalize = (value: string) => String(value || '').trim().toUpperCase();
+  const invoiceRefs = new Set([normalize(invoiceNumber), normalize('FAC-' + invoiceNumber)]);
+  const originals = movements.filter(movement =>
+    movement.companyId === companyId && !movement.correctionForMovementId &&
+    (movement.journalEntryId === source.id || invoiceRefs.has(normalize(movement.documentRef)))
+  );
+  const blocked = (reason: string): SaleInventoryReturnReadiness => ({
+    ready: false, reason, originalMovementCount: originals.length, returnedMovementCount: 0
+  });
+  if (!originals.length) {
+    return { ready: true, originalMovementCount: 0, returnedMovementCount: 0 };
+  }
+  let returnedMovementCount = 0;
+  for (const original of originals) {
+    if (original.type !== 'SALIDA' || original.concept !== 'VENTA') {
+      return blocked('El asiento tiene movimientos de inventario que no son salidas originales de esta venta; requieren conciliación manual especializada.');
+    }
+    const product = products.find(item => item.id === original.productId && item.companyId === companyId);
+    if (!product) return blocked('No se encuentra el artículo asociado al movimiento original ' + original.id + '.');
+    const inventoryCode = product.inventoryAccountCode || '1.1.4.01';
+    const costCode = product.costOfSalesAccountCode || '5.1.1.01';
+    if (source.items.some(item =>
+      (item.accountCode === inventoryCode || item.accountCode === costCode) &&
+      (Number(item.debitBs ?? 0) + Number(item.creditBs ?? 0) +
+       Number(item.debitUsd ?? 0) + Number(item.creditUsd ?? 0)) > 0.01
+    )) {
+      return blocked('El asiento original ya contiene costo de ventas o inventario; revertirlo además de las devoluciones duplicaría el efecto del Kardex.');
+    }
+    const originalCostEntry = original.journalEntryId
+      ? journalEntries.find(item => item.id === original.journalEntryId && item.companyId === companyId)
+      : undefined;
+    if (!originalCostEntry || originalCostEntry.type !== 'INVENTARIO' ||
+        originalCostEntry.date !== original.date || originalCostEntry.referenceDoc !== original.documentRef ||
+        originalCostEntry.items.length !== 2 ||
+        originalCostEntry.items.some(item => item.accountCode !== inventoryCode && item.accountCode !== costCode)) {
+      return blocked('La salida original de ' + original.productCode + ' no tiene un asiento de costo/inventario verificable.');
+    }
+    const originalCostTotals = originalCostEntry.items.reduce((sum, item) => ({
+      debitBs: sum.debitBs + Number(item.debitBs ?? 0),
+      creditBs: sum.creditBs + Number(item.creditBs ?? 0),
+      debitUsd: sum.debitUsd + Number(item.debitUsd ?? 0),
+      creditUsd: sum.creditUsd + Number(item.creditUsd ?? 0),
+      inventoryCreditBs: sum.inventoryCreditBs + (item.accountCode === inventoryCode ? Number(item.creditBs ?? 0) : 0),
+      costDebitBs: sum.costDebitBs + (item.accountCode === costCode ? Number(item.debitBs ?? 0) : 0),
+      inventoryCreditUsd: sum.inventoryCreditUsd + (item.accountCode === inventoryCode ? Number(item.creditUsd ?? 0) : 0),
+      costDebitUsd: sum.costDebitUsd + (item.accountCode === costCode ? Number(item.debitUsd ?? 0) : 0)
+    }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
+      inventoryCreditBs: 0, costDebitBs: 0, inventoryCreditUsd: 0, costDebitUsd: 0 });
+    if (Math.abs(originalCostTotals.debitBs - originalCostTotals.creditBs) >= 0.01 ||
+        Math.abs(originalCostTotals.debitUsd - originalCostTotals.creditUsd) >= 0.01 ||
+        Math.abs(originalCostTotals.inventoryCreditBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(originalCostTotals.costDebitBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(originalCostTotals.inventoryCreditUsd - Number(original.totalCostUsd)) > 0.02 ||
+        Math.abs(originalCostTotals.costDebitUsd - Number(original.totalCostUsd)) > 0.02) {
+      return blocked('El asiento original de costo no coincide con el valor histórico del Kardex para ' + original.productCode + '.');
+    }
+    const corrections = movements.filter(item =>
+      item.companyId === companyId && item.correctionForMovementId === original.id
+    );
+    const returnedQuantity = corrections.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+    if (!Number.isFinite(returnedQuantity) ||
+        Math.abs(returnedQuantity - Number(original.quantity)) > 1e-8) {
+      return blocked('La salida ' + original.documentRef + ' del artículo ' + original.productCode +
+        ' no está devuelta en su totalidad. Devuelto: ' + returnedQuantity + ' de ' + original.quantity + '.');
+    }
+    if (!corrections.length || corrections.some(item =>
+      item.productId !== original.productId || item.type !== 'ENTRADA' ||
+      item.concept !== 'DEVOLUCION_CLIENTE' || !item.journalEntryId ||
+      !Number.isFinite(Number(item.quantity)) || Number(item.quantity) <= 0 ||
+      !Number.isFinite(Number(item.totalCostBs)) || Number(item.totalCostBs) <= 0 ||
+      !Number.isFinite(Number(item.totalCostUsd)) || Number(item.totalCostUsd) <= 0 ||
+      item.date < original.date
+    )) {
+      return blocked('La devolución de ' + original.productCode + ' no tiene movimientos de entrada válidos y fechados después de la venta.');
+    }
+    const returnedCostBs = corrections.reduce((sum, item) => sum + Number(item.totalCostBs), 0);
+    const returnedCostUsd = corrections.reduce((sum, item) => sum + Number(item.totalCostUsd), 0);
+    if (Math.abs(returnedCostBs - Number(original.totalCostBs)) > 0.02 ||
+        Math.abs(returnedCostUsd - Number(original.totalCostUsd)) > 0.02) {
+      return blocked('El costo devuelto de ' + original.productCode + ' no coincide con el costo original del Kardex.');
+    }
+    for (const correction of corrections) {
+      const entry = journalEntries.find(item => item.id === correction.journalEntryId && item.companyId === companyId);
+      if (!entry || entry.type !== 'INVENTARIO' || entry.date !== correction.date ||
+          entry.referenceDoc !== correction.documentRef || entry.items.length !== 2 ||
+          entry.items.some(item => item.accountCode !== inventoryCode && item.accountCode !== costCode)) {
+        return blocked('La devolución ' + correction.documentRef + ' no tiene un asiento exclusivo de inventario/costo vinculado.');
+      }
+      const totals = entry.items.reduce((sum, item) => ({
+        debitBs: sum.debitBs + Number(item.debitBs ?? 0),
+        creditBs: sum.creditBs + Number(item.creditBs ?? 0),
+        debitUsd: sum.debitUsd + Number(item.debitUsd ?? 0),
+        creditUsd: sum.creditUsd + Number(item.creditUsd ?? 0),
+        inventoryDebitBs: sum.inventoryDebitBs + (item.accountCode === inventoryCode ? Number(item.debitBs ?? 0) : 0),
+        costCreditBs: sum.costCreditBs + (item.accountCode === costCode ? Number(item.creditBs ?? 0) : 0),
+        inventoryDebitUsd: sum.inventoryDebitUsd + (item.accountCode === inventoryCode ? Number(item.debitUsd ?? 0) : 0),
+        costCreditUsd: sum.costCreditUsd + (item.accountCode === costCode ? Number(item.creditUsd ?? 0) : 0)
+      }), { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0,
+        inventoryDebitBs: 0, costCreditBs: 0, inventoryDebitUsd: 0, costCreditUsd: 0 });
+      if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
+          Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
+          Math.abs(totals.inventoryDebitBs - Number(correction.totalCostBs)) > 0.02 ||
+          Math.abs(totals.costCreditBs - Number(correction.totalCostBs)) > 0.02 ||
+          Math.abs(totals.inventoryDebitUsd - Number(correction.totalCostUsd)) > 0.02 ||
+          Math.abs(totals.costCreditUsd - Number(correction.totalCostUsd)) > 0.02) {
+        return blocked('El asiento ' + entry.entryNumber + ' de la devolución no concilia Debe/Haber, inventario y costo de ventas.');
+      }
+    }
+    returnedMovementCount += corrections.length;
+  }
+  return { ready: true, originalMovementCount: originals.length, returnedMovementCount };
+}
+
+
+export interface PurchaseInventoryReconciliation {
+  ready: boolean;
+  reason?: string;
+  lineCount: number;
+  movementCount: number;
+  lineTotal: number;
+  baseTotal: number;
+  movementTotal: number;
+  journalInventoryDebit: number;
+  journalInventoryDebitUsd: number;
+  linesMatchInvoice: boolean;
+  journalMatchesInvoice: boolean;
+  movementMatchesLines: boolean;
+  ok: boolean;
+}
+
+/**
+ * Certifies the complete purchase -> inventory lines -> Kardex -> purchase
+ * journal chain in both currencies. This is a readiness check only; SQLite
+ * independently enforces the same invariants at persistence time.
+ */
+export function validatePurchaseInventoryReconciliation(input: {
+  companyId: string;
+  purchase: PurchaseRecord;
+  movements: InventoryMovement[];
+  journalEntries: JournalEntry[];
+  products?: InventoryProduct[];
+}): PurchaseInventoryReconciliation {
+  const { companyId, purchase, movements, journalEntries, products } = input;
+  const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  const normalize = (value: unknown) => String(value || '').trim().toUpperCase().replace(/\s+/g, '');
+  const normalizeRif = (value: unknown) => String(value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const lines = Array.isArray(purchase.inventoryLines) ? purchase.inventoryLines : [];
+  const taxableBase = Number(purchase.taxableBaseBs);
+  const exemptBase = Number(purchase.exemptAmountBs);
+  const vat = Number(purchase.vatAmountBs);
+  const vatWithheld = Number(purchase.vatWithheldBs ?? 0);
+  const islrWithheld = Number(purchase.islrWithheldBs ?? 0);
+  const igtf = Number(purchase.igtfAmountBs ?? 0);
+  const total = Number(purchase.totalAmountBs);
+  const rate = Number(purchase.bcvRate);
+  const baseTotal = money(taxableBase + exemptBase);
+  const lineTotal = money(lines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCostBs || 0), 0));
+  const expectedTotal = money(baseTotal + vat + igtf);
+  const expectedPayable = money(total - vatWithheld - islrWithheld);
+  const validAmounts = [taxableBase, exemptBase, vat, vatWithheld, islrWithheld, igtf, total, rate,
+    Number(purchase.taxRate)].every(value => Number.isFinite(value) && value >= 0) &&
+    rate > 0 && Number(purchase.taxRate) <= 100 &&
+    vatWithheld <= vat + 0.02 && islrWithheld <= taxableBase + 0.02 &&
+    expectedPayable > 0 && Math.abs(total - expectedTotal) <= 0.02;
+  const expectedReference = normalize('FAC-' + purchase.invoiceNumber);
+  const supplierRif = normalizeRif(purchase.supplierRif);
+  const linkedMovements = movements.filter(movement =>
+    movement.companyId === companyId && movement.type === 'ENTRADA' && movement.concept === 'COMPRA' &&
+    normalize(movement.documentRef) === expectedReference && !movement.correctionForMovementId
+  );
+  const movementTotal = money(linkedMovements.reduce((sum, movement) => sum + Number(movement.totalCostBs || 0), 0));
+  const purchaseJournal = purchase.journalEntryId
+    ? journalEntries.find(entry => entry.id === purchase.journalEntryId && entry.companyId === companyId)
+    : undefined;
+  const inventoryAccountByProduct = new Map((products || []).filter(product => product.companyId === companyId)
+    .map(product => [product.id, product.inventoryAccountCode || '1.1.4.01']));
+  const expectedInventoryByAccount = new Map<string, number>();
+  for (const line of lines) {
+    const accountCode = inventoryAccountByProduct.get(line.productId) || '1.1.4.01';
+    expectedInventoryByAccount.set(accountCode, money((expectedInventoryByAccount.get(accountCode) || 0) + Number(line.quantity || 0) * Number(line.unitCostBs || 0)));
+  }
+  const inventoryAccountCodes = new Set(expectedInventoryByAccount.keys());
+  const payableAccountCodes = [...new Set((purchaseJournal?.items || [])
+    .filter(item => String(item.accountCode || '').startsWith('2.1.1.') && Number(item.creditBs || 0) > 0)
+    .map(item => item.accountCode))];
+  const payableAccountCode = payableAccountCodes.length === 1 ? payableAccountCodes[0] : undefined;
+  const journalInventoryDebit = money(purchaseJournal?.items.reduce((sum, item) =>
+    sum + (inventoryAccountCodes.has(item.accountCode) ? Number(item.debitBs ?? 0) - Number(item.creditBs ?? 0) : 0), 0) || 0);
+  const journalInventoryDebitUsd = Number(purchaseJournal?.items.reduce((sum, item) =>
+    sum + (inventoryAccountCodes.has(item.accountCode) ? Number(item.debitUsd ?? 0) - Number(item.creditUsd ?? 0) : 0), 0) || 0);
+  const productIds = new Set<string>();
+  const validLines = lines.length > 0 && lines.every(line => {
+    const quantity = Number(line.quantity);
+    const unitCost = Number(line.unitCostBs);
+    if (!line.productId || productIds.has(String(line.productId)) ||
+        (products !== undefined && !inventoryAccountByProduct.has(String(line.productId))) ||
+        !Number.isFinite(quantity) || quantity <= 0 ||
+        !Number.isFinite(unitCost) || unitCost <= 0) return false;
+    productIds.add(String(line.productId));
+    return true;
+  });
+  const linesMatchInvoice = validLines && Math.abs(lineTotal - baseTotal) <= 0.02;
+  const movementMatchesLines = validLines && validAmounts && Boolean(supplierRif) &&
+    linkedMovements.length === lines.length && lines.every(line => {
+      const matches = linkedMovements.filter(movement => String(movement.productId) === String(line.productId));
+      if (matches.length !== 1) return false;
+      const movement = matches[0];
+      const quantity = Number(line.quantity);
+      const unitCost = Number(line.unitCostBs);
+      const expectedBs = money(quantity * unitCost);
+      const expectedUsd = expectedBs / rate;
+      const movementRif = normalizeRif(movement.counterpartyRif);
+      return movement.date === purchase.invoiceDate && Boolean(movementRif) && movementRif === supplierRif &&
+        Number.isFinite(Number(movement.bcvRate)) && Math.abs(Number(movement.bcvRate) - rate) <= 0.000001 &&
+        Number.isFinite(Number(movement.quantity)) && Math.abs(Number(movement.quantity) - quantity) <= 0.000001 &&
+        Number.isFinite(Number(movement.unitCostBs)) && Math.abs(Number(movement.unitCostBs) - unitCost) <= 0.02 &&
+        Number.isFinite(Number(movement.unitCostUsd)) &&
+        Math.abs(Number(movement.unitCostUsd) - unitCost / rate) <= 0.0001 &&
+        Number.isFinite(Number(movement.totalCostBs)) &&
+        Math.abs(money(Number(movement.totalCostBs)) - expectedBs) <= 0.02 &&
+        Number.isFinite(Number(movement.totalCostUsd)) &&
+        Math.abs(Number(movement.totalCostUsd) - expectedUsd) <= 0.0001;
+    }) && Math.abs(movementTotal - lineTotal) <= 0.02;
+
+  const allowedAccounts = new Set([...inventoryAccountCodes, '1.1.3.01', '6.1.1.11', '2.1.2.03', '2.1.2.04', ...(payableAccountCode ? [payableAccountCode] : [])]);
+  const journalItems = Array.isArray(purchaseJournal?.items) ? purchaseJournal.items : [];
+  const journalItemsValid = journalItems.length > 0 && journalItems.every(item => {
+    const values = [item.debitBs, item.creditBs, item.debitUsd, item.creditUsd].map(value => Number(value ?? 0));
+    return Boolean(item.accountCode) && allowedAccounts.has(item.accountCode) &&
+      values.every(value => Number.isFinite(value) && value >= 0) &&
+      !(values[0] > 0 && values[1] > 0) && !(values[2] > 0 && values[3] > 0);
+  });
+  const journalByAccount = new Map<string, { debitBs: number; creditBs: number; debitUsd: number; creditUsd: number }>();
+  for (const item of journalItems) {
+    const current = journalByAccount.get(item.accountCode) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    current.debitBs += Number(item.debitBs ?? 0);
+    current.creditBs += Number(item.creditBs ?? 0);
+    current.debitUsd += Number(item.debitUsd ?? 0);
+    current.creditUsd += Number(item.creditUsd ?? 0);
+    journalByAccount.set(item.accountCode, current);
+  }
+  const expectedAccounts = new Map<string, { debitBs: number; creditBs: number }>([
+    ...[...expectedInventoryByAccount.entries()].map(([code, amount]) => [code, { debitBs: amount, creditBs: 0 }] as [string, { debitBs: number; creditBs: number }]),
+    ['1.1.3.01', { debitBs: vat, creditBs: 0 }],
+    ['6.1.1.11', { debitBs: igtf, creditBs: 0 }],
+    ['2.1.2.03', { debitBs: 0, creditBs: vatWithheld }],
+    ['2.1.2.04', { debitBs: 0, creditBs: islrWithheld }],
+    ...(payableAccountCode ? [[payableAccountCode, { debitBs: 0, creditBs: expectedPayable }] as [string, { debitBs: number; creditBs: number }]] : [])
+  ]);
+  const journalAccountsMatch = journalItemsValid && [...journalByAccount.keys()].every(code => expectedAccounts.has(code)) && [...expectedAccounts.entries()].every(([code, expected]) => {
+    const actual = journalByAccount.get(code) || { debitBs: 0, creditBs: 0, debitUsd: 0, creditUsd: 0 };
+    return Math.abs(actual.debitBs - expected.debitBs) <= 0.02 &&
+      Math.abs(actual.creditBs - expected.creditBs) <= 0.02 &&
+      Math.abs(actual.debitUsd - expected.debitBs / rate) <= 0.0001 &&
+      Math.abs(actual.creditUsd - expected.creditBs / rate) <= 0.0001;
+  });
+  const journalDebitBs = journalItems.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
+  const journalCreditBs = journalItems.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
+  const journalDebitUsd = journalItems.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
+  const journalCreditUsd = journalItems.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
+  const journalBalanced = Math.abs(journalDebitBs - journalCreditBs) <= 0.02 &&
+    Math.abs(journalDebitUsd - journalCreditUsd) <= 0.0001;
+  const purchaseUsdMatches = Math.abs(Number(purchase.totalAmountUsd) - total / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.taxableBaseUsd) - taxableBase / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatAmountUsd) - vat / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.vatWithheldUsd ?? 0) - vatWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.islrWithheldUsd ?? 0) - islrWithheld / rate) <= 0.0001 &&
+    Math.abs(Number(purchase.igtfAmountUsd ?? 0) - igtf / rate) <= 0.0001;
+  const journalMatchesInvoice = Boolean(purchaseJournal && payableAccountCode && purchaseJournal.type === 'COMPRA' &&
+    purchaseJournal.companyId === companyId && purchaseJournal.date === purchase.invoiceDate &&
+    normalize(purchaseJournal.referenceDoc) === expectedReference && validAmounts &&
+    Number.isFinite(Number(purchaseJournal.bcvRate)) && Math.abs(Number(purchaseJournal.bcvRate) - rate) <= 0.000001 &&
+    journalAccountsMatch && journalBalanced && purchaseUsdMatches &&
+    Math.abs(journalInventoryDebit - baseTotal) <= 0.02 &&
+    Number.isFinite(journalInventoryDebitUsd) &&
+    Math.abs(journalInventoryDebitUsd - baseTotal / rate) <= 0.0001);
+  const ok = linesMatchInvoice && movementMatchesLines && journalMatchesInvoice;
+  const reason = !validLines ? 'Faltan líneas de inventario válidas o hay productos duplicados.'
+    : !validAmounts ? 'Los importes fiscales, retenciones, total o tasa BCV de la factura no son coherentes.'
+    : !linesMatchInvoice ? 'Las líneas no concilian con la base imponible más el exento.'
+    : !movementMatchesLines ? 'El Kardex no coincide por artículo, fecha, proveedor, cantidad, costo o tasa BCV en ambas monedas.'
+    : !journalMatchesInvoice ? 'El asiento original no concilia inventario, IVA, IGTF, retenciones y CxP por cuenta en Bs. y USD.'
+    : undefined;
+  return {
+    ready: ok, reason, lineCount: lines.length, movementCount: linkedMovements.length,
+    lineTotal, baseTotal, movementTotal, journalInventoryDebit, journalInventoryDebitUsd,
+    linesMatchInvoice, journalMatchesInvoice, movementMatchesLines, ok
+  };
+}
+
+
+export interface BankStatementReversalPair {
+  originalStatementId: string;
+  reversalStatementId: string;
+  bankAccountId: string;
+}
+
+export interface BankStatementReversalReadiness {
+  ready: boolean;
+  reason?: string;
+  pairs: BankStatementReversalPair[];
+}
+
+/**
+ * A previously reconciled bank line can only be reversed when the imported bank
+ * statement also contains its exact opposite transaction. The caller links the
+ * contra-entry and both statement rows in the same SQLite snapshot.
+ */
+export function validateBankStatementReversal(input: {
+  companyId: string;
+  source: JournalEntry;
+  reversalItems: JournalEntryItem[];
+  bankAccounts: BankAccount[];
+  statementMovements: BankStatementMovement[];
+}): BankStatementReversalReadiness {
+  const { companyId, source, reversalItems, bankAccounts, statementMovements } = input;
+  const originalRows = statementMovements.filter(row =>
+    row.companyId === companyId &&
+    (row.reconciledWithJournalEntryId === source.id ||
+      row.reconciledJournalEntryIds?.includes(source.id))
+  );
+  if (!originalRows.length) return { ready: true, pairs: [] };
+  const originalBankAccountIds = originalRows.map(row => row.bankAccountId);
+  if (new Set(originalBankAccountIds).size !== originalBankAccountIds.length) {
+    return { ready: false, reason: 'El mismo asiento aparece conciliado históricamente con varias filas de una misma cuenta bancaria; requiere conciliación manual antes de reversar.', pairs: [] };
+  }
+  const pairs: BankStatementReversalPair[] = [];
+  const usedOppositeIds = new Set<string>();
+  const usedAccountCodes = new Set<string>();
+  for (const original of originalRows) {
+    if ((original.isReconciled && original.reconciledWithJournalEntryId !== source.id) ||
+        (original.reconciledWithJournalEntryId && original.reconciledWithJournalEntryId !== source.id)) {
+      return { ready: false, reason: 'El movimiento bancario ' + original.reference + ' fue vinculado posteriormente a otro asiento; requiere resolver esa conciliación antes de reversar.', pairs: [] };
+    }
+    const bank = bankAccounts.find(item => item.id === original.bankAccountId && item.companyId === companyId);
+    if (!bank) return { ready: false, reason: 'No se encuentra la cuenta bancaria del movimiento histórico ' + original.id + '.', pairs: [] };
+    if (usedAccountCodes.has(bank.accountCode)) {
+      return { ready: false, reason: 'Varias cuentas bancarias comparten el mismo código contable; no es posible certificar una reversión automática.', pairs: [] };
+    }
+    usedAccountCodes.add(bank.accountCode);
+    const isUsd = bank.currency === 'USD';
+    const originalAmount = isUsd ? Number(original.amountUsd) : Number(original.amountBs);
+    const tolerance = isUsd ? 0.000001 : 0.05;
+    const sourceDebit = source.items.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.debitUsd : item.debitBs), 0);
+    const sourceCredit = source.items.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.creditUsd : item.creditBs), 0);
+    const originalMatches = original.type === 'CREDIT'
+      ? Math.abs(sourceDebit - originalAmount) < tolerance && sourceCredit < tolerance
+      : Math.abs(sourceCredit - originalAmount) < tolerance && sourceDebit < tolerance;
+    if (!originalMatches) {
+      return { ready: false, reason: 'El asiento original ya no coincide con el importe/naturaleza del extracto bancario ' + original.reference + '.', pairs: [] };
+    }
+    const oppositeType = original.type === 'CREDIT' ? 'DEBIT' : 'CREDIT';
+    const candidates = statementMovements.filter(row => {
+      if (row.id === original.id || usedOppositeIds.has(row.id) ||
+          row.companyId !== companyId || row.bankAccountId !== original.bankAccountId ||
+          row.type !== oppositeType || row.date < original.date ||
+          row.isReconciled || row.reconciledWithJournalEntryId ||
+          (row.reconciledJournalEntryIds?.length || 0) > 0) return false;
+      const amount = isUsd ? Number(row.amountUsd) : Number(row.amountBs);
+      return Math.abs(amount - originalAmount) < tolerance;
+    });
+    if (candidates.length !== 1) {
+      return {
+        ready: false,
+        reason: candidates.length === 0
+          ? 'Falta importar el movimiento bancario inverso exacto para la referencia ' + original.reference + '.'
+          : 'Hay más de un posible movimiento bancario inverso para ' + original.reference + '; desambigüe el extracto antes de reversar.',
+        pairs: []
+      };
+    }
+    const opposite = candidates[0];
+    const expectsDebit = opposite.type === 'CREDIT';
+    const reversalDebit = reversalItems.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.debitUsd : item.debitBs), 0);
+    const reversalCredit = reversalItems.filter(item => item.accountCode === bank.accountCode)
+      .reduce((sum, item) => sum + Number(isUsd ? item.creditUsd : item.creditBs), 0);
+    const reversalMatches = expectsDebit
+      ? Math.abs(reversalDebit - originalAmount) < tolerance && reversalCredit < tolerance
+      : Math.abs(reversalCredit - originalAmount) < tolerance && reversalDebit < tolerance;
+    if (!reversalMatches) {
+      return { ready: false, reason: 'El contra-asiento propuesto no compensa exactamente la línea de la cuenta bancaria ' + bank.bankName + '.', pairs: [] };
+    }
+    usedOppositeIds.add(opposite.id);
+    pairs.push({
+      originalStatementId: original.id,
+      reversalStatementId: opposite.id,
+      bankAccountId: original.bankAccountId
+    });
+  }
+  return { ready: true, pairs };
+}
+
+
+export interface JournalReversalAssessment {
+  ready: boolean;
+  blockers: string[];
+  documentKind: 'SALE' | 'PURCHASE' | 'GENERAL';
+  documentId?: string;
+  linkedSale?: SaleRecord;
+  linkedPurchase?: PurchaseRecord;
+  linkedCreditNoteCount: number;
+  linkedInventoryMovementCount: number;
+  linkedBankMovementCount: number;
+  activeSettlementCount: number;
+  activeSupplierAdvanceSettlementCount: number;
+  inventoryReadiness?: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation;
+  bankReadiness: BankStatementReversalReadiness;
+  debitBs: number;
+  creditBs: number;
+  debitUsd: number;
+  creditUsd: number;
+}
+
+/**
+ * Single preflight for the guided reversal assistant. It classifies the source
+ * entry and checks every currently modeled auxiliary before the UI enables
+ * posting. Posting repeats these checks in AccountingContext and SQLite.
+ */
+export function assessJournalReversal(input: {
+  companyId: string;
+  source: JournalEntry;
+  accounts: Account[];
+  sales: SaleRecord[];
+  purchases: PurchaseRecord[];
+  movements: InventoryMovement[];
+  products: InventoryProduct[];
+  journalEntries: JournalEntry[];
+  bankAccounts: BankAccount[];
+  bankStatementMovements: BankStatementMovement[];
+  creditSettlements: Array<{ companyId: string; documentId: string; kind: string; isReversed?: boolean }>;
+  supplierAdvanceSettlements?: Array<{ companyId: string; journalEntryId: string; targetPurchaseId?: string; kind: string; isReversed?: boolean }>;
+  priorPeriodAdjustment?: boolean;
+  retainedEarningsAccountCode?: string;
+}): JournalReversalAssessment {
+  const { companyId, source, accounts, sales, purchases, movements, products,
+    journalEntries, bankAccounts, bankStatementMovements, creditSettlements,
+    supplierAdvanceSettlements = [], priorPeriodAdjustment = false, retainedEarningsAccountCode } = input;
+  const sale = sales.find(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      (source.type === 'VENTA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
+  const purchase = purchases.find(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      (source.type === 'COMPRA' && source.referenceDoc === 'FAC-' + item.invoiceNumber)));
+  const documentKind = sale ? 'SALE' : purchase ? 'PURCHASE' : 'GENERAL';
+  // A supplier credit note is a fiscal child document of the original purchase.
+  // It must be included in the preflight even though its Kardex rows and journal
+  // are linked to the credit note reference, not to the original invoice.
+  const linkedCreditNotes = purchase && purchase.documentType === '01'
+    ? purchases.filter(item => item.companyId === companyId && item.documentType === '03' && item.originalPurchaseId === purchase.id)
+    : [];
+  const documentId = sale?.id || purchase?.id;
+  const reference = sale?.invoiceNumber || purchase?.invoiceNumber;
+  const normalizedReferences = reference
+    ? new Set([String(reference).trim().toUpperCase(), ('FAC-' + reference).trim().toUpperCase()])
+    : new Set<string>();
+  const linkedMovements = movements.filter(item => item.companyId === companyId &&
+    (item.journalEntryId === source.id ||
+      Boolean(reference && normalizedReferences.has(String(item.documentRef || '').trim().toUpperCase()))));
+  const linkedBankRows = bankStatementMovements.filter(item => item.companyId === companyId &&
+    (item.reconciledWithJournalEntryId === source.id || item.reconciledJournalEntryIds?.includes(source.id)));
+  const kind = sale ? 'SALE_COLLECTION' : purchase ? 'PURCHASE_PAYMENT' : '';
+  const settlements = documentId && kind ? creditSettlements.filter(item =>
+    item.companyId === companyId && item.documentId === documentId &&
+    item.kind === kind && !item.isReversed) : [];
+  const blockers: string[] = [];
+  if (source.companyId !== companyId) blockers.push('El asiento no pertenece a la empresa activa.');
+  if (source.isAdjusted && !source.reversedByEntryId) blockers.push('El asiento está marcado como ajustado, pero no conserva el enlace a su contra-asiento.');
+  if (source.reversalOfEntryId) blockers.push('El asiento seleccionado ya es un contra-asiento.');
+  if (source.reversedByEntryId || journalEntries.some(item =>
+    item.companyId === companyId && item.reversalOfEntryId === source.id)) {
+    blockers.push('El asiento original ya tiene una reversión registrada.');
+  }
+  if (sale?.isCancelled || purchase?.isCancelled) blockers.push('El documento comercial ya está anulado o reversado.');
+  if (purchase?.documentType === '03') {
+    blockers.push('El asiento corresponde a una nota de crédito de proveedor. Su reversión exige un documento fiscal correctivo y conciliación propia; no se permite un contra-asiento genérico.');
+  }
+  if (linkedCreditNotes.length) blockers.push('La factura tiene ' + linkedCreditNotes.length + ' nota(s) de crédito de proveedor vinculada(s). Debe conciliarse primero el historial fiscal y físico de esas notas; no se permite reversar la factura como si estuviera intacta.');
+  let inventoryReadiness: SaleInventoryReturnReadiness | PurchaseInventoryReconciliation | undefined;
+  if (purchase?.inventoryLines?.length) {
+    inventoryReadiness = validatePurchaseInventoryReconciliation({
+      companyId, purchase, movements, journalEntries, products
+    });
+    blockers.push(inventoryReadiness.ready
+      ? 'La compra tiene inventario vinculado: debe tramitarse mediante documento fiscal de nota de crédito y devolución coordinada, no con un contra-asiento aislado.'
+      : 'La conciliación de compra no está aprobada: ' + (inventoryReadiness.reason || 'revise factura, Kardex y asiento.'));
+  } else if (sale && linkedMovements.length) {
+    inventoryReadiness = validateSaleInventoryReturnReconciliation({
+      companyId, invoiceNumber: sale.invoiceNumber, source, movements, products, journalEntries
+    });
+    if (!inventoryReadiness.ready) blockers.push(inventoryReadiness.reason || 'La devolución de inventario de la venta no está conciliada.');
+  } else if (linkedMovements.length) {
+    blockers.push('El asiento tiene movimientos de inventario relacionados. Deben identificarse y conciliarse antes de reversar.');
+  }
+  if (settlements.length) blockers.push('Hay ' + settlements.length + ' cobro(s)/pago(s) vigente(s) asociados al documento; revierta primero sus liquidaciones.');
+  const activeSupplierAdvanceSettlements = supplierAdvanceSettlements.filter(item =>
+    item.companyId === companyId && !item.isReversed &&
+    (item.journalEntryId === source.id ||
+      (purchase && item.kind === 'APPLIED_TO_PURCHASE' && item.targetPurchaseId === purchase.id)));
+  const advancesToReverseFirst = activeSupplierAdvanceSettlements.filter(item => item.journalEntryId !== source.id);
+  if (advancesToReverseFirst.length) blockers.push('La factura tiene ' + advancesToReverseFirst.length +
+    ' aplicación(es) de anticipo vigente(s). Revierta primero cada liquidación desde su asiento ANTICIPO_PROVEEDOR.');
+  const reversedItems = buildReversalItems(source, accounts, priorPeriodAdjustment, retainedEarningsAccountCode);
+  const bankReadiness = validateBankStatementReversal({
+    companyId, source, reversalItems: reversedItems, bankAccounts, statementMovements: bankStatementMovements
+  });
+  if (!bankReadiness.ready) blockers.push(bankReadiness.reason || 'La conciliación bancaria inversa no está aprobada.');
+  const debitBs = reversedItems.reduce((sum, item) => sum + Number(item.debitBs ?? 0), 0);
+  const creditBs = reversedItems.reduce((sum, item) => sum + Number(item.creditBs ?? 0), 0);
+  const debitUsd = reversedItems.reduce((sum, item) => sum + Number(item.debitUsd ?? 0), 0);
+  const creditUsd = reversedItems.reduce((sum, item) => sum + Number(item.creditUsd ?? 0), 0);
+  return {
+    ready: blockers.length === 0, blockers, documentKind, documentId,
+    linkedSale: sale, linkedPurchase: purchase,
+    linkedCreditNoteCount: linkedCreditNotes.length,
+    linkedInventoryMovementCount: linkedMovements.length,
+    linkedBankMovementCount: linkedBankRows.length,
+    activeSettlementCount: settlements.length,
+    activeSupplierAdvanceSettlementCount: activeSupplierAdvanceSettlements.length,
+    inventoryReadiness, bankReadiness,
+    debitBs, creditBs, debitUsd, creditUsd
+  };
+}

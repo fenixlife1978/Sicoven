@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from './islrFiscalEvent';
+import { IslrFiscalEvent, allocateIslrFiscalReversal, validateIslrFiscalEventLedger } from './islrFiscalEvent';
 
 const event = (overrides: Partial<IslrFiscalEvent> = {}): IslrFiscalEvent => ({
   id: 'event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
@@ -10,13 +10,6 @@ const event = (overrides: Partial<IslrFiscalEvent> = {}): IslrFiscalEvent => ({
   journalEntryId: 'journal-1', createdAt: '2025-07-10T12:00:00.000Z', ...overrides
 });
 const eligible = { 'purchase-1': 1000 };
-
-test('cash purchases record ISLR on payment while credit purchases record it on account credit', () => {
-  assert.equal(resolvePurchaseIslrFiscalTrigger('CONTADO'), 'PAYMENT');
-  assert.equal(resolvePurchaseIslrFiscalTrigger('CREDITO'), 'ACCOUNT_CREDIT');
-  assert.equal(resolvePurchaseIslrFiscalTrigger(undefined), 'ACCOUNT_CREDIT');
-});
-
 
 test('accepts a valid first fiscal event with verified date-specific UT snapshot', () => {
   assert.doesNotThrow(() => validateIslrFiscalEventLedger([], [event()], eligible));

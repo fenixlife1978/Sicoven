@@ -30,7 +30,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
-import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
+import { IslrFiscalEvent, allocateIslrFiscalReversal, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
@@ -1587,8 +1587,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setIslrVouchers(prev => [...prev, islrVoucher]);
     }
 
-    // El hecho fiscal sigue el primer disparador registrado: contado = pago efectivo;
-    // crédito = abono en cuenta. En ambos casos se usa la fecha efectiva capturada arriba.
+    // La compra genera el abono en cuenta al reconocer el pasivo del proveedor.
+    // Se registra el evento fiscal con la fecha del asiento (no con la fecha del pago).
     if (purchaseData.islrConceptCode && Number(purchaseData.taxableBaseBs) > 0) {
       const fiscalDate = purchaseData.accountCreditDate!;
       const eventKey = `${companyKey}:${fiscalDate}`;
@@ -1607,7 +1607,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         conceptCode: purchaseData.islrConceptCode,
         fiscalDate,
         sequence: nextEventSequence,
-        kind: resolvePurchaseIslrFiscalTrigger(purchaseData.paymentTerm),
+        kind: 'ACCOUNT_CREDIT',
         allocations: [{ purchaseId, baseAmountBs: Number(purchaseData.taxableBaseBs) }],
         basePercentage: Number(purchaseData.islrBasePercentage),
         unitTaxValueBs: Number(purchaseData.islrUnitTaxValueBs),

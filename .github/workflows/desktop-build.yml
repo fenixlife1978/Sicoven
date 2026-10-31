@@ -1,0 +1,42 @@
+name: SICOVEN Desktop Validation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sicoven-desktop-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test authentication and session security guards
+        run: node scripts/test-auth-hardening.cjs
+      - name: Run automated tests
+        run: npm test
+      - name: Check TypeScript
+        run: npm run check:types
+      - name: Audit source resources
+        run: npm run audit:assets -- --source-only
+      - name: Build application
+        run: npm run build
+      - name: Audit production assets
+        run: npm run audit:assets

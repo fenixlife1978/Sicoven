@@ -1,0 +1,117 @@
+name: SICOVEN Windows installer
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: sicoven-windows-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout source
+        uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - name: Download previous 1.0.6 installer for real upgrade test
+        uses: actions/download-artifact@v4
+        with:
+          name: SICOVEN-Windows-34a826a9efb02194da61a0dbe0ce53fd50bd73d2
+          path: ${{ runner.temp }}/SICOVEN-Previous
+          run-id: 41106140337
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Set up Python for SQLite upgrade verification
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install locked dependencies
+        run: npm ci --no-audit --no-fund
+      - name: Test authentication and session security guards
+        run: node scripts/test-auth-hardening.cjs
+      - name: Run automated tests
+        run: npm test
+      - name: Check TypeScript types
+        run: npm run check:types
+      - name: Build renderer
+        run: npm run build
+      - name: Audit production assets
+        run: npm run audit:assets
+      - name: Build Windows NSIS installer
+        run: npm run dist
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+      - name: Verify installer exists
+        shell: pwsh
+        run: |
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-*-x64.exe" -File
+          if (-not $installer) {
+            throw "No se generó el instalador Windows x64 de SICOVEN."
+          }
+          $installer | Select-Object Name, Length, LastWriteTime | Format-Table
+      - name: Upgrade 1.0.6 to 1.0.7 and preserve SQLite data
+        shell: pwsh
+        run: |
+          $previousInstaller = Get-ChildItem -Path (Join-Path $env:RUNNER_TEMP "SICOVEN-Previous") -Filter "SICOVEN-Setup-*-x64.exe" -File | Select-Object -First 1
+          if (-not $previousInstaller) { throw "No se descargó el instalador anterior 1.0.6." }
+          $installer = Get-ChildItem -Path release -Filter "SICOVEN-Setup-1.0.7-x64.exe" -File | Select-Object -First 1
+          if (-not $installer) { throw "No se generó el instalador 1.0.7." }
+          $installDir = Join-Path $env:RUNNER_TEMP "SICOVEN-Smoke"
+          if (Test-Path $installDir) { Remove-Item -Path $installDir -Recurse -Force }
+          $oldInstall = Start-Process -FilePath $previousInstaller.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
+          if (-not $oldInstall.WaitForExit(120000)) { throw "La instalación de SICOVEN 1.0.6 excedió el tiempo permitido." }
+          $oldInstall.Refresh()
+          if ($oldInstall.ExitCode -ne 0) { throw "La instalación 1.0.6 terminó con código $($oldInstall.ExitCode)." }
+          $app = Join-Path $installDir "SICOVEN.exe"
+          $asar = Join-Path $installDir "resources\app.asar"
+          $sqliteNative = Join-Path $installDir "resources\app.asar.unpacked\node_modules\better-sqlite3\build\Release\better_sqlite3.node"
+          foreach ($required in @($app, $asar, $sqliteNative)) {
+            if (-not (Test-Path $required -PathType Leaf)) { throw "Falta un archivo esencial de SICOVEN 1.0.6: $required" }
+          }
+          $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
+          Start-Sleep -Seconds 12
+          $application.Refresh()
+          if ($application.HasExited) { throw "SICOVEN 1.0.6 se cerró durante el arranque. Código: $($application.ExitCode)" }
+          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          $database = Get-ChildItem -Path $env:APPDATA -Filter "sicoven.sqlite" -Recurse -File -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $database) { throw "SICOVEN 1.0.6 no creó la base SQLite en userData." }
+          $env:SICOVEN_DB_PATH = $database.FullName
+          python -c "import os,sqlite3; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); c.execute('CREATE TABLE IF NOT EXISTS _sicoven_upgrade_probe (probe_key TEXT PRIMARY KEY, probe_value TEXT NOT NULL)'); c.execute('INSERT OR REPLACE INTO _sicoven_upgrade_probe VALUES (?,?)', ('upgrade','preserve-me')); c.commit(); c.close()"
+          if ($LASTEXITCODE -ne 0) { throw "No se pudo preparar el marcador SQLite en 1.0.6." }
+          $upgrade = Start-Process -FilePath $installer.FullName -ArgumentList @("/S", "/D=$installDir") -PassThru
+          if (-not $upgrade.WaitForExit(120000)) { throw "La actualización 1.0.6 a 1.0.7 no terminó dentro del tiempo permitido." }
+          $upgrade.Refresh()
+          if ($upgrade.ExitCode -ne 0) { throw "La actualización a 1.0.7 terminó con código $($upgrade.ExitCode)." }
+          python -c "import os,sqlite3,sys; c=sqlite3.connect(os.environ['SICOVEN_DB_PATH']); r=c.execute('SELECT probe_value FROM _sicoven_upgrade_probe WHERE probe_key=?', ('upgrade',)).fetchone(); c.close(); sys.exit(0 if r and r[0]=='preserve-me' else 1)"
+          if ($LASTEXITCODE -ne 0) { throw "La actualización 1.0.6 a 1.0.7 eliminó o alteró datos SQLite." }
+          $application = Start-Process -FilePath $app -ArgumentList @("--disable-gpu") -PassThru
+          Start-Sleep -Seconds 12
+          $application.Refresh()
+          if ($application.HasExited) { throw "SICOVEN 1.0.7 se cerró después de la actualización. Código: $($application.ExitCode)" }
+          & taskkill.exe /PID $application.Id /T /F | Out-Null
+          Write-Host "Actualización real 1.0.6 -> 1.0.7, arranque y conservación de datos SQLite verificados."
+          Get-Item $installer.FullName | Select-Object Name, Length
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SICOVEN-Windows-${{ github.sha }}
+          path: |
+            release/SICOVEN-Setup-*-x64.exe
+            release/*.blockmap
+            release/latest.yml
+          if-no-files-found: error
+          retention-days: 30

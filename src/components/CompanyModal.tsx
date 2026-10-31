@@ -1,0 +1,351 @@
+import React, { useState } from 'react';
+import { useAccounting } from '../context/AccountingContext';
+import { Building2, X, ShieldAlert, Check, AlertCircle } from 'lucide-react';
+import { TaxpayerType } from '../types/accounting';
+import { validateVenezuelanRif } from '../utils/formatters';
+
+interface CompanyModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+}
+
+export const CompanyModal: React.FC<CompanyModalProps> = ({ isOpen, onClose }) => {
+  const { addCompany } = useAccounting();
+
+  const [rif, setRif] = useState('');
+  const [rifError, setRifError] = useState<string | null>(null);
+  const [rifTouched, setRifTouched] = useState(false);
+  const [name, setName] = useState('');
+  const [tradeName, setTradeName] = useState('');
+  const [address, setAddress] = useState('');
+  const [phone, setPhone] = useState('');
+  const [email, setEmail] = useState('');
+  const [taxpayerType, setTaxpayerType] = useState<TaxpayerType>('ESPECIAL');
+  const [defaultIvaRetentionRate, setDefaultIvaRetentionRate] = useState<number>(75);
+  const [isIgtfPerceptionAgent, setIsIgtfPerceptionAgent] = useState(false);
+  const [bcvRate, setBcvRate] = useState<string>('');
+  const [fiscalYear, setFiscalYear] = useState<string>(String(new Date().getFullYear()));
+
+  if (!isOpen) return null;
+
+  const handleRifChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value.toUpperCase();
+    setRif(val);
+    if (rifTouched) {
+      const res = validateVenezuelanRif(val);
+      setRifError(res.error);
+    }
+  };
+
+  const handleRifBlur = () => {
+    setRifTouched(true);
+    const res = validateVenezuelanRif(rif);
+    setRifError(res.error);
+    if (res.isValid) {
+      setRif(res.formattedRif);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    const rifValidation = validateVenezuelanRif(rif);
+    if (!rifValidation.isValid) {
+      setRifTouched(true);
+      setRifError(rifValidation.error);
+      return;
+    }
+    if (!name.trim()) return;
+
+    addCompany({
+      rif: rifValidation.formattedRif,
+      name: name.trim().toUpperCase(),
+      tradeName: tradeName.trim() || undefined,
+      address: address.trim() || 'Venezuela',
+      phone: phone.trim() || '(0212) 000-0000',
+      email: email.trim() || 'contacto@empresa.com.ve',
+      taxpayerType,
+      defaultIvaRetentionRate: taxpayerType === 'ESPECIAL' ? defaultIvaRetentionRate : 0,
+      isIgtfPerceptionAgent,
+      fiscalYear: Number(fiscalYear) || new Date().getFullYear(),
+      bcvRate: Number(bcvRate) || 0,
+      lastRateUpdate: new Date().toISOString().split('T')[0]
+    });
+
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 pointer-events-auto">
+      <div className="relative z-[1001] isolate pointer-events-auto bg-white rounded-2xl shadow-2xl max-w-lg w-full overflow-hidden border border-slate-200 animate-in fade-in zoom-in-95 duration-200">
+        <div className="flex items-center justify-between px-6 py-4 bg-slate-900 text-white">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 bg-emerald-500/20 text-emerald-400 rounded-lg">
+              <Building2 className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-semibold text-base">Registrar Nueva Empresa</h3>
+              <p className="text-xs text-slate-400">Crear entidad contable independiente (SENIAT / VEN-NIF)</p>
+            </div>
+          </div>
+          <button
+            onClick={onClose}
+            className="p-1 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition cursor-pointer"
+          >
+            <X className="w-5 h-5" />
+          </button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+          {/* RIF & Razón Social */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label className="block text-xs font-semibold text-slate-700">
+                  RIF Oficial *
+                </label>
+                <span className="text-[10px] text-slate-400 font-mono" title="Prefijos legales SENIAT: V, J, G, E, P">
+                  [V,J,G,E,P]
+                </span>
+              </div>
+              <div className="relative">
+                <input
+                  type="text"
+                  required
+                  placeholder="J-12345678-9"
+                  value={rif}
+                  onChange={handleRifChange}
+                  onBlur={handleRifBlur}
+                  maxLength={14}
+                  className={`w-full px-3 py-2 text-sm border rounded-lg focus:outline-none uppercase font-mono transition ${
+                    rifTouched && rifError
+                      ? 'border-rose-400 bg-rose-50/40 text-rose-900 focus:ring-2 focus:ring-rose-500/20'
+                      : rifTouched && !rifError && rif
+                      ? 'border-emerald-500 bg-emerald-50/30 text-slate-900 focus:ring-2 focus:ring-emerald-500/20'
+                      : 'border-slate-300 focus:ring-2 focus:ring-emerald-500'
+                  }`}
+                  aria-invalid={!!(rifTouched && rifError)}
+                  aria-describedby={rifTouched && rifError ? 'company-rif-error' : undefined}
+                />
+                {rifTouched && !rifError && rif && (
+                  <span
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 p-0.5 rounded-full bg-emerald-100 text-emerald-600"
+                    title="Estructura SENIAT válida"
+                  >
+                    <Check className="w-3.5 h-3.5 stroke-[3]" />
+                  </span>
+                )}
+              </div>
+              {rifTouched && rifError ? (
+                <p id="company-rif-error" className="mt-1 text-[11px] text-rose-600 flex items-start gap-1 leading-tight" role="alert">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                  <span>{rifError}</span>
+                </p>
+              ) : (
+                <p className="mt-1 text-[10px] text-slate-400">
+                  Estructura SENIAT: V, J, G, E, P (ej. J-12345678-9)
+                </p>
+              )}
+            </div>
+            <div className="sm:col-span-2">
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Razón Social *
+              </label>
+              <input
+                type="text"
+                required
+                placeholder="EJEMPLO COMERCIAL, C.A."
+                value={name}
+                onChange={e => setName(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none uppercase"
+              />
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Nombre Comercial (Opcional)
+            </label>
+            <input
+              type="text"
+              placeholder="Nombre de fantasía o marca"
+              value={tradeName}
+              onChange={e => setTradeName(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          {/* Calificación SENIAT */}
+          <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
+            <label className="block text-xs font-bold text-slate-800 uppercase tracking-wide">
+              Calificación Tributaria SENIAT
+            </label>
+            <div className="grid grid-cols-2 gap-3">
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                  taxpayerType === 'ESPECIAL'
+                    ? 'border-purple-500 bg-purple-50/50 text-purple-900 font-semibold'
+                    : 'border-slate-200 hover:bg-white text-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="taxpayerType"
+                  value="ESPECIAL"
+                  checked={taxpayerType === 'ESPECIAL'}
+                  onChange={() => {
+                    setTaxpayerType('ESPECIAL');
+                    setDefaultIvaRetentionRate(75);
+                  }}
+                  className="mt-0.5 text-purple-600 focus:ring-purple-500"
+                />
+                <div>
+                  <span className="block font-bold">Contribuyente Especial</span>
+                  <span className="text-[11px] font-normal text-slate-500">
+                    Agente de Retención designado por el SENIAT (75% / 100% IVA e ISLR).
+                  </span>
+                </div>
+              </label>
+
+              <label
+                className={`flex items-start gap-3 p-3 rounded-xl border text-xs cursor-pointer transition ${
+                  taxpayerType === 'ORDINARIO'
+                    ? 'border-sky-500 bg-sky-50/50 text-sky-900 font-semibold'
+                    : 'border-slate-200 hover:bg-white text-slate-600'
+                }`}
+              >
+                <input
+                  type="radio"
+                  name="taxpayerType"
+                  value="ORDINARIO"
+                  checked={taxpayerType === 'ORDINARIO'}
+                  onChange={() => {
+                    setTaxpayerType('ORDINARIO');
+                    setDefaultIvaRetentionRate(0);
+                  }}
+                  className="mt-0.5 text-sky-600 focus:ring-sky-500"
+                />
+                <div>
+                  <span className="block font-bold">Contribuyente Ordinario</span>
+                  <span className="text-[11px] font-normal text-slate-500">
+                    No designado como agente de retención de IVA.
+                  </span>
+                </div>
+              </label>
+            </div>
+
+            {taxpayerType === 'ESPECIAL' && (
+              <div className="pt-2 flex items-center justify-between text-xs">
+                <span className="font-medium text-slate-700">Porcentaje de Retención IVA por Defecto:</span>
+                <select
+                  value={defaultIvaRetentionRate}
+                  onChange={e => setDefaultIvaRetentionRate(Number(e.target.value))}
+                  className="px-2.5 py-1 border border-slate-300 rounded-lg text-xs font-semibold focus:outline-none focus:ring-1 focus:ring-emerald-500"
+                >
+                  <option value={75}>75% (General)</option>
+                  <option value={100}>100% (No inscritos o casos especiales)</option>
+                </select>
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-lg border border-sky-200 bg-sky-50 p-3">
+            <label className="flex items-start gap-2 text-xs text-slate-800 cursor-pointer">
+              <input type="checkbox" checked={isIgtfPerceptionAgent} onChange={e => setIsIgtfPerceptionAgent(e.target.checked)} className="mt-0.5" />
+              <span><strong>Empresa designada agente de percepción del IGTF</strong><span className="block text-[11px] text-slate-600 mt-1">Actívelo únicamente si la designación aplica legalmente a esta empresa.</span></span>
+            </label>
+          </div>
+
+          {/* Domicilio Fiscal y Contacto */}
+          <div>
+            <label className="block text-xs font-semibold text-slate-700 mb-1">
+              Dirección Fiscal
+            </label>
+            <textarea
+              rows={2}
+              placeholder="Av., Edificio, Piso, Oficina, Ciudad, Estado"
+              value={address}
+              onChange={e => setAddress(e.target.value)}
+              className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Teléfono de Contacto
+              </label>
+              <input
+                type="text"
+                placeholder="(0212) 123-4567"
+                value={phone}
+                onChange={e => setPhone(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Correo Electrónico
+              </label>
+              <input
+                type="email"
+                placeholder="contabilidad@empresa.com"
+                value={email}
+                onChange={e => setEmail(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          {/* Parámetros Financieros */}
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Tasa Oficial BCV Inicial (Bs/$)
+              </label>
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                required
+                value={bcvRate}
+                onChange={e => setBcvRate(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 mb-1">
+                Ejercicio Económico (Año)
+              </label>
+              <input
+                type="number"
+                min="2000"
+                max="2099"
+                required
+                value={fiscalYear}
+                onChange={e => setFiscalYear(e.target.value)}
+                className="w-full px-3 py-2 text-sm border border-slate-300 rounded-lg font-mono focus:ring-2 focus:ring-emerald-500 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <div className="pt-3 border-t border-slate-200 flex justify-end gap-2.5">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-800 transition cursor-pointer"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              className="flex items-center gap-1.5 px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-semibold shadow-md transition cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              Guardar y Activar Empresa
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+};
