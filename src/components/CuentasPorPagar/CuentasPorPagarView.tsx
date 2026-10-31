@@ -26,7 +26,7 @@ export const CuentasPorPagarView: React.FC = () => {
   return [...map.entries()].map(([rif,name])=>({rif,name}));
  },[purchases,supplierDirectAdvances,currentCompany.id]);
  const settlementBalance=settlementSupplierRif?getSupplierAdvanceBalance(settlementSupplierRif):null;
- const settlementTargets=purchases.filter(p=>p.companyId===currentCompany.id&&!p.isCancelled&&p.documentType==='01'&&p.paymentTerm==='CREDITO'&&String(p.supplierRif||'').trim().toUpperCase()===settlementSupplierRif);
+ const settlementTargets=purchases.filter(p=>p.companyId===currentCompany.id&&!p.isCancelled&&p.documentType==='01'&&p.paymentTerm==='CREDITO'&&String(p.supplierRif||'').trim().toUpperCase()===settlementSupplierRif&&getCreditBalance(p.id,'PURCHASE_PAYMENT').outstandingUsd>0.005);
  const refundBanks=bankAccounts.filter(b=>b.companyId===currentCompany.id&&b.currency==='BS');
  const submitAdvanceSettlement=async(e:React.FormEvent)=>{
   e.preventDefault();if(settlementSaving)return;setSettlementSaving(true);setSettlementMessage('');
