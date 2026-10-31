@@ -45,7 +45,7 @@ describe('equity changes report', () => {
     const entries = [
       entry('prior-1', '2025-05-01', 'MANUAL', [
         { accountCode: '4.1', accountName: 'Ingresos', debitBs: 0, creditBs: 300, debitUsd: 0, creditUsd: 30 },
-        { accountCode: '5.1', accountName: 'Gastos', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 5 }
+        { accountCode: '5.1', accountName: 'Gastos', debitBs: 50, creditBs: 0, debitUsd: 5, creditUsd: 0 }
       ]),
       entry('bank-opening-1', '2026-02-01', 'APERTURA', [
         { accountCode: '3.1', accountName: 'Capital social', debitBs: 0, creditBs: 50, debitUsd: 0, creditUsd: 5 }
