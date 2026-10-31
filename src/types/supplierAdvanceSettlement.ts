@@ -145,6 +145,7 @@ export function allocateSupplierAdvanceCreditNotes(
         String(settlement.supplierRif || '').trim().toUpperCase() !== rif) continue;
     const allocations = settlement.sourceCreditNoteAllocations;
     if (!Array.isArray(allocations) || allocations.length === 0) {
+      if (!Array.isArray(settlement.sourceCreditNoteIds) || settlement.sourceCreditNoteIds.length === 0) continue;
       throw new Error('Existe una liquidación histórica sin distribución por nota de crédito. Debe conciliarse manualmente antes de continuar.');
     }
     const allocationError = validateSupplierAdvanceCreditNoteAllocations(
