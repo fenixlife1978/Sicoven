@@ -1301,8 +1301,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         item.islrUnitTaxValueBs !== purchaseData.islrUnitTaxValueBs ||
         item.islrFormulaFactor !== purchaseData.islrFormulaFactor ||
         item.islrBasePercentage !== purchaseData.islrBasePercentage ||
-        !Number.isFinite(Number(item.islrWithheldBs || 0)) ||
-        !Number.isFinite(Number(item.islrSubtrahendBs || 0))
+        !Number.isFinite(Number(item.islrWithheldBs)) ||
+        !Number.isFinite(Number(item.islrSubtrahendBs))
       )) {
         throw new Error('El historial ISLR mensual contiene parámetros incompletos o distintos. Se requiere conciliación fiscal antes de acumular.');
       }
