@@ -44,7 +44,7 @@ test('SQLite integrity rejects duplicate account codes', () => {
 test('SQLite integrity rejects malformed levels and classification mismatch', () => {
   assert.throws(
     () => validateNewAccountCatalogEntries([root, group], [root, group, { ...leaf, level: 3 }]),
-    /estructura inválida/
+    /estructural inválida/
   );
   assert.throws(
     () => validateNewAccountCatalogEntries([root, group], [root, group, { ...leaf, type: 'PASIVO' }]),
