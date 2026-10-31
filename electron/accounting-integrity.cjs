@@ -1060,6 +1060,27 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó liquidaciones que exceden el saldo individual de un desembolso directo.');
     }
   }
+  // Cash payments, credit notes and supplier advances must share one AP ceiling.
+  for (const purchase of asArray(nextState.purchases).filter(item =>
+    item.documentType === '01' && item.paymentTerm === 'CREDITO' && !item.isCancelled)) {
+    const paidUsd = asArray(nextState.creditSettlements).filter(item =>
+      item.companyId === purchase.companyId && item.documentId === purchase.id &&
+      item.kind === 'PURCHASE_PAYMENT' && !item.isReversed)
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const creditedUsd = asArray(nextState.purchases).filter(item =>
+      item.companyId === purchase.companyId && item.originalPurchaseId === purchase.id &&
+      item.documentType === '03' && !item.isCancelled)
+      .reduce((sum, item) => sum + Number(item.netPayableReductionUsd || 0), 0);
+    const appliedUsd = advanceSettlements.filter(item =>
+      item.companyId === purchase.companyId && item.kind === 'APPLIED_TO_PURCHASE' &&
+      item.targetPurchaseId === purchase.id && !item.isReversed)
+      .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const netUsd = Number(purchase.totalAmountUsd) -
+      Number(purchase.vatWithheldUsd || 0) - Number(purchase.islrWithheldUsd || 0);
+    if (paidUsd + creditedUsd + appliedUsd > netUsd + 0.005) {
+      throw new Error('SQLite rechazó pagos, notas de crédito y anticipos aplicados que superan el principal neto de una factura por pagar.');
+    }
+  }
 
   // Direct supplier advances are append-only financial source records.
   const directAdvances = asArray(nextState.supplierDirectAdvances);
