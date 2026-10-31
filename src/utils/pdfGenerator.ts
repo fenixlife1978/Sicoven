@@ -431,17 +431,17 @@ export async function exportBalanceGeneralPdf(
   costosAccounts: any[],
   gastosAccounts: any[],
   totals: {
-    totalActivoBs: number;
-    totalPasivoBs: number;
-    totalPatrimonioBs: number;
-    totalPasivoPatrimonioBs: number;
-    totalIngresosBs: number;
-    totalCostosBs: number;
-    totalGastosBs: number;
-    utilidadNetaBs: number;
+    totalActivoBs: number; totalActivoUsd: number;
+    totalPasivoBs: number; totalPasivoUsd: number;
+    totalPatrimonioBs: number; totalPatrimonioUsd: number;
+    totalPasivoPatrimonioBs: number; totalPasivoPatrimonioUsd: number;
+    totalIngresosBs: number; totalIngresosUsd: number;
+    totalCostosBs: number; totalCostosUsd: number;
+    totalGastosBs: number; totalGastosUsd: number;
+    utilidadNetaBs: number; utilidadNetaUsd: number;
   }
 ) {
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
+  const doc = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'letter' });
 
   const startY = await addPdfHeader(
     doc,
