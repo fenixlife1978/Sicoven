@@ -16,6 +16,7 @@ import {
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
 import { prepareAccountForCatalog } from '../types/chartOfAccounts';
+import { validateJournalEntryAccounts } from '../types/journalEntryValidation';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -737,6 +738,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (currentCompany.closedThroughDate && entry.date <= currentCompany.closedThroughDate) {
       throw new Error('No se pueden registrar asientos en un período cerrado hasta ' + currentCompany.closedThroughDate + '.');
     }
+    if (!Array.isArray(entry.items)) throw new Error('El asiento debe contener líneas contables válidas.');
+    validateJournalEntryAccounts(entry.items, accounts);
     // Verificación de Asientos: Validación estricta de Partida Doble (Débito = Crédito)
     const totalDebitBs = entry.items.reduce((sum, item) => sum + (Number(item.debitBs) || 0), 0);
     const totalCreditBs = entry.items.reduce((sum, item) => sum + (Number(item.creditBs) || 0), 0);
