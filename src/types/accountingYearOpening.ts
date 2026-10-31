@@ -66,12 +66,16 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
       totals.debitUsd += Number(line.debitUsd);
       totals.creditUsd += Number(line.creditUsd);
 
-      if (entry.date >= input.periodStartDate && account.type === 'INGRESOS') {
-        profitLoss.bs += Number(line.creditBs) - Number(line.debitBs);
-        profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
-      } else if (entry.date >= input.periodStartDate && (account.type === 'COSTOS' || account.type === 'GASTOS')) {
-        profitLoss.bs += Number(line.debitBs) - Number(line.creditBs);
-        profitLoss.usd += Number(line.debitUsd) - Number(line.creditUsd);
+      if (account.type === 'INGRESOS') {
+        if (entry.date >= input.periodStartDate) {
+          profitLoss.bs += Number(line.creditBs) - Number(line.debitBs);
+          profitLoss.usd += Number(line.creditUsd) - Number(line.debitUsd);
+        }
+      } else if (account.type === 'COSTOS' || account.type === 'GASTOS') {
+        if (entry.date >= input.periodStartDate) {
+          profitLoss.bs += Number(line.debitBs) - Number(line.creditBs);
+          profitLoss.usd += Number(line.debitUsd) - Number(line.creditUsd);
+        }
       } else {
         const current = balances.get(account.code) || emptyTotals();
         current.debitBs += Number(line.debitBs);
