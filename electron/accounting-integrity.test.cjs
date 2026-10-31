@@ -1547,3 +1547,31 @@ test('SQLite validates the full contado purchase matrix: cash/bank, currencies, 
     ...base.state, purchases: [...base.state.purchases, duplicate]
   }), /factura de compra duplicada/);
 });
+
+test('SQLite blocks new journal entries and source documents dated inside a closed period', () => {
+  const company = { id: 'company-1', name: 'Empresa de prueba', closedThroughDate: '2026-09-30' };
+  const prior = { ...emptyState(), companies: [company] };
+  const entry = { ...sourceEntry(), date: '2026-09-30' };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [entry]
+  }), /período cerrado/);
+  const purchase = { id: 'purchase-1', companyId: 'company-1', invoiceDate: '2026-09-15' };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, purchases: [purchase]
+  }), /período cerrado/);
+  const sale = { id: 'sale-1', companyId: 'company-1', invoiceDate: '2026-09-01' };
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...prior, sales: [sale]
+  }), /período cerrado/);
+  const openEntry = { ...entry, id: 'entry-open', date: '2026-10-01' };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...prior, journalEntries: [openEntry]
+  }));
+});
+
+test('SQLite permits closing an existing historical period without treating prior transactions as new', () => {
+  const entry = sourceEntry();
+  const prior = { ...emptyState([entry]), companies: [{ id: 'company-1', name: 'Empresa' }] };
+  const next = { ...prior, companies: [{ id: 'company-1', name: 'Empresa', closedThroughDate: '2026-10-01' }] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, next));
+});

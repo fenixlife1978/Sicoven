@@ -218,11 +218,40 @@ function validateNewAccountCatalogEntries(previousAccounts, nextAccounts) {
   }
 }
 
+function validateNoNewTransactionsInClosedPeriods(previousState, nextState) {
+  const priorCompanies = new Map(asArray(previousState.companies).map(company => [String(company.id), company]));
+  const closedByCompany = new Map(asArray(nextState.companies)
+    .filter(company => company.closedThroughDate)
+    .map(company => [String(company.id), String(company.closedThroughDate)]));
+  const collections = [
+    ['journalEntries', 'date', 'asiento contable'],
+    ['purchases', 'invoiceDate', 'factura de compra'],
+    ['sales', 'invoiceDate', 'factura de venta'],
+    ['movements', 'date', 'movimiento de inventario']
+  ];
+  for (const [collection, dateField, label] of collections) {
+    const priorIds = new Set(asArray(previousState[collection]).map(item => String(item.id)));
+    for (const item of asArray(nextState[collection])) {
+      if (priorIds.has(String(item.id))) continue;
+      const closedThrough = closedByCompany.get(String(item.companyId));
+      const transactionDate = String(item[dateField] || '');
+      if (closedThrough && /^\d{4}-\d{2}-\d{2}$/.test(transactionDate) && transactionDate <= closedThrough) {
+        const company = priorCompanies.get(String(item.companyId)) ||
+          asArray(nextState.companies).find(candidate => String(candidate.id) === String(item.companyId));
+        throw new Error('SQLite bloqueó el registro de ' + label + ' con fecha ' + transactionDate +
+          ' en el período cerrado de ' + (company?.name || item.companyId) +
+          ' (cerrado hasta ' + closedThrough + '). Registre la operación en un período abierto.');
+      }
+    }
+  }
+}
+
 function validateAccountingSnapshot(previousState, nextState) {
   if (!nextState || typeof nextState !== 'object' || Array.isArray(nextState)) {
     throw new Error('Estado contable inválido.');
   }
   const priorState = previousState && typeof previousState === 'object' ? previousState : {};
+  validateNoNewTransactionsInClosedPeriods(priorState, nextState);
   if (asArray(priorState.accounts).length > 0) {
     validateNewAccountCatalogEntries(priorState.accounts, nextState.accounts);
   }
