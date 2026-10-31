@@ -3717,7 +3717,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             !data.journalEntries.some((j: any) => j.id === item.journalEntryId && j.companyId === item.companyId)) return true;
         advanceIds.add(item.id);
         if (item.kind === 'APPLIED_TO_PURCHASE') {
-          const target = data.purchases.find((p: any) => p.id === item.targetPurchaseId && p.companyId === item.companyId && p.documentType === '01');
+          const target = data.purchases.find((p: any) => p.id === item.targetPurchaseId && p.companyId === item.companyId && p.documentType === '01' && p.paymentTerm === 'CREDITO');
           return !target || String(target.supplierRif).trim().toUpperCase() !== String(item.supplierRif).trim().toUpperCase();
         }
         return !data.bankAccounts.some((b: any) => b.companyId === item.companyId && b.accountCode === item.treasuryAccountCode);
