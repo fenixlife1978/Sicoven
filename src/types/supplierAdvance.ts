@@ -13,7 +13,8 @@ export interface SupplierAdvanceBalance {
   directAdvanceCount: number;
 }
 
-const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const moneyBs = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+const moneyUsd = (value: number) => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
 
 /** Sums only active supplier credit notes; reversed/cancelled notes cannot fund a later settlement. */
 export function calculateSupplierAdvanceBalance(
@@ -30,10 +31,10 @@ export function calculateSupplierAdvanceBalance(
   );
   const direct = directAdvances.filter(item => !item.isReversed &&
     String(item.supplierRif || '').trim().toUpperCase() === normalizedRif);
-  const totalDirectBs = money(direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0));
-  const totalDirectUsd = money(direct.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0));
-  const totalCreditUsd = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) + totalDirectUsd);
-  const totalCreditBs = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) + totalDirectBs);
+  const totalDirectBs = moneyBs(direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0));
+  const totalDirectUsd = moneyUsd(direct.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0));
+  const totalCreditUsd = moneyUsd(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) + totalDirectUsd);
+  const totalCreditBs = moneyBs(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) + totalDirectBs);
   return {
     supplierRif: normalizedRif,
     supplierName: notes[0]?.supplierName || direct[0]?.supplierName || '',
@@ -67,8 +68,8 @@ export function calculateOutstandingSupplierAdvance(
   );
   const usedUsd = active.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
   const usedBs = active.reduce((sum, item) => sum + Number(item.advanceBookValueBs ?? item.amountBs ?? 0), 0);
-  const outstandingUsd = money(balance.totalCreditUsd - usedUsd);
-  const outstandingBs = money(balance.totalCreditBs - usedBs);
+  const outstandingUsd = moneyUsd(balance.totalCreditUsd - usedUsd);
+  const outstandingBs = moneyBs(balance.totalCreditBs - usedBs);
   if (outstandingUsd < -0.005 || outstandingBs < -0.02) {
     throw new Error('Las liquidaciones históricas exceden los anticipos registrados. Se requiere conciliación antes de continuar.');
   }
@@ -86,7 +87,7 @@ export function validateSupplierAdvanceSettlement(
       !Number.isFinite(requestedUsd) || requestedUsd <= 0) {
     return 'El saldo disponible y el importe a liquidar deben ser válidos; el importe debe ser mayor que cero.';
   }
-  if (requestedUsd > availableUsd + 0.005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
+  if (requestedUsd > availableUsd + 0.000005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
   const source = String(supplierRif || '').trim().toUpperCase();
   if (!source) return 'La liquidación no tiene un proveedor de origen identificado.';
   if (targetSupplierRif != null && String(targetSupplierRif).trim().toUpperCase() !== source) {
