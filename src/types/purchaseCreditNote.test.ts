@@ -165,6 +165,20 @@ test('rechaza líneas de factura duplicadas o con cantidades y costos inválidos
   })), /duplicadas o contienen cantidades\/costos inválidos/);
 });
 
+test('bloquea devoluciones cuando la retención ISLR original usa sustraendo', () => {
+  const naturalPersonPurchase = {
+    ...purchase,
+    islrConceptCode: '002',
+    islrConceptName: 'Honorarios profesionales a persona natural residente',
+    islrRate: 3,
+    islrSubtrahendBs: 107.50,
+    islrWithheldBs: 192.50
+  };
+  assert.throws(() => calculatePurchaseCreditNote(draft({
+    purchase: naturalPersonPurchase
+  })), /tiene sustraendo; el prorrateo automático no es fiscalmente fiable/);
+});
+
 test('rechaza importes fiscales y retenciones incoherentes', () => {
   assert.throws(() => calculatePurchaseCreditNote(draft({
     purchase: { ...purchase, vatWithheldBs: 40 }
