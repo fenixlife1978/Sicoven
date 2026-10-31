@@ -12,7 +12,7 @@ const accounts: Account[] = [
 ];
 
 const entry = (id: string, date: string, type: JournalEntry['type'], items: JournalEntry['items'], exerciseLink?: JournalEntry['exerciseLink']): JournalEntry => ({
-  id, companyId: 'co-1', entryNumber: Number(id.replace(/\\D/g, '')) || 1,
+  id, companyId: 'co-1', entryNumber: Number(id.replace(/\D/g, '')) || 1,
   date, description: id, type, bcvRate: 1, items, createdAt: date, exerciseLink
 });
 
