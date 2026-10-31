@@ -93,7 +93,12 @@ export type HistoricalReportKind = 'SITUACION' | 'RESULTADOS';
  * Closing entries remain part of the cumulative ledger position but are
  * excluded from the annual operating result.
  */
-export function selectHistoricalReportEntries<T extends { companyId: string; date: string; type: string }>(
+export function selectHistoricalReportEntries<T extends {
+  companyId: string;
+  date: string;
+  type: string;
+  exerciseLink?: { nextPeriodStartDate?: string };
+}>(
   entries: T[],
   companyId: string,
   year: number,
@@ -102,10 +107,22 @@ export function selectHistoricalReportEntries<T extends { companyId: string; dat
   if (!Number.isInteger(year) || year < 1) return [];
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
-  return entries.filter(entry => {
-    if (entry.companyId !== companyId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
-    if (entry.date > end) return false;
-    if (kind === 'SITUACION') return true;
-    return entry.date >= start && entry.type !== 'CIERRE';
-  });
+  const validCompanyEntries = entries.filter(entry =>
+    entry.companyId === companyId &&
+    /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date) &&
+    entry.date <= end
+  );
+
+  if (kind === 'RESULTADOS') {
+    return validCompanyEntries.filter(entry => entry.date >= start && entry.type !== 'CIERRE');
+  }
+
+  // An annual opening carries forward the complete prior closing balance.
+  // Once it exists, adding all earlier ledger entries again would duplicate
+  // every balance already represented by that opening journal entry.
+  const latestOpeningDate = validCompanyEntries
+    .filter(entry => entry.type === 'APERTURA')
+    .reduce((latest, entry) => entry.date > latest ? entry.date : latest, '');
+
+  return validCompanyEntries.filter(entry => !latestOpeningDate || entry.date >= latestOpeningDate);
 }
