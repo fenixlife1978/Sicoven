@@ -188,6 +188,9 @@ function validateNewAccountCatalogEntries(previousAccounts, nextAccounts) {
   for (const account of accounts) {
     const code = String(account.code || '').trim();
     if (priorCodes.has(code)) continue; // No reescribir la estructura histórica en esta migración.
+    if (accounts.some(candidate => String(candidate.code || '').startsWith(code + '.'))) {
+      throw new Error('SQLite rechazó insertar un nivel intermedio que cambiaría la jerarquía de cuentas históricas.');
+    }
     const segments = code.split('.');
     if (segments.length < 1 || segments.length > 5 || segments.some(segment => !/^[0-9]+$/.test(segment)) ||
         Number(account.level) !== segments.length || !String(account.name || '').trim() ||
