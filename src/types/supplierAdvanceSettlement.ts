@@ -88,7 +88,7 @@ export function validateSupplierAdvanceSettlementDraft(
       draft.amountUsd <= 0 || draft.amountBs <= 0 || draft.bcvRate <= 0 || availableUsd < 0) {
     return 'Importes, saldo y tasa deben ser válidos y mayores que cero.';
   }
-  if (draft.amountUsd > availableUsd + 0.005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
+  if (draft.amountUsd > availableUsd + 0.000005) return 'La liquidación supera el saldo a favor disponible del proveedor.';
   if (draft.kind === 'REFUND_RECEIVED' && (!Number.isFinite(draft.cashReceivedBs ?? draft.amountBs) || (draft.cashReceivedBs ?? draft.amountBs) <= 0)) return 'El importe efectivamente recibido en Bs debe ser válido.';
   if (draft.kind === 'REFUND_RECEIVED') {
     if (!draft.treasuryAccountCode || !validTreasuryAccountCodes.includes(draft.treasuryAccountCode)) {
@@ -107,7 +107,8 @@ export function validateSupplierAdvanceSettlementDraft(
 }
 
 
-const roundMoney = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
+const roundUsd = (value: number): number => Math.round((value + Number.EPSILON) * 1000000) / 1000000;
+const roundBs = (value: number): number => Math.round((value + Number.EPSILON) * 100) / 100;
 
 /**
  * Allocates a settlement against each source credit note in deterministic FIFO order.
@@ -162,31 +163,31 @@ export function allocateSupplierAdvanceCreditNotes(
         throw new Error('Una liquidación histórica referencia una nota de crédito que no está en el conjunto fuente.');
       }
       const current = usedByNote.get(allocation.creditNoteId) || { usd: 0, bs: 0 };
-      current.usd = roundMoney(current.usd + allocation.amountUsd);
-      current.bs = roundMoney(current.bs + allocation.bookValueBs);
+      current.usd = roundUsd(current.usd + allocation.amountUsd);
+      current.bs = roundBs(current.bs + allocation.bookValueBs);
       usedByNote.set(allocation.creditNoteId, current);
     }
   }
-  let remaining = roundMoney(requestedUsd);
+  let remaining = roundUsd(requestedUsd);
   const result: SupplierAdvanceCreditNoteAllocation[] = [];
   for (const source of sources) {
-    if (remaining <= 0.005) break;
+    if (remaining <= 0.000005) break;
     const used = usedByNote.get(source.id) || { usd: 0, bs: 0 };
-    const availableUsd = roundMoney(source.amountUsd - used.usd);
-    const availableBsRaw = roundMoney(source.bookValueBs - used.bs);
-    if (availableUsd < -0.005 || availableBsRaw < -0.02) {
+    const availableUsd = roundUsd(source.amountUsd - used.usd);
+    const availableBsRaw = roundBs(source.bookValueBs - used.bs);
+    if (availableUsd < -0.000005 || availableBsRaw < -0.02) {
       throw new Error('Las liquidaciones históricas exceden el saldo de la nota de crédito ' + source.id + '.');
     }
     const availableBs = Math.max(0, availableBsRaw);
-    if (availableUsd <= 0.005) continue;
+    if (availableUsd <= 0.000005) continue;
     const takeUsd = Math.min(remaining, availableUsd);
-    const takeBs = takeUsd >= availableUsd - 0.005
+    const takeBs = takeUsd >= availableUsd - 0.000005
       ? availableBs
-      : roundMoney(availableBs * takeUsd / availableUsd);
-    result.push({ creditNoteId: source.id, amountUsd: roundMoney(takeUsd), bookValueBs: takeBs });
-    remaining = roundMoney(remaining - takeUsd);
+      : roundBs(availableBs * takeUsd / availableUsd);
+    result.push({ creditNoteId: source.id, amountUsd: roundUsd(takeUsd), bookValueBs: takeBs });
+    remaining = roundUsd(remaining - takeUsd);
   }
-  if (remaining > 0.005) {
+  if (remaining > 0.000005) {
     throw new Error('La liquidación supera el saldo distribuible de las notas de crédito fuente.');
   }
   return result;
@@ -211,9 +212,9 @@ export function validateSupplierAdvanceCreditNoteAllocations(
   const valid = allocations.every(item => Number.isFinite(item.amountUsd) && item.amountUsd > 0 &&
     Number.isFinite(item.bookValueBs) && item.bookValueBs >= 0);
   if (!valid) return 'La distribución por nota de crédito contiene importes inválidos.';
-  const sumUsd = roundMoney(allocations.reduce((sum, item) => sum + item.amountUsd, 0));
-  const sumBs = roundMoney(allocations.reduce((sum, item) => sum + item.bookValueBs, 0));
-  if (Math.abs(sumUsd - roundMoney(amountUsd)) > 0.01 || Math.abs(sumBs - roundMoney(bookValueBs)) > 0.02) {
+  const sumUsd = roundUsd(allocations.reduce((sum, item) => sum + item.amountUsd, 0));
+  const sumBs = roundBs(allocations.reduce((sum, item) => sum + item.bookValueBs, 0));
+  if (Math.abs(sumUsd - roundUsd(amountUsd)) > 0.00001 || Math.abs(sumBs - roundBs(bookValueBs)) > 0.02) {
     return 'La distribución individual no coincide con el importe liquidado ni con su valor histórico.';
   }
   return null;
