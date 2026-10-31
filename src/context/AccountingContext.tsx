@@ -1301,6 +1301,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         item.islrUnitTaxValueBs !== purchaseData.islrUnitTaxValueBs ||
         item.islrFormulaFactor !== purchaseData.islrFormulaFactor ||
         item.islrBasePercentage !== purchaseData.islrBasePercentage ||
+        !Number.isFinite(Number(item.taxableBaseBs)) || Number(item.taxableBaseBs) < 0 ||
         !Number.isFinite(Number(item.islrWithheldBs)) ||
         !Number.isFinite(Number(item.islrSubtrahendBs))
       )) {
@@ -1310,8 +1311,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchaseData.taxableBaseBs,
         priorMonthlyOperations.map(item => ({
           baseAmountBs: item.taxableBaseBs,
-          withheldAmountBs: item.islrWithheldBs || 0,
-          subtrahendBs: item.islrSubtrahendBs || 0
+          withheldAmountBs: item.islrWithheldBs,
+          subtrahendBs: item.islrSubtrahendBs
         })),
         concept
       );
