@@ -54,7 +54,10 @@ export interface CashFlowIndirectReport {
 
 const finite = (value: unknown): number => {
   const n = Number(value ?? 0);
-  return Number.isFinite(n) ? n : 0;
+  if (!Number.isFinite(n)) {
+    throw new Error('El Estado de Flujos de Efectivo no puede calcularse: existe un importe no finito en un movimiento contable.');
+  }
+  return n;
 };
 const round = (value: number, places: number) => {
   const factor = 10 ** places;
