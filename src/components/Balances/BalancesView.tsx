@@ -49,13 +49,21 @@ export const BalancesView: React.FC = () => {
           gastosAccounts,
           {
             totalActivoBs,
+            totalActivoUsd,
             totalPasivoBs,
+            totalPasivoUsd,
             totalPatrimonioBs,
+            totalPatrimonioUsd,
             totalPasivoPatrimonioBs,
+            totalPasivoPatrimonioUsd,
             totalIngresosBs,
+            totalIngresosUsd,
             totalCostosBs,
+            totalCostosUsd,
             totalGastosBs,
-            utilidadNetaBs
+            totalGastosUsd,
+            utilidadNetaBs,
+            utilidadNetaUsd
           }
         );
       }
