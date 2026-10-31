@@ -115,7 +115,7 @@ test('SQLite accepts a direct supplier advance refund allocated to its original 
   const next = {
     ...emptyState([directJournal, refundJournal]), accounts,
     supplierDirectAdvances: [source], supplierAdvanceSettlements: [settlement],
-    bankAccounts: [{ id: 'cash-account', companyId: 'company-1', accountCode: '1.1.1.01' }]
+    bankAccounts: []
   };
   assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
   assert.throws(() => validateAccountingSnapshot(previous, {
