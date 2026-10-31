@@ -10,7 +10,8 @@ import {
   Building,
   FileCheck,
   Plus,
-  Download
+  Download,
+  Wallet
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
 import { getUnclosedResultContribution, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
@@ -18,6 +19,7 @@ import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
 import { AnnualReportsView } from './AnnualReportsView';
+import { CashFlowStatementView } from './CashFlowStatementView';
 import {
   exportBalanceComprobacionPdf,
   exportBalanceAjustadoPdf,
@@ -27,7 +29,7 @@ import {
 export const BalancesView: React.FC = () => {
   const { currentCompany, accounts, journalEntries, displayCurrency } = useAccounting();
 
-  const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO' | 'ANUAL'>('COMPROBACION');
+  const [activeReport, setActiveReport] = useState<'COMPROBACION' | 'AJUSTADO' | 'GENERAL' | 'HISTORICO' | 'ANUAL' | 'FLUJO'>('COMPROBACION');
   const [isAdjustmentModalOpen, setIsAdjustmentModalOpen] = useState(false);
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -348,6 +350,10 @@ export const BalancesView: React.FC = () => {
     return <AnnualReportsView onBack={() => setActiveReport("GENERAL")} />;
   }
 
+  if (activeReport === "FLUJO") {
+    return <CashFlowStatementView onBack={() => setActiveReport("GENERAL")} />;
+  }
+
   return (
     <div className="space-y-6">
       {/* Official Header with Selected Company Logo */}
@@ -442,6 +448,18 @@ export const BalancesView: React.FC = () => {
           >
             <TrendingUp className="w-4 h-4 text-emerald-500" />
             4. Balances históricos
+          </button>
+
+          <button
+            onClick={() => setActiveReport('FLUJO')}
+            className={`px-4 py-2 rounded-xl text-xs font-bold transition flex items-center gap-2 cursor-pointer ${
+              activeReport === 'FLUJO'
+                ? 'bg-slate-900 text-white shadow-md'
+                : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+            }`}
+          >
+            <Wallet className="w-4 h-4 text-emerald-500" />
+            Estado de Flujos de Efectivo
           </button>
 
           <button
