@@ -286,27 +286,44 @@ export const BalancesView: React.FC = () => {
   );
   const utilidadNetaUsd = totalIngresosUsd - totalCostosUsd - totalGastosUsd;
 
-  // When a CIERRE entry transfers the fiscal result into equity, the
-  // balance-sheet equity accounts already contain it; do not add it twice.
-  const hasResultClosingEntry = companyJournalEntries.some(entry =>
+  // The balance sheet must include only the unclosed result since the latest
+  // result-transfer entry. Prior closed results are already inside equity.
+  const resultClosingEntries = companyJournalEntries.filter(entry =>
     entry.type === 'CIERRE' &&
     entry.items.some(item => accounts.find(account => account.code === item.accountCode)?.type === 'PATRIMONIO') &&
     entry.items.some(item => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(
       accounts.find(account => account.code === item.accountCode)?.type || ''
     ))
   );
+  const latestResultClosingDate = resultClosingEntries.reduce(
+    (latest, entry) => entry.date > latest ? entry.date : latest,
+    ''
+  );
+  const unclosedResult = companyJournalEntries
+    .filter(entry => !latestResultClosingDate || entry.date > latestResultClosingDate)
+    .reduce((result, entry) => {
+      for (const item of entry.items) {
+        const accountType = accounts.find(account => account.code === item.accountCode)?.type;
+        const sign = accountType === 'INGRESOS' || accountType === 'COSTOS' || accountType === 'GASTOS'
+          ? 1 : 0;
+        if (!sign) continue;
+        result.bs += Number(item.creditBs || 0) - Number(item.debitBs || 0);
+        result.usd += Number(item.creditUsd || 0) - Number(item.debitUsd || 0);
+      }
+      return result;
+    }, { bs: 0, usd: 0 });
 
   const patrimonioBaseBs = patrimonioAccounts.reduce(
     (s, a) => s + (a.adjustedCreditBs - a.adjustedDebitBs),
     0
   );
-  const totalPatrimonioBs = patrimonioBaseBs + (hasResultClosingEntry ? 0 : utilidadNetaBs);
+  const totalPatrimonioBs = patrimonioBaseBs + unclosedResult.bs;
 
   const patrimonioBaseUsd = patrimonioAccounts.reduce(
     (s, a) => s + (a.adjustedCreditUsd - a.adjustedDebitUsd),
     0
   );
-  const totalPatrimonioUsd = patrimonioBaseUsd + (hasResultClosingEntry ? 0 : utilidadNetaUsd);
+  const totalPatrimonioUsd = patrimonioBaseUsd + unclosedResult.usd;
 
   const totalPasivoPatrimonioBs = totalPasivoBs + totalPatrimonioBs;
   const totalPasivoPatrimonioUsd = totalPasivoUsd + totalPatrimonioUsd;
