@@ -936,7 +936,10 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó un asiento de anticipo descuadrado o que no descarga el valor histórico correcto.');
     }
     if (settlement.kind === 'REFUND_RECEIVED') {
-      const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode);
+      const bank = nextBankAccounts.find(item => item.companyId === companyId && item.accountCode === settlement.treasuryAccountCode && item.currency === 'BS');
+      const treasuryAccount = asArray(nextState.accounts).find(item => item.code === settlement.treasuryAccountCode);
+      const validCashAccount = treasuryAccount && treasuryAccount.type === 'ACTIVO' &&
+        treasuryAccount.isMovement === true && treasuryAccount.code === '1.1.1.01';
       const cashReceivedBs = Number(settlement.cashReceivedBs ?? 0);
       const treasuryDebit = journal.items.reduce((sum, item) =>
         sum + (item.accountCode === settlement.treasuryAccountCode ? Number(item.debitBs || 0) : 0), 0);
@@ -947,7 +950,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
       const allowedCodes = new Set([settlement.treasuryAccountCode, '1.1.2.03',
         ...(expectedFx > 0.009 ? ['4.2.1.01'] : expectedFx < -0.009 ? ['6.1.1.08'] : [])]);
-      if (!bank || cashReceivedBs <= 0 ||
+      if ((!bank && !validCashAccount) || cashReceivedBs <= 0 ||
           Math.abs(treasuryDebit - cashReceivedBs) >= 0.01 ||
           journal.items.some(item => !allowedCodes.has(item.accountCode)) ||
           Math.abs(gainBs - Math.max(0, expectedFx)) >= 0.01 ||
