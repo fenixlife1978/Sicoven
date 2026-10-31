@@ -36,7 +36,7 @@ function createHarness({ authorized = true, validSession = true } = {}) {
     },
     getActiveSession: token => {
       calls.session.push(token);
-      return validSession && token === 'valid-session' ? { id: 1 } : null;
+      return validSession && token === 'valid-session' ? { id: 1, username: 'auditor', role: 'admin' } : null;
     }
   });
   return { db, handler: handlers.get('sicoven:save-state'), calls };
@@ -177,7 +177,8 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
       ],
       journalEntries: [opening]
     };
-    persistAccountingSnapshot(harness.db, snapshot);
+    const saved = harness.handler({}, 'valid-session', snapshot);
+    assert.equal(saved.ok, true);
     const event = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='accounting_year_opening_posted'").get();
     assert.ok(event);
     const details = JSON.parse(event.details_json);
@@ -185,6 +186,7 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
     assert.equal(details.companyId, opening.companyId);
     assert.equal(details.openingDate, opening.date);
     assert.equal(details.referenceDoc, opening.referenceDoc);
+    assert.deepEqual(details.actor, { userId: 1, username: 'auditor' });
     const types = harness.db.prepare("SELECT event_type FROM audit_events ORDER BY id").all().map(row => row.event_type);
     assert.deepEqual(types, ['journal_entry_posted', 'accounting_year_opening_posted', 'state_saved']);
   } finally {
