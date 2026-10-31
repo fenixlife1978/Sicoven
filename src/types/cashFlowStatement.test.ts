@@ -71,6 +71,8 @@ describe('cash flow statement', () => {
     assert.equal(report.unclassifiedNetBs, -30);
     assert.equal(report.activities.SIN_CLASIFICAR.paymentsBs, 30);
     assert.equal(report.isFullyClassified, false);
+    assert.equal(report.lines.length, 1);
+    assert.equal(report.lines[0].activity, 'SIN_CLASIFICAR');
     assert.equal(report.isReconciled, true);
   });
 
