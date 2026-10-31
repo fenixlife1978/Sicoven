@@ -491,7 +491,7 @@ app.whenReady().then(async () => {
     const emptyState = {
       companies: [], currentCompanyId: '', accounts: [],
       journalEntries: [], purchases: [], sales: [], products: [], movements: [], vatVouchers: [], islrVouchers: [],
-      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], supplierAdvanceSettlements: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
+      bankAccounts: [], bankStatementMovements: [], creditSettlements: [], supplierAdvanceSettlements: [], islrFiscalEvents: [], displayCurrency: 'DUAL', autoSyncBcv: true, bcvSyncResult: null
     };
     const reset = db.transaction(() => {
       db.prepare('DELETE FROM app_state').run();
@@ -506,7 +506,7 @@ app.whenReady().then(async () => {
     const persisted = db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get();
     const verified = persisted ? JSON.parse(persisted.state_json) : null;
     if (!verified || verified.companies?.length !== 0 ||
-        ['journalEntries','purchases','sales','products','movements','vatVouchers','islrVouchers','bankAccounts','bankStatementMovements','creditSettlements']
+        ['journalEntries','purchases','sales','products','movements','vatVouchers','islrVouchers','bankAccounts','bankStatementMovements','creditSettlements','supplierAdvanceSettlements','islrFiscalEvents']
           .some(key => !Array.isArray(verified[key]) || verified[key].length !== 0)) {
       throw new Error('La verificación posterior al reinicio detectó datos operativos residuales.');
     }
