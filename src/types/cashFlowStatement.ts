@@ -226,8 +226,12 @@ export function buildCashFlowReport(
   const reconciliationDifferenceUsd = ledgerClosing.usd - closingCashUsd;
   const isReconciled = Math.abs(reconciliationDifferenceBs) <= toleranceBs &&
     Math.abs(reconciliationDifferenceUsd) <= toleranceUsd;
-  const isFullyClassified = Math.abs(unclassifiedNetBs) <= toleranceBs &&
-    Math.abs(unclassifiedNetUsd) <= toleranceUsd;
+  const unclassifiedTotals = activities.SIN_CLASIFICAR;
+  const isFullyClassified =
+    unclassifiedTotals.receiptsBs <= toleranceBs &&
+    unclassifiedTotals.paymentsBs <= toleranceBs &&
+    unclassifiedTotals.receiptsUsd <= toleranceUsd &&
+    unclassifiedTotals.paymentsUsd <= toleranceUsd;
   return {
     year, openingCashBs: opening.bs, openingCashUsd: opening.usd,
     netChangeBs, netChangeUsd, closingCashBs, closingCashUsd,
