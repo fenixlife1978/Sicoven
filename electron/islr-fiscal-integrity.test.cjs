@@ -62,6 +62,51 @@ test('reconciles account-credit ISLR event with purchase concept, base and journ
   ), /asiento de compra no concilia/);
 });
 
+test('rejects duplicate ISLR withholding events when partial payments follow the first account-credit trigger', () => {
+  const purchase = {
+    id: 'p-partial', companyId: 'c1', supplierRif: 'J-12345678-9',
+    documentType: '01', invoiceDate: '2026-10-01', invoiceNumber: 'F-PARTIAL',
+    paymentTerm: 'CREDITO', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false,
+    islrConceptCode: '003', islrBasePercentage: 90, islrUnitTaxValueBs: 43, islrWithheldBs: 5
+  };
+  const journal = (id, date, type = 'COMPRA') => ({
+    id, companyId: 'c1', date, type,
+    items: [{ accountCode: '2.1.2.04', debitBs: 0, creditBs: 5 }]
+  });
+  const voucher = {
+    id: 'v-partial', companyId: 'c1', supplierRif: 'J-12345678-9',
+    conceptCode: '003', invoiceNumber: 'F-PARTIAL', invoiceDate: '2026-10-01',
+    baseAmountBs: 100, withheldAmountBs: 5
+  };
+  const accountCredit = {
+    id: 'e-account-credit', companyId: 'c1', supplierRif: purchase.supplierRif,
+    conceptCode: '003', fiscalDate: '2026-10-01', sequence: 1, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 5,
+    journalEntryId: 'j-purchase', voucherId: 'v-partial', createdAt: '2026-10-01T10:00:00.000Z'
+  };
+  const paymentOne = {
+    ...accountCredit, id: 'e-payment-1', fiscalDate: '2026-10-05', sequence: 1,
+    kind: 'PAYMENT', allocations: [{ purchaseId: purchase.id, baseAmountBs: 25 }],
+    journalEntryId: 'j-payment-1', voucherId: undefined
+  };
+  const paymentTwo = {
+    ...paymentOne, id: 'e-payment-2', sequence: 2,
+    allocations: [{ purchaseId: purchase.id, baseAmountBs: 15 }],
+    journalEntryId: 'j-payment-2'
+  };
+  const previous = {
+    purchases: [purchase], journalEntries: [journal('j-purchase', '2026-10-01')],
+    islrVouchers: [voucher], islrFiscalEvents: [accountCredit]
+  };
+  const next = {
+    purchases: [purchase],
+    journalEntries: [journal('j-purchase', '2026-10-01'), journal('j-payment-1', '2026-10-05', 'PAGO'), journal('j-payment-2', '2026-10-06', 'PAGO')],
+    islrVouchers: [voucher], islrFiscalEvents: [accountCredit, paymentOne, paymentTwo]
+  };
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /base fiscal asignada supera la base elegible/);
+});
+
 test('requires and reconciles an ISLR voucher for positive account-credit withholding', () => {
   const purchase = {
     id: 'p1', companyId: 'c1', supplierRif: 'J-12345678-9',
