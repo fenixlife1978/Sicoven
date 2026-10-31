@@ -114,7 +114,7 @@ describe('historical report period selection', () => {
   it('uses only selected-year operating entries for historical income statements', () => {
     assert.deepEqual(
       selectHistoricalReportEntries(entries, 'co-1', 2026, 'RESULTADOS').map(entry => entry.id),
-      ['opening-2026', 'sale-2026']
+      ['sale-2026']
     );
   });
 
