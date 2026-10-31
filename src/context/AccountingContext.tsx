@@ -448,7 +448,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const reopenAccountingPeriod = async (reopenedThroughDate: string | null, reason: string): Promise<void> => {
     if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
-    if (persistenceFaultRef.current || !window.sicovenStore || !storageReady) {
+    const store = window.sicovenStore;
+    if (persistenceFaultRef.current || !store || !storageReady) {
       throw new Error('La reapertura formal requiere SQLite de escritorio disponible y sin errores.');
     }
     if (!currentCompany.id || !currentCompany.closedThroughDate) {
@@ -465,7 +466,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     periodReopeningInFlightRef.current = true;
     try {
       await saveQueueRef.current;
-      const result = await window.sicovenStore.reopenAccountingPeriod(token, {
+      const result = await store.reopenAccountingPeriod(token, {
         companyId: currentCompany.id,
         reopenedThroughDate,
         reason: normalizedReason
@@ -474,7 +475,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         throw new Error('SQLite no confirmó la reapertura contable.');
       }
       const persistenceConfirmation = waitForPersistence();
-      setCompanies(prev => prev.map(company => company.id === currentCompany.id ? result.company : company));
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id
+        ? { ...company, ...(result.company.closedThroughDate ? { closedThroughDate: result.company.closedThroughDate } : { closedThroughDate: undefined }) }
+        : company));
       await persistenceConfirmation;
     } finally {
       periodReopeningInFlightRef.current = false;
