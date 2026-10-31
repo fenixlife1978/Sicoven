@@ -14,7 +14,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
-import { ISLR_CONCEPTS, calculateIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
+import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, VALOR_UNIDAD_TRIBUTARIA_BS, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
   INITIAL_JOURNAL_ENTRIES,
@@ -1284,22 +1284,34 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
       }
-      if (concept.appliesSubtrahend) {
-        const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-        const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
-        const priorMonthlyOperation = purchases.some(item =>
-          item.companyId === currentCompany.id &&
-          !item.isCancelled &&
-          item.documentType === '01' &&
-          String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
-          item.islrConceptCode === concept.code &&
-          String(item.invoiceDate || '').slice(0, 7) === monthKey
-        );
-        if (priorMonthlyOperation) {
-          throw new Error('Este proveedor ya tiene una operación ISLR del mismo concepto en el período mensual. Para evitar aplicar el sustraendo más de una vez o subretener, la operación queda bloqueada hasta disponer del cálculo acumulado y su conciliación fiscal.');
-        }
+      const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
+      const priorMonthlyOperations = purchases.filter(item =>
+        item.companyId === currentCompany.id &&
+        !item.isCancelled &&
+        item.documentType === '01' &&
+        String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
+        item.islrConceptCode === concept.code &&
+        String(item.invoiceDate || '').slice(0, 7) === monthKey
+      );
+      if (priorMonthlyOperations.some(item =>
+        item.islrUnitTaxValueBs !== purchaseData.islrUnitTaxValueBs ||
+        item.islrFormulaFactor !== purchaseData.islrFormulaFactor ||
+        item.islrBasePercentage !== purchaseData.islrBasePercentage ||
+        !Number.isFinite(Number(item.islrWithheldBs || 0)) ||
+        !Number.isFinite(Number(item.islrSubtrahendBs || 0))
+      )) {
+        throw new Error('El historial ISLR mensual contiene parámetros incompletos o distintos. Se requiere conciliación fiscal antes de acumular.');
       }
-      const expectedIslr = calculateIslrRetention(purchaseData.taxableBaseBs, concept);
+      const expectedIslr = calculateMonthlyIslrRetention(
+        purchaseData.taxableBaseBs,
+        priorMonthlyOperations.map(item => ({
+          baseAmountBs: item.taxableBaseBs,
+          withheldAmountBs: item.islrWithheldBs || 0,
+          subtrahendBs: item.islrSubtrahendBs || 0
+        })),
+        concept
+      );
       if (Math.abs(expectedIslr.withheldAmountBs - Number(purchaseData.islrWithheldBs)) > 0.01 ||
           Math.abs(expectedIslr.subtrahendBs - Number(purchaseData.islrSubtrahendBs || 0)) > 0.01 ||
           Math.abs(expectedIslr.rate - Number(purchaseData.islrRate || 0)) > 0.001) {
