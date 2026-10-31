@@ -112,9 +112,21 @@ export function buildCashFlowIndirectReport(
     }
   }
 
+  const isTreatmentCompatible = (account: Account) => {
+    const treatment = account.cashFlowIndirectTreatment;
+    if (!treatment || treatment === 'EXCLUDE') return true;
+    if (treatment === 'NON_CASH_EXPENSE_ADD_BACK') return account.type === 'COSTOS' || account.type === 'GASTOS';
+    if (treatment === 'NON_CASH_INCOME_DEDUCT') return account.type === 'INGRESOS';
+    if (treatment === 'OPERATING_ASSET_INCREASE_DEDUCT') return account.type === 'ACTIVO';
+    if (treatment === 'OPERATING_LIABILITY_INCREASE_ADD') return account.type === 'PASIVO';
+    return false;
+  };
+  const invalidTreatments = accounts.some(account =>
+    account.cashFlowIndirectTreatment !== undefined && !isTreatmentCompatible(account)
+  );
   const classifiedAccounts = accounts.filter(account =>
     account.isMovement && account.cashFlowIndirectTreatment &&
-    account.cashFlowIndirectTreatment !== 'EXCLUDE'
+    account.cashFlowIndirectTreatment !== 'EXCLUDE' && isTreatmentCompatible(account)
   );
   for (const account of classifiedAccounts) {
     const treatment = account.cashFlowIndirectTreatment!;
@@ -172,20 +184,19 @@ export function buildCashFlowIndirectReport(
   const netChangeUsd = round(operatingCashFlowUsd + investingCashFlowUsd + financingCashFlowUsd, 2);
   const reconciliationDifferenceBs = round(direct.ledgerClosingCashBs - (direct.openingCashBs + netChangeBs), 2);
   const reconciliationDifferenceUsd = round(direct.ledgerClosingCashUsd - (direct.openingCashUsd + netChangeUsd), 2);
-  const classifiedCodes = new Set(classifiedAccounts.map(account => account.code));
   const unclassifiedPnl = accounts.some(account =>
     account.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
-    account.cashFlowActivity !== 'OPERACION' && account.cashFlowIndirectTreatment === undefined
+    account.cashFlowActivity !== 'OPERACION' && (!account.cashFlowIndirectTreatment || !isTreatmentCompatible(account))
   );
   const unclassifiedBalanceChanges = accounts.some(account =>
     account.isMovement && ['ACTIVO', 'PASIVO'].includes(account.type) &&
     !account.code.startsWith('1.1.1.') && account.cashFlowActivity !== 'EFECTIVO_EQUIVALENTE' &&
     account.cashFlowActivity !== 'INVERSION' && account.cashFlowActivity !== 'FINANCIACION' &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
-    account.cashFlowIndirectTreatment === undefined
+    (!account.cashFlowIndirectTreatment || !isTreatmentCompatible(account))
   );
-  const isFullyClassified = direct.isFullyClassified && !unclassifiedPnl && !unclassifiedBalanceChanges;
+  const isFullyClassified = direct.isFullyClassified && !unclassifiedPnl && !unclassifiedBalanceChanges && !invalidTreatments;
   return {
     year, netIncomeBs: round(netIncomeBs, 2), netIncomeUsd: round(netIncomeUsd, 2),
     nonCashAdjustmentsBs: round(nonCashAdjustmentsBs, 2), nonCashAdjustmentsUsd: round(nonCashAdjustmentsUsd, 2),
