@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   filterEntriesByCompany,
   getAccountBalanceNature,
+  getUnclosedResultContribution,
   hasAccountMovement,
   isBalanceSheetBalanced,
   isTrialBalanceBalanced,
@@ -63,6 +64,13 @@ describe('accounting report integrity', () => {
     assert.equal(isTrialBalanceBalanced({ ...totals, totalDebitBs: -1 }), false);
   });
 
+  it('applies income, cost and expense signs to unclosed result in both currencies', () => {
+    assert.deepEqual(getUnclosedResultContribution('INGRESOS', 0, 100, 0, 10), { bs: 100, usd: 10 });
+    assert.deepEqual(getUnclosedResultContribution('COSTOS', 30, 0, 3, 0), { bs: -30, usd: -3 });
+    assert.deepEqual(getUnclosedResultContribution('GASTOS', 20, 0, 2, 0), { bs: -20, usd: -2 });
+    assert.deepEqual(getUnclosedResultContribution('ACTIVO', 20, 10, 2, 1), { bs: 0, usd: 0 });
+  });
+
   it('labels debit and credit nature according to normal account balance', () => {
     assert.equal(getAccountBalanceNature(25, true), 'DEUDOR');
     assert.equal(getAccountBalanceNature(-25, true), 'ACREEDOR');
@@ -74,10 +82,11 @@ describe('accounting report integrity', () => {
 
 describe('historical report period selection', () => {
   const entries = [
-    { id: 'opening-2025', companyId: 'co-1', date: '2025-01-01', type: 'APERTURA' },
+    { id: 'opening-2025', companyId: 'co-1', date: '2025-01-01', type: 'APERTURA', exerciseLink: { nextPeriodStartDate: '2025-01-01' } },
     { id: 'sale-2025', companyId: 'co-1', date: '2025-06-30', type: 'VENTA' },
     { id: 'closing-2025', companyId: 'co-1', date: '2025-12-31', type: 'CIERRE' },
-    { id: 'opening-2026', companyId: 'co-1', date: '2026-01-01', type: 'APERTURA' },
+    { id: 'opening-2026', companyId: 'co-1', date: '2026-01-01', type: 'APERTURA', exerciseLink: { nextPeriodStartDate: '2026-01-01' } },
+    { id: 'bank-opening-2026', companyId: 'co-1', date: '2026-02-01', type: 'APERTURA' },
     { id: 'sale-2026', companyId: 'co-1', date: '2026-03-15', type: 'VENTA' },
     { id: 'closing-2026', companyId: 'co-1', date: '2026-12-31', type: 'CIERRE' },
     { id: 'future-2027', companyId: 'co-1', date: '2027-01-01', type: 'MANUAL' },
@@ -87,14 +96,25 @@ describe('historical report period selection', () => {
   it('uses cumulative ledger entries through year-end for historical situation reports', () => {
     assert.deepEqual(
       selectHistoricalReportEntries(entries, 'co-1', 2026, 'SITUACION').map(entry => entry.id),
-      ['opening-2025', 'sale-2025', 'closing-2025', 'opening-2026', 'sale-2026', 'closing-2026']
+      ['opening-2026', 'bank-opening-2026', 'sale-2026', 'closing-2026']
     );
+  });
+
+  it('keeps the prior exercise cumulative but resets at the next annual opening', () => {
+    assert.deepEqual(
+      selectHistoricalReportEntries(entries, 'co-1', 2025, 'SITUACION').map(entry => entry.id),
+      ['opening-2025', 'sale-2025', 'closing-2025']
+    );
+    const selected2026 = selectHistoricalReportEntries(entries, 'co-1', 2026, 'SITUACION');
+    assert.equal(selected2026.some(entry => entry.id === 'sale-2025'), false);
+    assert.equal(selected2026.some(entry => entry.id === 'opening-2026'), true);
+    assert.equal(selected2026.some(entry => entry.id === 'bank-opening-2026'), true);
   });
 
   it('uses only selected-year operating entries for historical income statements', () => {
     assert.deepEqual(
       selectHistoricalReportEntries(entries, 'co-1', 2026, 'RESULTADOS').map(entry => entry.id),
-      ['opening-2026', 'sale-2026']
+      ['sale-2026']
     );
   });
 

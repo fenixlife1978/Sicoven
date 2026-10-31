@@ -85,15 +85,43 @@ export function getAccountBalanceNature(
 }
 
 
+export type IncomeStatementAccountType = 'INGRESOS' | 'COSTOS' | 'GASTOS';
+
+export interface ResultContribution {
+  bs: number;
+  usd: number;
+}
+
+/** Contribution of an unclosed P&L posting to equity, without cross-currency conversion. */
+export function getUnclosedResultContribution(
+  accountType: string | undefined,
+  debitBs: number,
+  creditBs: number,
+  debitUsd: number,
+  creditUsd: number
+): ResultContribution {
+  if (accountType === 'INGRESOS' || accountType === 'COSTOS' || accountType === 'GASTOS') {
+    // The signed equity contribution is always credit minus debit:
+    // revenue credits increase equity; cost/expense debits decrease it.
+    return { bs: creditBs - debitBs, usd: creditUsd - debitUsd };
+  }
+  return { bs: 0, usd: 0 };
+}
+
 export type HistoricalReportKind = 'SITUACION' | 'RESULTADOS';
 
 /**
- * A statement of financial position is cumulative at year-end, while the
- * income statement reports activity for the selected fiscal year only.
- * Closing entries remain part of the cumulative ledger position but are
- * excluded from the annual operating result.
+ * A statement of financial position uses the latest opening journal as its
+ * carry-forward boundary, preventing prior-year balances from being counted
+ * again when the opening entry already contains them. The income statement
+ * reports activity for the selected fiscal year only.
  */
-export function selectHistoricalReportEntries<T extends { companyId: string; date: string; type: string }>(
+export function selectHistoricalReportEntries<T extends {
+  companyId: string;
+  date: string;
+  type: string;
+  exerciseLink?: { nextPeriodStartDate?: string };
+}>(
   entries: T[],
   companyId: string,
   year: number,
@@ -102,10 +130,22 @@ export function selectHistoricalReportEntries<T extends { companyId: string; dat
   if (!Number.isInteger(year) || year < 1) return [];
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
-  return entries.filter(entry => {
-    if (entry.companyId !== companyId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
-    if (entry.date > end) return false;
-    if (kind === 'SITUACION') return true;
-    return entry.date >= start && entry.type !== 'CIERRE';
-  });
+  const validCompanyEntries = entries.filter(entry =>
+    entry.companyId === companyId &&
+    /^\d{4}-\d{2}-\d{2}$/.test(entry.date) &&
+    entry.date <= end
+  );
+
+  if (kind === 'RESULTADOS') {
+    return validCompanyEntries.filter(entry => entry.date >= start && entry.type !== 'CIERRE' && entry.type !== 'APERTURA');
+  }
+
+  // An annual opening carries forward the complete prior closing balance.
+  // Once it exists, adding all earlier ledger entries again would duplicate
+  // every balance already represented by that opening journal entry.
+  const latestOpeningDate = validCompanyEntries
+    .filter(entry => entry.type === 'APERTURA' && Boolean(entry.exerciseLink?.nextPeriodStartDate))
+    .reduce((latest, entry) => entry.date > latest ? entry.date : latest, '');
+
+  return validCompanyEntries.filter(entry => !latestOpeningDate || entry.date >= latestOpeningDate);
 }

@@ -13,7 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
-import { filterEntriesByCompany, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced } from '../../types/accountingReportIntegrity';
+import { getUnclosedResultContribution, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced, selectHistoricalReportEntries } from '../../types/accountingReportIntegrity';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
@@ -74,12 +74,42 @@ export const BalancesView: React.FC = () => {
     }
   };
 
-  // All report calculations must be isolated to the selected company's ledger.
-  const companyJournalEntries = filterEntriesByCompany(journalEntries, currentCompany.id);
+  // The current statement of financial position starts at the latest annual
+  // opening entry. That entry already carries forward prior closing balances.
+  const companyJournalEntries = selectHistoricalReportEntries(
+    journalEntries, currentCompany.id, Number(currentCompany.fiscalYear), 'SITUACION'
+  );
+  // The income statement always uses operating activity from the selected year,
+  // independently from the balance-sheet carry-forward and excluding CIERRE.
+  const resultEntries = selectHistoricalReportEntries(
+    journalEntries, currentCompany.id, Number(currentCompany.fiscalYear), 'RESULTADOS'
+  );
 
-  // Separate non-adjusted entries and adjusted entries within the selected company.
+  // Separate non-adjusted entries and adjusted entries within the selected company's
+  // balance-sheet period for the trial balance.
   const regularEntries = companyJournalEntries.filter(e => !e.isAdjusted && e.type !== 'AJUSTE');
   const adjustmentEntries = companyJournalEntries.filter(e => e.isAdjusted || e.type === 'AJUSTE');
+
+  // Build the income-statement account balances from the selected fiscal year only.
+  const resultAccountBalances = accounts.map(account => {
+    let debitBs = 0, creditBs = 0, debitUsd = 0, creditUsd = 0;
+    for (const entry of resultEntries) for (const item of entry.items) {
+      if (item.accountCode !== account.code) continue;
+      debitBs += Number(item.debitBs || 0);
+      creditBs += Number(item.creditBs || 0);
+      debitUsd += Number(item.debitUsd || 0);
+      creditUsd += Number(item.creditUsd || 0);
+    }
+    return {
+      ...account,
+      adjustedDebitBs: debitBs,
+      adjustedCreditBs: creditBs,
+      adjustedDebitUsd: debitUsd,
+      adjustedCreditUsd: creditUsd,
+      hasMovement: hasAccountMovement({ debitBs, creditBs, debitUsd, creditUsd })
+    };
+  }).filter(account => account.hasMovement);
+
 
   // Compute balances per account
   const accountBalances = accounts.map(acc => {
@@ -203,9 +233,9 @@ export const BalancesView: React.FC = () => {
   const activoAccounts = activeAccounts.filter(a => a.type === 'ACTIVO');
   const pasivoAccounts = activeAccounts.filter(a => a.type === 'PASIVO');
   const patrimonioAccounts = activeAccounts.filter(a => a.type === 'PATRIMONIO');
-  const ingresosAccounts = activeAccounts.filter(a => a.type === 'INGRESOS');
-  const costosAccounts = activeAccounts.filter(a => a.type === 'COSTOS');
-  const gastosAccounts = activeAccounts.filter(a => a.type === 'GASTOS');
+  const ingresosAccounts = resultAccountBalances.filter(a => a.type === 'INGRESOS');
+  const costosAccounts = resultAccountBalances.filter(a => a.type === 'COSTOS');
+  const gastosAccounts = resultAccountBalances.filter(a => a.type === 'GASTOS');
 
   // Activos netos (Deudor - Acreedor)
   const totalActivoBs = activoAccounts.reduce(
@@ -256,18 +286,49 @@ export const BalancesView: React.FC = () => {
   );
   const utilidadNetaUsd = totalIngresosUsd - totalCostosUsd - totalGastosUsd;
 
-  // Patrimonio Neto = Cuentas de Patrimonio + Utilidad del Ejercicio
+  // The balance sheet must include only the unclosed result since the latest
+  // result-transfer entry. Prior closed results are already inside equity.
+  const resultClosingEntries = companyJournalEntries.filter(entry =>
+    entry.type === 'CIERRE' &&
+    entry.items.some(item => accounts.find(account => account.code === item.accountCode)?.type === 'PATRIMONIO') &&
+    entry.items.some(item => ['INGRESOS', 'COSTOS', 'GASTOS'].includes(
+      accounts.find(account => account.code === item.accountCode)?.type || ''
+    ))
+  );
+  const latestResultClosingDate = resultClosingEntries.reduce(
+    (latest, entry) => entry.date > latest ? entry.date : latest,
+    ''
+  );
+  const unclosedResult = companyJournalEntries
+    .filter(entry => !latestResultClosingDate || entry.date > latestResultClosingDate)
+    .reduce((result, entry) => {
+      for (const item of entry.items) {
+        const accountType = accounts.find(account => account.code === item.accountCode)?.type;
+        if (!['INGRESOS', 'COSTOS', 'GASTOS'].includes(accountType || '')) continue;
+        const contribution = getUnclosedResultContribution(
+          accountType,
+          Number(item.debitBs || 0),
+          Number(item.creditBs || 0),
+          Number(item.debitUsd || 0),
+          Number(item.creditUsd || 0)
+        );
+        result.bs += contribution.bs;
+        result.usd += contribution.usd;
+      }
+      return result;
+    }, { bs: 0, usd: 0 });
+
   const patrimonioBaseBs = patrimonioAccounts.reduce(
     (s, a) => s + (a.adjustedCreditBs - a.adjustedDebitBs),
     0
   );
-  const totalPatrimonioBs = patrimonioBaseBs + utilidadNetaBs;
+  const totalPatrimonioBs = patrimonioBaseBs + unclosedResult.bs;
 
   const patrimonioBaseUsd = patrimonioAccounts.reduce(
     (s, a) => s + (a.adjustedCreditUsd - a.adjustedDebitUsd),
     0
   );
-  const totalPatrimonioUsd = patrimonioBaseUsd + utilidadNetaUsd;
+  const totalPatrimonioUsd = patrimonioBaseUsd + unclosedResult.usd;
 
   const totalPasivoPatrimonioBs = totalPasivoBs + totalPatrimonioBs;
   const totalPasivoPatrimonioUsd = totalPasivoUsd + totalPatrimonioUsd;
