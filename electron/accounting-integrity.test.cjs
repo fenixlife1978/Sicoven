@@ -1095,11 +1095,15 @@ test('SQLite preserves the ISLR fiscal event ledger as append-only history', () 
     id: 'purchase-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
     documentType: '01', taxableBaseBs: 100, exemptAmountBs: 0, isCancelled: false
   };
-  const prior = { ...emptyState([sourceEntry()]), purchases: [purchase], islrFiscalEvents: [fiscalEvent] };
+  const secondPurchase = { ...purchase, id: 'purchase-2' };
+  const prior = { ...emptyState([sourceEntry()]), purchases: [purchase, secondPurchase], islrFiscalEvents: [fiscalEvent] };
   const secondEntry = { ...sourceEntry(), id: 'entry-2', entryNumber: 2 };
   assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
-    ...emptyState([sourceEntry(), secondEntry]), purchases: [purchase],
-    islrFiscalEvents: [fiscalEvent, { ...fiscalEvent, id: 'islr-event-2', sequence: 2, journalEntryId: 'entry-2' }]
+    ...emptyState([sourceEntry(), secondEntry]), purchases: [purchase, secondPurchase],
+    islrFiscalEvents: [fiscalEvent, {
+      ...fiscalEvent, id: 'islr-event-2', sequence: 2, journalEntryId: 'entry-2',
+      allocations: [{ purchaseId: 'purchase-2', baseAmountBs: 100 }]
+    }]
   }));
   assert.throws(() => validateAccountingSnapshot(prior, emptyState([sourceEntry()])), /eliminación del registro histórico en islrFiscalEvents/);
   assert.throws(() => validateAccountingSnapshot(prior, {
