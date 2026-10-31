@@ -13,7 +13,7 @@ import {
   Download
 } from 'lucide-react';
 import { formatBs, formatUsd } from '../../utils/formatters';
-import { hasAccountMovement, isTrialBalanceBalanced } from '../../types/accountingReportIntegrity';
+import { filterEntriesByCompany, hasAccountMovement, isBalanceSheetBalanced, isTrialBalanceBalanced } from '../../types/accountingReportIntegrity';
 import { NewEntryModal } from '../LibroDiario/NewEntryModal';
 import { CompanyLogoHeader } from '../CompanyLogoHeader';
 import { HistoricalBalancesView } from './HistoricalBalancesView';
@@ -66,9 +66,12 @@ export const BalancesView: React.FC = () => {
     }
   };
 
-  // Separate non-adjusted entries and adjusted entries
-  const regularEntries = journalEntries.filter(e => !e.isAdjusted && e.type !== 'AJUSTE');
-  const adjustmentEntries = journalEntries.filter(e => e.isAdjusted || e.type === 'AJUSTE');
+  // All report calculations must be isolated to the selected company's ledger.
+  const companyJournalEntries = filterEntriesByCompany(journalEntries, currentCompany.id);
+
+  // Separate non-adjusted entries and adjusted entries within the selected company.
+  const regularEntries = companyJournalEntries.filter(e => !e.isAdjusted && e.type !== 'AJUSTE');
+  const adjustmentEntries = companyJournalEntries.filter(e => e.isAdjusted || e.type === 'AJUSTE');
 
   // Compute balances per account
   const accountBalances = accounts.map(acc => {
@@ -261,7 +264,12 @@ export const BalancesView: React.FC = () => {
   const totalPasivoPatrimonioBs = totalPasivoBs + totalPatrimonioBs;
   const totalPasivoPatrimonioUsd = totalPasivoUsd + totalPatrimonioUsd;
 
-  const ecuacionCuadrada = Math.abs(totalActivoBs - totalPasivoPatrimonioBs) < 0.05;
+  const ecuacionCuadrada = isBalanceSheetBalanced({
+    totalAssetsBs: totalActivoBs,
+    totalLiabilitiesAndEquityBs: totalPasivoPatrimonioBs,
+    totalAssetsUsd: totalActivoUsd,
+    totalLiabilitiesAndEquityUsd: totalPasivoPatrimonioUsd
+  });
 
   if (activeReport === "HISTORICO") {
     return <HistoricalBalancesView onBack={() => setActiveReport("GENERAL")} />;
@@ -660,11 +668,11 @@ export const BalancesView: React.FC = () => {
                 </div>
 
                 {ecuacionCuadrada ? (
-                  <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30" title="Balance Exactamente Cuadrado">
+                  <span className="p-2 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30" title="Ecuación patrimonial cuadrada en Bs. y USD">
                     <CheckCircle2 className="w-6 h-6" />
                   </span>
                 ) : (
-                  <span className="p-2 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30" title="Descuadre Patrimonial">
+                  <span className="p-2 bg-rose-500/20 text-rose-400 rounded-xl border border-rose-500/30" title="Descuadre patrimonial en Bs. o USD">
                     <AlertCircle className="w-6 h-6" />
                   </span>
                 )}
