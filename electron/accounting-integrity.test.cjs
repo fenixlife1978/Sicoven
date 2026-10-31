@@ -819,6 +819,77 @@ test('SQLite rejects a retention correction flag linked to an unrelated entry', 
   assert.throws(() => validateAccountingSnapshot(prior, next), /corrección de retención IVA/);
 });
 
+test('SQLite applies a direct supplier advance to a future payable and reduces the remaining AP ceiling', () => {
+  const { prior: basePrior } = supplierCreditFixture();
+  const originalPurchase = basePrior.purchases[0];
+  const originalEntry = basePrior.journalEntries[0];
+  const payableLine = originalEntry.items.find(item => item.accountCode === '2.1.1.01');
+  payableLine.description = 'Cuenta por pagar proveedor';
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true },
+    { code: '2.1.1.01', name: 'Proveedores', type: 'PASIVO', isMovement: true }
+  ];
+  const directJournal = {
+    id: 'direct-source-journal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-10', description: 'Anticipo directo', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: 'DIRECT-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const applicationJournal = {
+    id: 'direct-application-journal', companyId: 'company-1', entryNumber: 3,
+    date: '2026-10-11', description: 'Aplicación anticipo a factura', type: 'ANTICIPO_PROVEEDOR',
+    bcvRate: 100, referenceDoc: originalPurchase.invoiceNumber,
+    items: [
+      { accountCode: '2.1.1.01', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const source = {
+    id: 'direct-source-1', companyId: 'company-1', supplierRif: originalPurchase.supplierRif,
+    supplierName: originalPurchase.supplierName, date: '2026-10-10', amountUsd: 1,
+    bookValueBs: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+    paymentCurrency: 'BS', paidAmount: 100, reference: 'DIRECT-1',
+    journalEntryId: 'direct-source-journal', createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'direct-application-1', companyId: 'company-1', supplierRif: originalPurchase.supplierRif,
+    supplierName: originalPurchase.supplierName, sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: ['direct-source-1'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-source-1', amountUsd: 1, bookValueBs: 100 }],
+    kind: 'APPLIED_TO_PURCHASE', date: '2026-10-11', amountUsd: 1, amountBs: 100,
+    advanceBookValueBs: 100, bcvRate: 100, targetPurchaseId: originalPurchase.id,
+    journalEntryId: 'direct-application-journal', reference: 'APPLY-1',
+    createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const previous = {
+    ...basePrior, accounts,
+    supplierDirectAdvances: [], supplierAdvanceSettlements: []
+  };
+  const next = {
+    ...previous,
+    journalEntries: [...previous.journalEntries, directJournal, applicationJournal],
+    supplierDirectAdvances: [source], supplierAdvanceSettlements: [settlement]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    supplierAdvanceSettlements: [{ ...settlement, amountUsd: 2,
+      sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-source-1', amountUsd: 2, bookValueBs: 200 }]
+    }],
+    journalEntries: [...previous.journalEntries, directJournal, {
+      ...applicationJournal,
+      items: [
+        { accountCode: '2.1.1.01', debitBs: 200, creditBs: 0, debitUsd: 2, creditUsd: 0 },
+        { accountCode: '1.1.2.03', debitBs: 0, creditBs: 200, debitUsd: 0, creditUsd: 2 }
+      ]
+    }]
+  }), /exceden el saldo individual de un desembolso directo|superan el principal neto de CxP/);
+});
+
 test('SQLite reconciles the portion of a supplier credit note applied to AP and the excess recorded as an advance', () => {
   const { prior, next } = supplierCreditFixture();
   const note = next.purchases[1];
