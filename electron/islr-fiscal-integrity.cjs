@@ -25,6 +25,8 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   const journals = Array.isArray(nextState.journalEntries) ? nextState.journalEntries : [];
   const purchaseById = new Map(purchases.map(item => [String(item.id), item]));
   const journalById = new Map(journals.map(item => [String(item.id), item]));
+  const vouchers = Array.isArray(nextState.islrVouchers) ? nextState.islrVouchers : [];
+  const voucherById = new Map(vouchers.map(item => [String(item.id), item]));
   const oldById = new Map(previous.map(item => [String(item.id), item]));
   const nextById = new Map(next.map(item => [String(item.id), item]));
   if (oldById.size !== previous.length || nextById.size !== next.length) {
@@ -110,6 +112,24 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
       allocationIds.add(String(allocation.purchaseId));
     }
     if (event.kind === 'ACCOUNT_CREDIT') {
+      if (Number(event.withheldAmountBs) > 0.01) {
+        const voucher = event.voucherId ? voucherById.get(String(event.voucherId)) : null;
+        const linkedPurchase = event.allocations.length === 1
+          ? purchaseById.get(String(event.allocations[0].purchaseId))
+          : null;
+        if (!voucher || !linkedPurchase ||
+            voucher.companyId !== event.companyId ||
+            String(voucher.supplierRif || '').trim().toUpperCase() !== String(event.supplierRif).trim().toUpperCase() ||
+            voucher.conceptCode !== event.conceptCode ||
+            voucher.invoiceNumber !== linkedPurchase.invoiceNumber ||
+            voucher.invoiceDate !== linkedPurchase.invoiceDate ||
+            Math.abs(Number(voucher.baseAmountBs) - Number(event.allocations.reduce((sum, item) => sum + Number(item.baseAmountBs), 0))) > 0.01 ||
+            Math.abs(Number(voucher.withheldAmountBs) - Number(event.withheldAmountBs)) > 0.01) {
+          throw new Error('SQLite rechazó el evento ISLR: el comprobante emitido no existe o no coincide con factura, proveedor, concepto, base e importe retenido.');
+        }
+      } else if (event.voucherId) {
+        throw new Error('SQLite rechazó un evento ISLR sin retención que referencia un comprobante no necesario.');
+      }
       const journalWithheld = (Array.isArray(journal.items) ? journal.items : [])
         .filter(item => item.accountCode === '2.1.2.04')
         .reduce((sum, item) => sum + Number(item.creditBs || 0) - Number(item.debitBs || 0), 0);
