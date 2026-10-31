@@ -146,3 +146,14 @@ test('mantiene aisladas las asignaciones históricas por empresa y proveedor', (
     [otherCompany, otherSupplier], 'company-1', 'J-12345678-9', 10
   ), [{ creditNoteId: 'nc-1', amountUsd: 10, bookValueBs: 900 }]);
 });
+
+test('preserva seis decimales USD al distribuir un anticipo de Bs. 106.48 a tasa 100', () => {
+  const allocations = allocateSupplierAdvanceCreditNotes(
+    [{ id: 'nc-precise', amountUsd: 1.0648, bookValueBs: 106.48 }],
+    [], 'company-1', 'J-12345678-9', 1.0648
+  );
+  assert.deepEqual(allocations, [
+    { creditNoteId: 'nc-precise', amountUsd: 1.0648, bookValueBs: 106.48 }
+  ]);
+  assert.equal(validateSupplierAdvanceCreditNoteAllocations(allocations, ['nc-precise'], 1.0648, 106.48), null);
+});
