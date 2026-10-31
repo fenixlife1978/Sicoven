@@ -85,6 +85,30 @@ export function getAccountBalanceNature(
 }
 
 
+export type IncomeStatementAccountType = 'INGRESOS' | 'COSTOS' | 'GASTOS';
+
+export interface ResultContribution {
+  bs: number;
+  usd: number;
+}
+
+/** Contribution of an unclosed P&L posting to equity, without cross-currency conversion. */
+export function getUnclosedResultContribution(
+  accountType: string | undefined,
+  debitBs: number,
+  creditBs: number,
+  debitUsd: number,
+  creditUsd: number
+): ResultContribution {
+  if (accountType === 'INGRESOS') {
+    return { bs: creditBs - debitBs, usd: creditUsd - debitUsd };
+  }
+  if (accountType === 'COSTOS' || accountType === 'GASTOS') {
+    return { bs: debitBs - creditBs, usd: debitUsd - creditUsd };
+  }
+  return { bs: 0, usd: 0 };
+}
+
 export type HistoricalReportKind = 'SITUACION' | 'RESULTADOS';
 
 /**
