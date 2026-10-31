@@ -27,6 +27,13 @@ function persistAccountingSnapshot(db, state) {
         reversalReason: entry.reversalReason || null, workpaperNote: entry.workpaperNote || null,
         priorPeriodAdjustment: Boolean(entry.priorPeriodAdjustment), totals
       }));
+      if (entry.type === 'APERTURA') {
+        auditInsert.run('accounting_year_opening_posted', JSON.stringify({
+          entryId: entry.id, companyId: entry.companyId, entryNumber: entry.entryNumber,
+          openingDate: entry.date, referenceDoc: entry.referenceDoc || null,
+          description: entry.description, totals
+        }));
+      }
     }
     for (const collectionName of ['purchases', 'sales']) {
       const oldDocuments = new Map((Array.isArray(priorState[collectionName]) ? priorState[collectionName] : [])
