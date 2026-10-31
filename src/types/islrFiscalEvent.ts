@@ -82,7 +82,10 @@ export function validateIslrFiscalEventLedger(
       if (!originalId || !event.reversalReason?.trim()) {
         fail('La reversión fiscal requiere evento original y justificación.');
       }
-      if (!original || original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
+      if (!original) {
+        fail('La reversión fiscal no encuentra el evento original.');
+      }
+      if (original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
           original.supplierRif !== event.supplierRif || original.conceptCode !== event.conceptCode) {
         fail('La reversión fiscal no coincide con un evento original de la misma empresa, proveedor y concepto.');
       }
