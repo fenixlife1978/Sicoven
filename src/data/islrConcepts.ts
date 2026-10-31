@@ -203,3 +203,75 @@ export function calculateIslrTariff2Ut(taxableBaseUt: number): number {
   if (taxableBaseUt <= 3000) return 300 + (taxableBaseUt - 2000) * 0.22;
   return 520 + (taxableBaseUt - 3000) * 0.34;
 }
+
+export interface AnnualIslrOperation {
+  baseAmountBs: number;
+  withheldAmountBs: number;
+}
+
+/**
+ * Retención incremental T-2 para una persona jurídica no domiciliada
+ * (código 005): acumula la base gravable anual, aplica el porcentaje de base
+ * indicado por el catálogo (90% para el código 005), calcula T-2 progresiva
+ * en UT y convierte el impuesto acumulado usando una UT explícita.
+ *
+ * La UT no tiene valor predeterminado deliberadamente: debe ser suministrada
+ * conforme al criterio fiscal confirmado para el cierre del ejercicio.
+ * No habilita por sí sola el código 005 ni decide qué UT corresponde usar.
+ */
+export function calculateAnnualIslrTariff2Retention(
+  currentBaseAmountBs: number,
+  previousOperations: AnnualIslrOperation[],
+  unitTaxValueBs: number,
+  basePercentage = 90
+): { rate: number; cumulativeTaxableBaseUt: number; cumulativeWithheldBs: number; withheldAmountBs: number } {
+  if (!Number.isFinite(currentBaseAmountBs) || currentBaseAmountBs < 0) {
+    throw new Error('La base de la operación ISLR anual debe ser finita y no negativa.');
+  }
+  if (!Array.isArray(previousOperations)) {
+    throw new Error('El historial anual ISLR no tiene un formato válido.');
+  }
+  if (!Number.isFinite(unitTaxValueBs) || unitTaxValueBs <= 0) {
+    throw new Error('Debe indicarse expresamente una Unidad Tributaria válida para el cierre del ejercicio.');
+  }
+  if (!Number.isFinite(basePercentage) || basePercentage <= 0 || basePercentage > 100) {
+    throw new Error('El porcentaje de base anual ISLR debe estar entre 0 y 100.');
+  }
+
+  const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
+  let previousBase = 0;
+  let previousWithheld = 0;
+  for (const operation of previousOperations) {
+    const base = Number(operation?.baseAmountBs);
+    const withheld = Number(operation?.withheldAmountBs);
+    if (!Number.isFinite(base) || base < 0 || !Number.isFinite(withheld) || withheld < 0) {
+      throw new Error('Existe una operación anual ISLR histórica inválida; se requiere conciliación.');
+    }
+    previousBase += base;
+    previousWithheld += withheld;
+  }
+
+  const cumulativeBaseBs = (previousBase + currentBaseAmountBs) * (basePercentage / 100);
+  const cumulativeTaxableBaseUt = cumulativeBaseBs / unitTaxValueBs;
+  const cumulativeWithheldBs = roundMoney(
+    calculateIslrTariff2Ut(cumulativeTaxableBaseUt) * unitTaxValueBs
+  );
+  const previousTaxableBaseUt = previousBase * (basePercentage / 100) / unitTaxValueBs;
+  const expectedPreviousWithheld = roundMoney(
+    calculateIslrTariff2Ut(previousTaxableBaseUt) * unitTaxValueBs
+  );
+  if (Math.abs(expectedPreviousWithheld - roundMoney(previousWithheld)) > 0.01) {
+    throw new Error('Las retenciones anuales históricas no concilian con T-2 usando la UT indicada; se requiere rectificación.');
+  }
+
+  const incremental = roundMoney(cumulativeWithheldBs - previousWithheld);
+  if (incremental < -0.01) {
+    throw new Error('La retención histórica supera el impuesto anual recalculado; se requiere rectificación.');
+  }
+  return {
+    rate: cumulativeTaxableBaseUt <= 2000 ? 15 : cumulativeTaxableBaseUt <= 3000 ? 22 : 34,
+    cumulativeTaxableBaseUt,
+    cumulativeWithheldBs,
+    withheldAmountBs: Math.max(0, incremental)
+  };
+}
