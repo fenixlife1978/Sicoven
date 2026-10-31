@@ -149,20 +149,44 @@ test('ISLR T-2 is progressive rather than applying one flat rate to the whole ba
 });
 
 
-test('annual T-2 calculator applies 90% base and returns the incremental annual withholding', () => {
-  const first = calculateAnnualIslrTariff2Retention(100000, [], 43, 90);
-  assert.equal(first.cumulativeTaxableBaseUt, 90000 / 43);
-  assert.equal(first.cumulativeWithheldBs, Math.round((300 + (90000 / 43 - 2000) * 0.22) * 43 * 100) / 100);
+test('annual T-2 applies 90% base and incremental withholding using operation-date UT snapshots', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
+  const firstTaxableUt = 90000 / 9;
+  assert.equal(first.cumulativeTaxableBaseUt, firstTaxableUt);
+  assert.equal(first.cumulativeWithheldBs, Math.round(calculateIslrTariff2Ut(firstTaxableUt) * 9 * 100) / 100);
+
   const second = calculateAnnualIslrTariff2Retention(50000, [
-    { baseAmountBs: 100000, withheldAmountBs: first.cumulativeWithheldBs }
-  ], 43, 90);
-  assert.equal(second.withheldAmountBs, second.cumulativeWithheldBs - first.cumulativeWithheldBs);
+    { paymentDate: '2025-06-10', baseAmountBs: 100000, withheldAmountBs: first.withheldAmountBs, unitTaxValueBs: 9 }
+  ], '2025-06-20', 9, 90);
+  assert.equal(second.withheldAmountBs, second.cumulativeWithheldBs - first.withheldAmountBs);
 });
 
-test('annual T-2 calculator rejects unreconciled history and missing close-year UT', () => {
-  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], 0, 90), /Unidad Tributaria/);
+test('annual T-2 does not recalculate prior operations using a later UT', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
+  const nextAtDifferentUt = calculateAnnualIslrTariff2Retention(50000, [
+    { paymentDate: '2025-06-10', baseAmountBs: 100000, withheldAmountBs: first.withheldAmountBs, unitTaxValueBs: 9 }
+  ], '2025-07-10', 43, 90);
+  const expectedCurrentTax = calculateIslrTariff2Ut((150000 * 0.9) / 43) * 43;
+  assert.equal(nextAtDifferentUt.cumulativeWithheldBs, Math.round(expectedCurrentTax * 100) / 100);
+  assert.equal(nextAtDifferentUt.withheldAmountBs,
+    Math.max(0, Math.round((expectedCurrentTax - first.withheldAmountBs) * 100) / 100));
+});
+
+test('annual T-2 validates each historical withholding against its own date and UT', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(1000, [
+    { paymentDate: '2025-06-10', baseAmountBs: 100000, withheldAmountBs: first.withheldAmountBs + 1, unitTaxValueBs: 9 }
+  ], '2025-07-10', 43, 90), /no concilian/);
+});
+
+test('annual T-2 rejects invalid dates, another fiscal year, missing UT snapshots, and invalid percentages', () => {
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], '2025-06-10', 0, 90), /UT vigente/);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], '2025-02-30', 43, 90), /fecha efectiva/);
   assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [
-    { baseAmountBs: 10000, withheldAmountBs: 1 }
-  ], 43, 90), /no concilian/);
-  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], 43, 101), /porcentaje/);
+    { paymentDate: '2024-12-20', baseAmountBs: 10000, withheldAmountBs: 0, unitTaxValueBs: 43 }
+  ], '2025-01-10', 43, 90), /mismo ejercicio/);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [
+    { paymentDate: '2025-06-10', baseAmountBs: 10000, withheldAmountBs: 0, unitTaxValueBs: 0 }
+  ], '2025-07-10', 43, 90), /snapshot de UT/);
+  assert.throws(() => calculateAnnualIslrTariff2Retention(10000, [], '2025-07-10', 43, 101), /porcentaje/);
 });

@@ -204,74 +204,107 @@ export function calculateIslrTariff2Ut(taxableBaseUt: number): number {
   return 520 + (taxableBaseUt - 3000) * 0.34;
 }
 
+/**
+ * Snapshot de una operación de retención T-2 dentro del ejercicio.
+ * La UT es la vigente en la fecha efectiva de pago/abono, no una UT
+ * reconstruida posteriormente ni una UT única para todo el ejercicio.
+ */
 export interface AnnualIslrOperation {
+  paymentDate: string;
   baseAmountBs: number;
   withheldAmountBs: number;
+  unitTaxValueBs: number;
 }
 
 /**
- * Retención incremental T-2 para una persona jurídica no domiciliada
- * (código 005): acumula la base gravable anual, aplica el porcentaje de base
- * indicado por el catálogo (90% para el código 005), calcula T-2 progresiva
- * en UT y convierte el impuesto acumulado usando una UT explícita.
+ * Retención incremental T-2 (Decreto 1.808, art. 9, parágrafo primero).
+ * En cada pago/abono se acumulan los enriquecimientos netos del ejercicio,
+ * se convierten a UT con el valor vigente en esa fecha y se aplica la tarifa
+ * progresiva. El resultado se convierte a Bs con esa misma UT y se resta
+ * lo efectivamente retenido antes.
  *
- * La UT no tiene valor predeterminado deliberadamente: debe ser suministrada
- * conforme al criterio fiscal confirmado para el cierre del ejercicio.
- * No habilita por sí sola el código 005 ni decide qué UT corresponde usar.
+ * Cada operación anterior conserva su propia fecha y UT. Así se concilia el
+ * importe debido en cada momento sin recalcular operaciones históricas con
+ * una UT posterior. Este motor no habilita por sí solo el código 005.
  */
 export function calculateAnnualIslrTariff2Retention(
   currentBaseAmountBs: number,
   previousOperations: AnnualIslrOperation[],
-  unitTaxValueBs: number,
+  currentPaymentDate: string,
+  currentUnitTaxValueBs: number,
   basePercentage = 90
 ): { rate: number; cumulativeTaxableBaseUt: number; cumulativeWithheldBs: number; withheldAmountBs: number } {
+  const isIsoDate = (value: string) => {
+    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    const date = new Date(value + 'T00:00:00Z');
+    return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
+  };
   if (!Number.isFinite(currentBaseAmountBs) || currentBaseAmountBs < 0) {
     throw new Error('La base de la operación ISLR anual debe ser finita y no negativa.');
   }
   if (!Array.isArray(previousOperations)) {
     throw new Error('El historial anual ISLR no tiene un formato válido.');
   }
-  if (!Number.isFinite(unitTaxValueBs) || unitTaxValueBs <= 0) {
-    throw new Error('Debe indicarse expresamente una Unidad Tributaria válida para el cierre del ejercicio.');
+  if (!isIsoDate(currentPaymentDate)) {
+    throw new Error('La fecha efectiva de pago o abono en cuenta para T-2 no es válida.');
+  }
+  if (!Number.isFinite(currentUnitTaxValueBs) || currentUnitTaxValueBs <= 0) {
+    throw new Error('Debe indicarse la UT vigente en la fecha efectiva del pago o abono.');
   }
   if (!Number.isFinite(basePercentage) || basePercentage <= 0 || basePercentage > 100) {
     throw new Error('El porcentaje de base anual ISLR debe estar entre 0 y 100.');
   }
 
   const roundMoney = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
-  let previousBase = 0;
-  let previousWithheld = 0;
+  const fiscalYear = currentPaymentDate.slice(0, 4);
+  let accumulatedBaseBs = 0;
+  let accumulatedWithheldBs = 0;
+  let previousDate = '';
+
   for (const operation of previousOperations) {
+    const date = String(operation?.paymentDate || '');
     const base = Number(operation?.baseAmountBs);
     const withheld = Number(operation?.withheldAmountBs);
-    if (!Number.isFinite(base) || base < 0 || !Number.isFinite(withheld) || withheld < 0) {
-      throw new Error('Existe una operación anual ISLR histórica inválida; se requiere conciliación.');
+    const unitTax = Number(operation?.unitTaxValueBs);
+    if (!isIsoDate(date) || date.slice(0, 4) !== fiscalYear ||
+        (previousDate && date < previousDate) || date >= currentPaymentDate) {
+      throw new Error('El historial T-2 debe contener fechas válidas, ordenadas y del mismo ejercicio, anteriores al pago actual.');
     }
-    previousBase += base;
-    previousWithheld += withheld;
+    if (!Number.isFinite(base) || base < 0 || !Number.isFinite(withheld) || withheld < 0 ||
+        !Number.isFinite(unitTax) || unitTax <= 0) {
+      throw new Error('Existe una operación anual ISLR histórica inválida o sin snapshot de UT; se requiere conciliación.');
+    }
+
+    accumulatedBaseBs += base;
+    const taxableBaseUtAtOperation = accumulatedBaseBs * (basePercentage / 100) / unitTax;
+    const taxDueBsAtOperation = roundMoney(
+      calculateIslrTariff2Ut(taxableBaseUtAtOperation) * unitTax
+    );
+    const expectedIncrementalWithholding = roundMoney(
+      Math.max(0, taxDueBsAtOperation - accumulatedWithheldBs)
+    );
+    if (Math.abs(expectedIncrementalWithholding - roundMoney(withheld)) > 0.01) {
+      throw new Error('Las retenciones históricas T-2 no concilian con la base acumulada y la UT vigente en cada fecha; se requiere rectificación.');
+    }
+    accumulatedWithheldBs += withheld;
+    previousDate = date;
   }
 
-  const cumulativeBaseBs = (previousBase + currentBaseAmountBs) * (basePercentage / 100);
-  const cumulativeTaxableBaseUt = cumulativeBaseBs / unitTaxValueBs;
+  const cumulativeTaxableBaseUt =
+    (accumulatedBaseBs + currentBaseAmountBs) * (basePercentage / 100) / currentUnitTaxValueBs;
   const cumulativeWithheldBs = roundMoney(
-    calculateIslrTariff2Ut(cumulativeTaxableBaseUt) * unitTaxValueBs
+    calculateIslrTariff2Ut(cumulativeTaxableBaseUt) * currentUnitTaxValueBs
   );
-  const previousTaxableBaseUt = previousBase * (basePercentage / 100) / unitTaxValueBs;
-  const expectedPreviousWithheld = roundMoney(
-    calculateIslrTariff2Ut(previousTaxableBaseUt) * unitTaxValueBs
+  // Una variación de UT puede reducir el impuesto recalculado. Nunca se
+  // genera una retención negativa ni se modifica lo retenido anteriormente.
+  const withheldAmountBs = roundMoney(
+    Math.max(0, cumulativeWithheldBs - accumulatedWithheldBs)
   );
-  if (Math.abs(expectedPreviousWithheld - roundMoney(previousWithheld)) > 0.01) {
-    throw new Error('Las retenciones anuales históricas no concilian con T-2 usando la UT indicada; se requiere rectificación.');
-  }
 
-  const incremental = roundMoney(cumulativeWithheldBs - previousWithheld);
-  if (incremental < -0.01) {
-    throw new Error('La retención histórica supera el impuesto anual recalculado; se requiere rectificación.');
-  }
   return {
     rate: cumulativeTaxableBaseUt <= 2000 ? 15 : cumulativeTaxableBaseUt <= 3000 ? 22 : 34,
     cumulativeTaxableBaseUt,
     cumulativeWithheldBs,
-    withheldAmountBs: Math.max(0, incremental)
+    withheldAmountBs
   };
 }
