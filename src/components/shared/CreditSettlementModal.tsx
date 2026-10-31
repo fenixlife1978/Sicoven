@@ -50,12 +50,12 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
   const bankCurrency = method === 'BANK_TRANSFER_USD' ? 'USD' : 'BS';
   const eligibleBankAccounts = bankAccounts.filter(account => account.companyId === currentCompany.id && account.currency === bankCurrency);
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
     setSaving(true);
     try {
-      addCreditSettlement({
+      await addCreditSettlement({
         documentId, kind, settlementDate: date, bcvRate: Number(rate),
         amountUsd: Number(usd), amountBs: bs, method,
         bankAccountId: isBankTransfer ? bankAccountId : undefined,
@@ -63,7 +63,7 @@ export const CreditSettlementModal: React.FC<Props> = ({ documentId, documentNum
       });
       onClose();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'No se pudo registrar la liquidación.');
+      setError(err instanceof Error ? err.message : 'No se pudo confirmar la liquidación en SQLite. Revise el estado antes de reintentar.');
     } finally {
       setSaving(false);
     }

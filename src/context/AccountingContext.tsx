@@ -77,7 +77,7 @@ interface AccountingContextType {
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
   getCreditBalance: (documentId: string, kind: 'SALE_COLLECTION' | 'PURCHASE_PAYMENT') => CreditBalance;
-  addCreditSettlement: (draft: CreditSettlementDraft) => CreditSettlement;
+  addCreditSettlement: (draft: CreditSettlementDraft) => Promise<CreditSettlement>;
   getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
   supplierAdvanceSettlements: SupplierAdvanceSettlement[];
   addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
@@ -986,7 +986,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
-  const addCreditSettlement = (draft: CreditSettlementDraft): CreditSettlement => {
+  const addCreditSettlement = async (draft: CreditSettlementDraft): Promise<CreditSettlement> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
       throw new Error('La persistencia SQLite no está disponible o todavía no está lista. No se registró el cobro/pago.');
     }
@@ -1149,7 +1149,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       createdAt: new Date().toISOString()
     };
     setCreditSettlements(prev => [...prev, settlement]);
-    return settlement;
+    try {
+      // El asiento y la liquidación forman una sola confirmación funcional:
+      // el llamador no recibe éxito hasta que el snapshot completo esté guardado.
+      await waitForPersistence();
+      return settlement;
+    } finally {
+      settlementInFlightRef.current.delete(operationKey);
+    }
   };
 
   const deleteJournalEntry = (id: string) => {
