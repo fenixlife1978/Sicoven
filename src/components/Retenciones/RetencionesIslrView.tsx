@@ -178,18 +178,18 @@ export const RetencionesIslrView: React.FC = () => {
 
           <div className="bg-slate-50 p-4 rounded-xl border border-slate-200">
             <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wide block">
-              Base Imponible de Retención
+              Base de Operaciones ISLR
             </span>
             <div className="text-lg font-bold font-mono text-slate-900 mt-1">
               {formatBs(totalBaseBs)}
             </div>
             <div className="text-xs text-slate-500">
-              Operaciones comerciales y honorarios
+              Incluye operaciones con retención cero
             </div>
           </div>
         </div>
 
-        {filteredVouchers.some(voucher => voucher.requiresFiscalCorrection) && (
+        {hasPendingFiscalCorrection && (
           <div role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
             Hay comprobantes vinculados a notas de crédito o reversiones que requieren rectificación fiscal. Se conservan como documentos históricos y las exportaciones SENIAT quedan bloqueadas hasta registrar la corrección aplicable.
           </div>
