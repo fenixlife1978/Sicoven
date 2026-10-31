@@ -1271,7 +1271,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if ((purchaseData.vatWithheldBs || 0) + (purchaseData.islrWithheldBs || 0) > purchaseData.totalAmountBs + 0.005) {
       throw new Error('Las retenciones no pueden superar el total de la factura.');
     }
-    if (Number(purchaseData.islrWithheldBs || 0) > 0) {
+    if (purchaseData.islrConceptCode || Number(purchaseData.islrWithheldBs || 0) > 0) {
       const concept = ISLR_CONCEPTS.find(item => item.code === purchaseData.islrConceptCode);
       if (!concept || purchaseData.islrBeneficiaryType !== concept.category ||
           purchaseData.islrResidency !== (concept.category === 'PN'
@@ -1283,6 +1283,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           purchaseData.islrFormulaFactor !== ISLR_FORMULA_FACTOR ||
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
+      }
+      if (concept.appliesSubtrahend) {
+        const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+        const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
+        const priorMonthlyOperation = purchases.some(item =>
+          item.companyId === currentCompany.id &&
+          !item.isCancelled &&
+          item.documentType === '01' &&
+          String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
+          item.islrConceptCode === concept.code &&
+          String(item.invoiceDate || '').slice(0, 7) === monthKey
+        );
+        if (priorMonthlyOperation) {
+          throw new Error('Este proveedor ya tiene una operación ISLR del mismo concepto en el período mensual. Para evitar aplicar el sustraendo más de una vez o subretener, la operación queda bloqueada hasta disponer del cálculo acumulado y su conciliación fiscal.');
+        }
       }
       const expectedIslr = calculateIslrRetention(purchaseData.taxableBaseBs, concept);
       if (Math.abs(expectedIslr.withheldAmountBs - Number(purchaseData.islrWithheldBs)) > 0.01 ||
