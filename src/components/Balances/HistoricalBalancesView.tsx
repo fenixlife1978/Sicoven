@@ -32,10 +32,10 @@ export const HistoricalBalancesView: React.FC<{ onBack: () => void }> = ({ onBac
         debitUsd += Number(item.debitUsd || 0); creditUsd += Number(item.creditUsd || 0);
       }
       const balanceBs = kind === 'SITUACION'
-        ? (account.type === 'ACTIVO' ? debitBs-creditBs : ['PASIVO','PATRIMONIO'].includes(account.type) ? creditBs-debitBs : 0)
+        ? (account.type === 'ACTIVO' ? debitBs-creditBs : ['PASIVO','PATRIMONIO'].includes(account.type) ? creditBs-debitBs : account.type === 'INGRESOS' ? creditBs-debitBs : ['COSTOS','GASTOS'].includes(account.type) ? debitBs-creditBs : 0)
         : (account.type === 'INGRESOS' ? creditBs-debitBs : ['COSTOS','GASTOS'].includes(account.type) ? debitBs-creditBs : 0);
       const balanceUsd = kind === 'SITUACION'
-        ? (account.type === 'ACTIVO' ? debitUsd-creditUsd : ['PASIVO','PATRIMONIO'].includes(account.type) ? creditUsd-debitUsd : 0)
+        ? (account.type === 'ACTIVO' ? debitUsd-creditUsd : ['PASIVO','PATRIMONIO'].includes(account.type) ? creditUsd-debitUsd : account.type === 'INGRESOS' ? creditUsd-debitUsd : ['COSTOS','GASTOS'].includes(account.type) ? debitUsd-creditUsd : 0)
         : (account.type === 'INGRESOS' ? creditUsd-debitUsd : ['COSTOS','GASTOS'].includes(account.type) ? debitUsd-creditUsd : 0);
       return { ...account, debitBs, creditBs, debitUsd, creditUsd, balanceBs, balanceUsd };
     }).filter(row => Math.abs(row.balanceBs) > 0.004 || Math.abs(row.balanceUsd) > 0.004);
