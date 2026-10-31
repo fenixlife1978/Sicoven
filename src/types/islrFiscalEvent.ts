@@ -77,23 +77,40 @@ export function validateIslrFiscalEventLedger(
       fail('El snapshot de UT del evento fiscal ISLR no coincide con el valor verificado para su fecha.');
     }
     if (event.kind === 'REVERSAL') {
-      const reversalOfEventId = String(event.reversalOfEventId || '');
-      if (!reversalOfEventId || !event.reversalReason?.trim()) {
-        throw new Error('La reversión fiscal requiere evento original y justificación.');
+      const originalId = String(event.reversalOfEventId || '');
+      const original = nextById.get(originalId);
+      if (!originalId || !event.reversalReason?.trim()) {
+        fail('La reversión fiscal requiere evento original y justificación.');
       }
-      const original = nextById.get(reversalOfEventId);
-      if (!original) throw new Error('La reversión fiscal no encuentra el evento original.');
-      if (original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
-          original.supplierRif !== event.supplierRif || original.conceptCode !== event.conceptCode ||
-          original.allocations.length !== event.allocations.length ||
-          original.allocations.some((allocation, index) =>
-            allocation.purchaseId !== event.allocations[index].purchaseId ||
-            Math.abs(allocation.baseAmountBs - event.allocations[index].baseAmountBs) > 0.000001) ||
-          Math.abs(original.withheldAmountBs - event.withheldAmountBs) > 0.01 ||
-          reversed.has(original.id)) {
-        fail('La reversión fiscal no coincide exactamente con un evento original vigente o ya reversado.');
+      if (!original || original.kind === 'REVERSAL' || original.companyId !== event.companyId ||
+          original.supplierRif !== event.supplierRif || original.conceptCode !== event.conceptCode) {
+        fail('La reversión fiscal no coincide con un evento original de la misma empresa, proveedor y concepto.');
       }
-      reversed.add(original.id);
+      const priorReversals = next.filter(item => item.kind === 'REVERSAL' &&
+        item.reversalOfEventId === originalId && item.id !== event.id);
+      const originalBase = new Map(original.allocations.map(item => [item.purchaseId, item.baseAmountBs]));
+      const reversedBase = new Map<string, number>();
+      for (const prior of priorReversals) for (const allocation of prior.allocations) {
+        reversedBase.set(allocation.purchaseId, (reversedBase.get(allocation.purchaseId) || 0) + allocation.baseAmountBs);
+      }
+      for (const allocation of event.allocations) {
+        const base = Number(originalBase.get(allocation.purchaseId) || 0);
+        const totalReversed = (reversedBase.get(allocation.purchaseId) || 0) + Number(allocation.baseAmountBs);
+        if (base <= 0 || totalReversed > base + 0.01) {
+          fail('La reversión ISLR supera la base pendiente del evento original.');
+        }
+        reversedBase.set(allocation.purchaseId, totalReversed);
+      }
+      const originalTotalBase = original.allocations.reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const totalReversedBase = Array.from(reversedBase.values()).reduce((sum, value) => sum + value, 0);
+      const priorWithheld = priorReversals.reduce((sum, item) => sum + Number(item.withheldAmountBs), 0);
+      const expectedCumulativeWithheld = originalTotalBase > 0
+        ? Math.round((Number(original.withheldAmountBs) * totalReversedBase / originalTotalBase + Number.EPSILON) * 100) / 100
+        : 0;
+      if (priorWithheld + Number(event.withheldAmountBs) > Number(original.withheldAmountBs) + 0.01 ||
+          Math.abs(priorWithheld + Number(event.withheldAmountBs) - expectedCumulativeWithheld) > 0.02) {
+        fail('La reversión ISLR no concilia proporcionalmente con la base y retención original pendiente.');
+      }
     } else if (event.reversalOfEventId || event.reversalReason) {
       fail('Un evento de pago o abono no puede contener datos de reversión.');
     }
@@ -123,12 +140,16 @@ export function validateIslrFiscalEventLedger(
   }
 
   const activeByPurchase = new Map<string, number>();
-  const reversedIds = new Set(next.filter(item => item.kind === 'REVERSAL').map(item => item.reversalOfEventId));
   for (const event of next) {
-    if (event.kind === 'REVERSAL' || reversedIds.has(event.id)) continue;
+    if (event.kind === 'REVERSAL') continue;
     for (const allocation of event.allocations) {
+      const reversed = next.filter(item => item.kind === 'REVERSAL' && item.reversalOfEventId === event.id)
+        .flatMap(item => item.allocations)
+        .filter(item => item.purchaseId === allocation.purchaseId)
+        .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
+      const remaining = Math.max(0, Number(allocation.baseAmountBs) - reversed);
       activeByPurchase.set(allocation.purchaseId,
-        (activeByPurchase.get(allocation.purchaseId) || 0) + allocation.baseAmountBs);
+        (activeByPurchase.get(allocation.purchaseId) || 0) + remaining);
     }
   }
   for (const [purchaseId, allocated] of activeByPurchase) {
