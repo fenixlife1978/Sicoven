@@ -1,4 +1,4 @@
-import { Company, VatRetentionVoucher, IslrRetentionVoucher } from '../types/accounting';
+import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
 import { cleanRif } from './formatters';
 
 /**
@@ -79,6 +79,66 @@ export function generateSeniatIslrXml(company: Company, vouchers: IslrRetentionV
 
   xml += `</RelacionRetencionesISLR>`;
   return xml;
+}
+
+/**
+ * Construye la relación fiscal mensual desde compras con concepto ISLR declarado.
+ * Incluye operaciones con retención cero; los comprobantes históricos se usan
+ * como respaldo cuando la compra original no conserva metadatos ISLR.
+ */
+export function generateSeniatIslrOperationsXml(
+  company: Company,
+  purchases: PurchaseRecord[],
+  vouchers: IslrRetentionVoucher[],
+  period: string
+): string {
+  const agentRif = cleanRif(company.rif);
+  const xmlEscape = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  const operations = purchases
+    .filter(p => p.companyId === company.id && p.documentType === '01' && p.invoiceDate.slice(0, 7).replace('-', '') === period && p.islrConceptCode && !p.isCancelled)
+    .map(p => ({
+      supplierRif: p.supplierRif,
+      invoiceNumber: p.invoiceNumber,
+      controlNumber: p.controlNumber,
+      invoiceDate: p.invoiceDate,
+      conceptCode: p.islrConceptCode as string,
+      baseAmountBs: Number(p.taxableBaseBs),
+      retentionRate: Number(p.islrRate || 0),
+      key: [p.supplierRif, p.invoiceNumber, p.invoiceDate, p.islrConceptCode].join('|')
+    }));
+  const known = new Set(operations.map(item => item.key));
+  for (const voucher of vouchers) {
+    const key = [voucher.supplierRif, voucher.invoiceNumber, voucher.invoiceDate, voucher.conceptCode].join('|');
+    if (voucher.companyId !== company.id || voucher.period !== period || known.has(key)) continue;
+    operations.push({
+      supplierRif: voucher.supplierRif,
+      invoiceNumber: voucher.invoiceNumber,
+      controlNumber: voucher.controlNumber,
+      invoiceDate: voucher.invoiceDate,
+      conceptCode: voucher.conceptCode,
+      baseAmountBs: Number(voucher.baseAmountBs),
+      retentionRate: Number(voucher.retentionRate),
+      key
+    });
+    known.add(key);
+  }
+  operations.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.invoiceNumber.localeCompare(b.invoiceNumber));
+  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\\n`;
+  xml += `<RelacionRetencionesISLR RifAgente="${xmlEscape(agentRif)}" Periodo="${xmlEscape(period)}">\\n`;
+  for (const operation of operations) {
+    const parts = operation.invoiceDate.split('-');
+    const date = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : operation.invoiceDate;
+    xml += `  <DetalleRetencion>\\n`;
+    xml += `    <RifRetenido>${xmlEscape(cleanRif(operation.supplierRif))}</RifRetenido>\\n`;
+    xml += `    <NumeroFactura>${xmlEscape(operation.invoiceNumber)}</NumeroFactura>\\n`;
+    xml += `    <NumeroControl>${xmlEscape(operation.controlNumber)}</NumeroControl>\\n`;
+    xml += `    <FechaOperacion>${xmlEscape(date)}</FechaOperacion>\\n`;
+    xml += `    <CodigoConcepto>${xmlEscape(operation.conceptCode.padStart(3, '0'))}</CodigoConcepto>\\n`;
+    xml += `    <MontoOperacion>${operation.baseAmountBs.toFixed(2)}</MontoOperacion>\\n`;
+    xml += `    <PorcentajeRetencion>${operation.retentionRate.toFixed(2)}</PorcentajeRetencion>\\n`;
+    xml += `  </DetalleRetencion>\\n`;
+  }
+  return xml + `</RelacionRetencionesISLR>`;
 }
 
 /**
