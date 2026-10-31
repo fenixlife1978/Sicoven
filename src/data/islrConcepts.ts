@@ -247,13 +247,6 @@ export function calculateAnnualIslrTariff2Retention(
   if (!isIsoDate(currentPaymentDate)) {
     throw new Error('La fecha efectiva de pago o abono en cuenta para T-2 no es válida.');
   }
-  if (!Number.isFinite(currentUnitTaxValueBs) || currentUnitTaxValueBs <= 0) {
-    throw new Error('Debe indicarse la UT vigente en la fecha efectiva del pago o abono.');
-  }
-  const expectedCurrentUnitTax = getIslrUnitTaxValueForPeriod(currentPaymentDate.slice(0, 7));
-  if (expectedCurrentUnitTax == null || Math.abs(currentUnitTaxValueBs - expectedCurrentUnitTax) > 0.000001) {
-    throw new Error('El snapshot de UT de la operación actual no coincide con el valor verificado para su período fiscal.');
-  }
   if (!Number.isFinite(basePercentage) || basePercentage <= 0 || basePercentage > 100) {
     throw new Error('El porcentaje de base anual ISLR debe estar entre 0 y 100.');
   }
@@ -295,6 +288,14 @@ export function calculateAnnualIslrTariff2Retention(
     }
     accumulatedWithheldBs += withheld;
     previousDate = date;
+  }
+
+  if (!Number.isFinite(currentUnitTaxValueBs) || currentUnitTaxValueBs <= 0) {
+    throw new Error('Debe indicarse la UT vigente en la fecha efectiva del pago o abono.');
+  }
+  const expectedCurrentUnitTax = getIslrUnitTaxValueForPeriod(currentPaymentDate.slice(0, 7));
+  if (expectedCurrentUnitTax == null || Math.abs(currentUnitTaxValueBs - expectedCurrentUnitTax) > 0.000001) {
+    throw new Error('El snapshot de UT de la operación actual no coincide con el valor verificado para su período fiscal.');
   }
 
   const cumulativeTaxableBaseUt =
