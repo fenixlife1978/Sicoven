@@ -1,12 +1,36 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  filterEntriesByCompany,
   getAccountBalanceNature,
   hasAccountMovement,
+  isBalanceSheetBalanced,
   isTrialBalanceBalanced
 } from './accountingReportIntegrity';
 
 describe('accounting report integrity', () => {
+  it('isolates report entries to the selected company', () => {
+    const entries = [
+      { id: 'a-1', companyId: 'company-a' },
+      { id: 'b-1', companyId: 'company-b' },
+      { id: 'a-2', companyId: 'company-a' }
+    ];
+    assert.deepEqual(filterEntriesByCompany(entries, 'company-a').map(entry => entry.id), ['a-1', 'a-2']);
+    assert.deepEqual(filterEntriesByCompany(entries, 'company-b').map(entry => entry.id), ['b-1']);
+  });
+
+  it('requires the statement of financial position to balance in Bs and USD', () => {
+    const balanced = {
+      totalAssetsBs: 1000,
+      totalLiabilitiesAndEquityBs: 1000,
+      totalAssetsUsd: 25,
+      totalLiabilitiesAndEquityUsd: 25
+    };
+    assert.equal(isBalanceSheetBalanced(balanced), true);
+    assert.equal(isBalanceSheetBalanced({ ...balanced, totalLiabilitiesAndEquityUsd: 24.99 }), false);
+    assert.equal(isBalanceSheetBalanced({ ...balanced, totalLiabilitiesAndEquityBs: 999 }), false);
+    assert.equal(isBalanceSheetBalanced({ ...balanced, totalAssetsUsd: Number.NaN }), false);
+  });
   it('includes an account with USD-only movement in report totals', () => {
     assert.equal(hasAccountMovement({ debitBs: 0, creditBs: 0, debitUsd: 12, creditUsd: 0 }), true);
   });
