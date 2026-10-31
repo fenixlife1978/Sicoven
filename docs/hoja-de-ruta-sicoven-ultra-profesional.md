@@ -32,6 +32,7 @@
 | 6.4. Integridad del Balance General en doble moneda y aislamiento multiempresa | [#24](https://github.com/fenixlife1978/Sicoven/pull/24) | `275ab32b16f3b7e402dace923a0769cff5aceeac` | CI escritorio/Windows satisfactorios; validaciones Bs/USD y aislamiento |
 | 6.5. Estados financieros PDF en doble moneda | [#25](https://github.com/fenixlife1978/Sicoven/pull/25) | `82ef632c31bbacf80611dbfbd75e6515d64bd257` | CI pre-merge y post-merge escritorio/Windows SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
 | 2.1. Corrección del corte acumulado de balances históricos | [#27](https://github.com/fenixlife1978/Sicoven/pull/27) | `9d8147e52b3e9be7c470c281537ddaf8e59c8692` | CI escritorio `41235602359` y Windows `41235602352` SUCCESS; upgrade 1.0.6→1.0.7 conservó SQLite y artefacto Windows cargado |
+| 2.2. Corrección de aperturas anuales y saldos históricos | [#29](https://github.com/fenixlife1978/Sicoven/pull/29) | `48e48bd6d4a1958125a8663759c8c244e361623d` | CI escritorio `41237562263` y Windows `41237562281` SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`; NSIS y upgrade 1.0.6→1.0.7 conservaron SQLite |
 
 El PR #20 se fusionó mediante *squash* solo después de comprobar que ambos trabajos CI terminaron en `success`, que el SHA de la rama coincidía con `c6d515af1608cbe7d3efa0c8d8ff792d018d7c98` y que GitHub reportaba el PR abierto y fusionable. No se publicó instalador ni release.
 
@@ -58,6 +59,18 @@ Los cinco subbloques están fusionados en `main`:
 - Commit de integración en `main`: `9d8147e52b3e9be7c470c281537ddaf8e59c8692`.
 
 **Límite:** este subbloque corrige la lógica de los comparativos históricos existentes; no completa por sí solo el Estado de Flujos de Efectivo ni el Estado de Cambios en el Patrimonio. El Bloque 2 permanece abierto hasta implementar y validar los cuatro estados financieros y sus notas/revelaciones conforme al marco aplicable.
+
+### Bloque 2.2 — Apertura anual y saldos históricos — integrado
+
+- **PR #29:** corrige la duplicación de saldos cuando el asiento de apertura anual ya transporta los saldos de balance del ejercicio anterior.
+- El selector de situación identifica aperturas anuales mediante `exerciseLink.nextPeriodStartDate`; una apertura bancaria ordinaria no reinicia el acumulado.
+- El Estado de Resultados utiliza únicamente los movimientos del ejercicio y excluye los asientos de cierre y apertura.
+- El resultado pendiente de cierre se presenta con el signo contable correcto en ambas monedas: crédito menos débito para ingresos, costos y gastos; los débitos de costos/gastos reducen el resultado y el patrimonio.
+- Se añadieron pruebas para corte anual, apertura 2025/2026, apertura bancaria dentro del año, selección de resultados y contribución del resultado al patrimonio.
+- CI escritorio `41237562263` y Windows `41237562281`: SUCCESS sobre SHA `8f8cfd3491e255eec19447665e4eb0421beed4ee`. Windows completó NSIS, upgrade real 1.0.6→1.0.7 y verificación de conservación de SQLite.
+- Commit de integración en `main`: `48e48bd6d4a1958125a8663759c8c244e361623d`.
+
+**Estado del Bloque 2:** el Estado de Situación Financiera, el Estado de Resultados y los comparativos históricos tienen avances integrados. El Estado de Cambios en el Patrimonio está en desarrollo en el PR #30; el Estado de Flujos de Efectivo y las notas/revelaciones continúan pendientes. No declarar terminado el bloque hasta cerrar todos esos componentes y sus conciliaciones.
 
 ## Capacidades preexistentes identificadas en la inspección inicial
 
