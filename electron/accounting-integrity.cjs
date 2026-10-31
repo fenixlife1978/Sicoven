@@ -222,7 +222,9 @@ function validateAccountingSnapshot(previousState, nextState) {
     throw new Error('Estado contable inválido.');
   }
   const priorState = previousState && typeof previousState === 'object' ? previousState : {};
-  validateNewAccountCatalogEntries(priorState.accounts, nextState.accounts);
+  if (asArray(priorState.accounts).length > 0) {
+    validateNewAccountCatalogEntries(priorState.accounts, nextState.accounts);
+  }
   assertAppendOnlyCollection(priorState, nextState, 'purchases',
     ['journalEntryId', 'isCancelled', 'cancelledByJournalEntryId', 'cancellationReason', 'cancellationNote'], ['journalEntryId', 'isCancelled']);
   assertAppendOnlyCollection(priorState, nextState, 'sales',
