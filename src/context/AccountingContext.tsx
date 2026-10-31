@@ -846,6 +846,9 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const setAccountCashFlowActivity = (accountCode: string, activity: CashFlowActivity) => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible o todavía no está lista. No se guardó la clasificación.');
+    }
     const account = accounts.find(item => item.code === accountCode);
     if (!account || !account.isMovement) throw new Error('Seleccione una cuenta contable imputable existente.');
     if (!['EFECTIVO_EQUIVALENTE', 'OPERACION', 'INVERSION', 'FINANCIACION', 'NO_MONETARIO', 'SIN_CLASIFICAR'].includes(activity)) {
