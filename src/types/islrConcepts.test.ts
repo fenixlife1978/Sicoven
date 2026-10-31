@@ -4,6 +4,7 @@ import {
   ISLR_CONCEPTS,
   VALOR_UNIDAD_TRIBUTARIA_BS,
   ISLR_FORMULA_FACTOR,
+  getIslrUnitTaxValueForPeriod,
   calculateIslrRetention
 } from '../data/islrConcepts';
 
@@ -19,6 +20,22 @@ test('catalogue exposes only verified fixed-rate codes and has no duplicate iden
   assert.deepEqual(codes, ['002', '003', '004', '010', '011', '012', '013']);
   assert.equal(VALOR_UNIDAD_TRIBUTARIA_BS, 43);
   assert.equal(ISLR_FORMULA_FACTOR, 83.3334);
+});
+
+test('monthly ISLR UT uses the value in force at the start of the period', () => {
+  assert.equal(getIslrUnitTaxValueForPeriod('2025-06'), 9);
+  assert.equal(getIslrUnitTaxValueForPeriod('2025-07'), 43);
+  assert.equal(getIslrUnitTaxValueForPeriod('2023-05'), 0.4);
+  assert.equal(getIslrUnitTaxValueForPeriod('2023-06'), 9);
+  assert.equal(getIslrUnitTaxValueForPeriod('2021-10'), null);
+  assert.equal(getIslrUnitTaxValueForPeriod('invalid'), null);
+});
+
+test('ISLR calculation uses the UT snapshot applicable to the period', () => {
+  const june = calculateIslrRetention(10000, concept('002'), 9);
+  const july = calculateIslrRetention(10000, concept('002'), 43);
+  assert.equal(june.subtrahendBs, 22.5);
+  assert.equal(july.subtrahendBs, 107.5);
 });
 
 test('code 002 applies the legal 3% formula and UT 43 sustraendo', () => {
