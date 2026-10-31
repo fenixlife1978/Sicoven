@@ -1105,9 +1105,12 @@ test('SQLite preserves the ISLR fiscal event ledger as append-only history', () 
       allocations: [{ purchaseId: 'purchase-2', baseAmountBs: 100 }]
     }]
   }));
-  assert.throws(() => validateAccountingSnapshot(prior, emptyState([sourceEntry()])), /eliminación del registro histórico en islrFiscalEvents/);
   assert.throws(() => validateAccountingSnapshot(prior, {
-    ...emptyState([sourceEntry()]), purchases: [purchase],
+    ...emptyState([sourceEntry()]), purchases: [purchase, secondPurchase],
+    islrFiscalEvents: []
+  }), /eliminación del registro histórico en islrFiscalEvents/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...emptyState([sourceEntry()]), purchases: [purchase, secondPurchase],
     islrFiscalEvents: [{ ...fiscalEvent, withheldAmountBs: 10 }]
   }), /modificación de un registro histórico en islrFiscalEvents/);
 });
