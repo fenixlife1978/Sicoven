@@ -172,6 +172,14 @@ test('annual T-2 does not recalculate prior operations using a later UT', () => 
     Math.max(0, Math.round((expectedCurrentTax - first.withheldAmountBs) * 100) / 100));
 });
 
+test('annual T-2 allows multiple ordered payment events on the same date', () => {
+  const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
+  const second = calculateAnnualIslrTariff2Retention(50000, [
+    { paymentDate: '2025-06-10', baseAmountBs: 100000, withheldAmountBs: first.withheldAmountBs, unitTaxValueBs: 9 }
+  ], '2025-06-10', 9, 90);
+  assert.equal(second.withheldAmountBs, second.cumulativeWithheldBs - first.withheldAmountBs);
+});
+
 test('annual T-2 validates each historical withholding against its own date and UT', () => {
   const first = calculateAnnualIslrTariff2Retention(100000, [], '2025-06-10', 9, 90);
   assert.throws(() => calculateAnnualIslrTariff2Retention(1000, [

@@ -191,9 +191,8 @@ export function calculateMonthlyIslrRetention(
 
 /**
  * Tarifa T-2 progresiva del artículo 9 del Decreto 1.808.
- * Devuelve el impuesto acumulado expresado en UT; no convierte a bolívares
- * ni calcula retenciones incrementales. El llamador debe aportar la UT
- * legalmente aplicable al cierre del ejercicio y conciliar el historial.
+ * Devuelve el impuesto acumulado expresado en UT. La conversión a Bs. y
+ * la retención incremental se calculan con la UT vigente en cada pago/abono.
  */
 export function calculateIslrTariff2Ut(taxableBaseUt: number): number {
   if (!Number.isFinite(taxableBaseUt) || taxableBaseUt < 0) {
@@ -235,7 +234,7 @@ export function calculateAnnualIslrTariff2Retention(
   basePercentage = 90
 ): { rate: number; cumulativeTaxableBaseUt: number; cumulativeWithheldBs: number; withheldAmountBs: number } {
   const isIsoDate = (value: string) => {
-    if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
     const date = new Date(value + 'T00:00:00Z');
     return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value;
   };
@@ -267,7 +266,7 @@ export function calculateAnnualIslrTariff2Retention(
     const withheld = Number(operation?.withheldAmountBs);
     const unitTax = Number(operation?.unitTaxValueBs);
     if (!isIsoDate(date) || date.slice(0, 4) !== fiscalYear ||
-        (previousDate && date < previousDate) || date >= currentPaymentDate) {
+        (previousDate && date < previousDate) || date > currentPaymentDate) {
       throw new Error('El historial T-2 debe contener fechas válidas, ordenadas y del mismo ejercicio, anteriores al pago actual.');
     }
     if (!Number.isFinite(base) || base < 0 || !Number.isFinite(withheld) || withheld < 0 ||
