@@ -218,7 +218,7 @@ export function buildCashFlowReport(
         else totals.paymentsUsd += value;
         totals.netUsd += net > 0 ? value : -value;
       }
-      lines.push({
+      addLine({
         entryId: entry.id, entryNumber: entry.entryNumber, date: entry.date,
         description: item.description || entry.description, referenceDoc: entry.referenceDoc,
         accountCode: item.accountCode, accountName: account?.name || item.accountName,
