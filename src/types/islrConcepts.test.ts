@@ -27,7 +27,8 @@ test('monthly ISLR UT uses the value in force at the start of the period', () =>
   assert.equal(getIslrUnitTaxValueForPeriod('2025-07'), 43);
   assert.equal(getIslrUnitTaxValueForPeriod('2023-05'), 0.4);
   assert.equal(getIslrUnitTaxValueForPeriod('2023-06'), 9);
-  assert.equal(getIslrUnitTaxValueForPeriod('2021-10'), null);
+  assert.equal(getIslrUnitTaxValueForPeriod('2021-10'), 0.02);
+  assert.equal(getIslrUnitTaxValueForPeriod('2021-09'), null);
   assert.equal(getIslrUnitTaxValueForPeriod('invalid'), null);
 });
 
