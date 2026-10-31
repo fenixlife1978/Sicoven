@@ -28,7 +28,6 @@ export function calculateSupplierAdvanceBalance(
     !item.isCancelled &&
     String(item.supplierRif || '').trim().toUpperCase() === normalizedRif
   );
-  const totalCreditBs = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0));
   const direct = directAdvances.filter(item => !item.isReversed &&
     String(item.supplierRif || '').trim().toUpperCase() === normalizedRif);
   const totalDirectBs = money(direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0));
@@ -37,7 +36,7 @@ export function calculateSupplierAdvanceBalance(
   const totalCreditBs = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) + totalDirectBs);
   return {
     supplierRif: normalizedRif,
-    supplierName: notes[0]?.supplierName || '',
+    supplierName: notes[0]?.supplierName || direct[0]?.supplierName || '',
     totalCreditBs,
     totalCreditUsd,
     outstandingBs: totalCreditBs,
