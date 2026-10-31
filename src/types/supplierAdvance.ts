@@ -1,5 +1,6 @@
 import type { SupplierAdvanceSettlement } from './supplierAdvanceSettlement';
 import type { PurchaseRecord } from './accounting';
+import type { SupplierDirectAdvance } from './supplierDirectAdvance';
 
 export interface SupplierAdvanceBalance {
   supplierRif: string;
@@ -9,6 +10,7 @@ export interface SupplierAdvanceBalance {
   outstandingBs: number;
   outstandingUsd: number;
   creditNoteCount: number;
+  directAdvanceCount: number;
 }
 
 const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
@@ -16,7 +18,8 @@ const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 10
 /** Sums only active supplier credit notes; reversed/cancelled notes cannot fund a later settlement. */
 export function calculateSupplierAdvanceBalance(
   supplierRif: string,
-  purchases: PurchaseRecord[]
+  purchases: PurchaseRecord[],
+  directAdvances: SupplierDirectAdvance[] = []
 ): SupplierAdvanceBalance {
   const normalizedRif = String(supplierRif || '').trim().toUpperCase();
   if (!normalizedRif) throw new Error('Debe identificar el RIF del proveedor.');
@@ -26,7 +29,12 @@ export function calculateSupplierAdvanceBalance(
     String(item.supplierRif || '').trim().toUpperCase() === normalizedRif
   );
   const totalCreditBs = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0));
-  const totalCreditUsd = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0));
+  const direct = directAdvances.filter(item => !item.isReversed &&
+    String(item.supplierRif || '').trim().toUpperCase() === normalizedRif);
+  const totalDirectBs = money(direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0));
+  const totalDirectUsd = money(direct.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0));
+  const totalCreditUsd = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) + totalDirectUsd);
+  const totalCreditBs = money(notes.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) + totalDirectBs);
   return {
     supplierRif: normalizedRif,
     supplierName: notes[0]?.supplierName || '',
@@ -34,7 +42,8 @@ export function calculateSupplierAdvanceBalance(
     totalCreditUsd,
     outstandingBs: totalCreditBs,
     outstandingUsd: totalCreditUsd,
-    creditNoteCount: notes.length
+    creditNoteCount: notes.length,
+    directAdvanceCount: direct.length
   };
 }
 
@@ -43,9 +52,14 @@ export function calculateOutstandingSupplierAdvance(
   supplierRif: string,
   purchases: PurchaseRecord[],
   settlements: SupplierAdvanceSettlement[],
-  companyId: string
+  companyId: string,
+  directAdvances: SupplierDirectAdvance[] = []
 ): SupplierAdvanceBalance {
-  const balance = calculateSupplierAdvanceBalance(supplierRif, purchases.filter(item => item.companyId === companyId));
+  const balance = calculateSupplierAdvanceBalance(
+    supplierRif,
+    purchases.filter(item => item.companyId === companyId),
+    directAdvances.filter(item => item.companyId === companyId)
+  );
   const rif = String(supplierRif || '').trim().toUpperCase();
   const active = settlements.filter(item =>
     item.companyId === companyId &&
