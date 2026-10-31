@@ -65,7 +65,7 @@ describe('cash flow indirect method', () => {
 
   it('does not silently mark unknown income and balance accounts as classified', () => {
     const incomplete = accounts.map(account => account.code === '4.1.1'
-      ? { ...account, cashFlowIndirectTreatment: undefined }
+      ? { ...account, cashFlowActivity: undefined, cashFlowIndirectTreatment: undefined }
       : account);
     const report = buildCashFlowIndirectReport([
       entry('sale', '2026-01-01', [line('1.1.1.01', 10, 0, 1, 0), line('4.1.1', 0, 10, 0, 1)])
