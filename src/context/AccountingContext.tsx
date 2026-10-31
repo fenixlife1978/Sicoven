@@ -3263,6 +3263,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankStatementMovements([]);
     setCreditSettlements([]);
     setSupplierAdvanceSettlements([]);
+    setIslrFiscalEvents([]);
   };
 
   const resetFactoryData = async () => {
@@ -3287,6 +3288,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankStatementMovements([]);
     setCreditSettlements([]);
     setSupplierAdvanceSettlements([]);
+    setIslrFiscalEvents([]);
     setDisplayCurrency('DUAL');
   };
 
