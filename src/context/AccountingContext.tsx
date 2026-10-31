@@ -3770,7 +3770,6 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       const islrFiscalEvents: IslrFiscalEvent[] = data?.islrFiscalEvents === undefined
         ? []
         : data.islrFiscalEvents;
-      const financialDisclosures: FinancialDisclosure[] = data?.financialDisclosures === undefined ? [] : data.financialDisclosures;
       if (!Array.isArray(islrFiscalEvents) || islrFiscalEvents.some((event: any) =>
         !event || typeof event.id !== 'string' || !event.id.trim() ||
         typeof event.companyId !== 'string' || !event.companyId.trim() ||
