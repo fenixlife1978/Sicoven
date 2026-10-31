@@ -392,6 +392,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (window.sicovenStore && !storageReady) throw new Error('SQLite todavía no está lista. No se registró la reversión.');
     const source = journalEntries.find(entry => entry.id === id && entry.companyId === currentCompany.id);
     if (!source) throw new Error('No se encontró el asiento original en la empresa activa.');
+    const directAdvanceSource = supplierDirectAdvances.find(item =>
+      item.companyId === currentCompany.id && item.journalEntryId === source.id);
+    if (directAdvanceSource && supplierAdvanceSettlements.some(item =>
+      item.companyId === currentCompany.id && !item.isReversed &&
+      (item.sourceDirectAdvanceIds || []).includes(directAdvanceSource.id))) {
+      throw new Error('No se puede revertir el desembolso original mientras exista una aplicación o reembolso activo. Revierta primero las liquidaciones vinculadas.');
+    }
     if (source.reversalOfEntryId) throw new Error('No se permite reversar un asiento que ya es un contra-asiento.');
     if (source.reversedByEntryId || journalEntries.some(entry => entry.companyId === currentCompany.id && entry.reversalOfEntryId === id)) {
       throw new Error('Este asiento ya tiene una reversión registrada.');
