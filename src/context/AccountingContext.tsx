@@ -933,6 +933,13 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       ? purchases.find(item => item.id === draft.targetPurchaseId && item.companyId === currentCompany.id && item.documentType === '01' && !item.isCancelled)
       : undefined;
     if (draft.kind === 'APPLIED_TO_PURCHASE' && !target) throw new Error('La factura destino no existe, no es una factura original o está reversada.');
+    if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
+      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. La liquidación no se registró.');
+    }
+    if (target) {
+      const paymentDateError = validatePurchasePaymentDate(draft.date, getPurchaseAccountCreditDate(target));
+      if (paymentDateError) throw new Error(paymentDateError);
+    }
     const balance = getSupplierAdvanceBalance(rif);
     // El formulario captura el importe efectivamente recibido en Bs.; por tanto,
     // no debe permitir seleccionar una cuenta bancaria denominada en USD.
