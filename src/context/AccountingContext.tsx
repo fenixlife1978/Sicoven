@@ -37,7 +37,7 @@ import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAver
 import { isValidIsoDate } from '../types/migrationParsing';
 import { hasConsistentFiscalDocumentAmounts } from '../types/fiscalDocumentAmounts';
 import { calculatePurchaseCreditNote, type PurchaseCreditNoteRequest } from '../types/purchaseCreditNote';
-import { validatePurchaseSettlementMode } from '../types/purchaseSettlement';
+import { validatePurchaseSettlementMode, validatePurchasePaymentDate } from '../types/purchaseSettlement';
 import { validateSaleSettlementMode } from '../types/saleSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
@@ -997,6 +997,11 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (!document) throw new Error('La factura no existe en la empresa activa.');
     if (document.isCancelled) throw new Error('No se puede liquidar una factura reversada.');
     if (document.paymentTerm !== 'CREDITO') throw new Error('Solo se pueden liquidar facturas identificadas como crédito.');
+    if (kind === 'PURCHASE_PAYMENT') {
+      const purchase = document as PurchaseRecord;
+      const paymentDateError = validatePurchasePaymentDate(draft.settlementDate, getPurchaseAccountCreditDate(purchase));
+      if (paymentDateError) throw new Error(paymentDateError);
+    }
     const balance = getCreditBalance(draft.documentId, kind);
     const error = validateCreditSettlement(draft, balance.outstandingUsd);
     if (error) throw new Error(error);
