@@ -29,7 +29,7 @@ describe('supplier direct advances', () => {
     const draft = {
       supplierRif: 'J-12345678-9', supplierName: 'Proveedor', date: '2026-10-01',
       amountUsd: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
-      paymentCurrency: 'BS' as const, paidAmount: 10000, reference: 'TRX-001'
+      paymentCurrency: 'BS' as const, paidAmount: 10000, reference: 'TRX-001', support: 'REC-001'
     };
     assert.equal(validateSupplierDirectAdvanceDraft(draft, 'company-1', accounts), null);
     assert.match(validateSupplierDirectAdvanceDraft({ ...draft, treasuryAccountCode: '6.1.1.01' }, 'company-1', accounts) || '', /Caja\/Banco/);
