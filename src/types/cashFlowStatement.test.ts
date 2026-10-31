@@ -122,6 +122,10 @@ describe('cash flow statement', () => {
 
   it('treats a linked annual opening as opening cash, not as a period cash flow', () => {
     const entries = [
+      entry('prior-year-cash', '2025-12-31', 'MANUAL', [
+        line('1.1.1.01', 'Caja principal', 50, 0, 5, 0),
+        line('3.1', 'Capital social', 0, 50, 0, 5)
+      ]),
       entry('annual-opening-2026', '2026-01-01', 'APERTURA', [
         line('1.1.1.01', 'Caja principal', 500, 0, 50, 0),
         line('3.1', 'Capital social', 0, 500, 0, 50)
@@ -129,8 +133,11 @@ describe('cash flow statement', () => {
     ];
     const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 500);
+    assert.equal(report.openingCashUsd, 50);
     assert.equal(report.netChangeBs, 0);
     assert.equal(report.closingCashBs, 500);
+    assert.equal(report.ledgerClosingCashBs, 500);
+    assert.equal(report.reconciliationDifferenceBs, 0);
     assert.equal(report.activities.FINANCIACION.netBs, 0);
     assert.equal(report.isReconciled, true);
   });
