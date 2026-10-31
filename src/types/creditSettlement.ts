@@ -38,6 +38,9 @@ export interface CreditBalance {
   /** Reducción documental por notas de crédito; no se considera pago de efectivo. */
   creditedByNotesUsd?: number;
   creditedByNotesBs?: number;
+  /** Supplier advances applied directly to this invoice without a cash payment. */
+  creditedBySupplierAdvancesUsd?: number;
+  creditedBySupplierAdvancesBs?: number;
 }
 
 export interface CreditSettlementDraft {
