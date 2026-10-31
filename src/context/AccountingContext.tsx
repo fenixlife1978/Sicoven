@@ -42,6 +42,7 @@ import { validateSaleSettlementMode } from '../types/saleSettlement';
 import { allocateSupplierCredit } from '../types/supplierCreditAllocation';
 import { calculateOutstandingSupplierAdvance, type SupplierAdvanceBalance } from '../types/supplierAdvance';
 import { calculateSupplierAdvanceFxSettlement } from '../types/supplierAdvanceFx';
+import { validateSupplierDirectAdvanceDraft, type SupplierDirectAdvance, type SupplierDirectAdvanceDraft } from '../types/supplierDirectAdvance';
 import { allocateSupplierAdvanceCreditNotes, validateSupplierAdvanceCreditNoteAllocations, validateSupplierAdvanceSettlementDraft, type SupplierAdvanceSettlement, type SupplierAdvanceSettlementDraft } from '../types/supplierAdvanceSettlement';
 
 export interface AccountingAuditEvent {
@@ -81,6 +82,8 @@ interface AccountingContextType {
   getSupplierAdvanceBalance: (supplierRif: string) => SupplierAdvanceBalance;
   supplierAdvanceSettlements: SupplierAdvanceSettlement[];
   addSupplierAdvanceSettlement: (draft: SupplierAdvanceSettlementDraft) => Promise<SupplierAdvanceSettlement>;
+  supplierDirectAdvances: SupplierDirectAdvance[];
+  addSupplierDirectAdvance: (draft: SupplierDirectAdvanceDraft) => Promise<SupplierDirectAdvance>;
 
   // Compras
   purchases: PurchaseRecord[];
@@ -264,6 +267,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
   const [islrFiscalEvents, setIslrFiscalEvents] = useState<IslrFiscalEvent[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
+  const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
   // Los importadores pueden registrar varias facturas en el mismo ciclo de React;
@@ -531,7 +535,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, islrFiscalEvents, displayCurrency
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency
   };
 
   useEffect(() => {
@@ -564,6 +568,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
             if (Array.isArray(saved.creditSettlements)) setCreditSettlements(saved.creditSettlements as CreditSettlement[]);
             if (Array.isArray(saved.supplierAdvanceSettlements)) setSupplierAdvanceSettlements(saved.supplierAdvanceSettlements as SupplierAdvanceSettlement[]);
+            if (Array.isArray(saved.supplierDirectAdvances)) setSupplierDirectAdvances(saved.supplierDirectAdvances as SupplierDirectAdvance[]);
             if (Array.isArray(saved.islrFiscalEvents)) setIslrFiscalEvents(saved.islrFiscalEvents as IslrFiscalEvent[]);
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
           } else {
@@ -582,6 +587,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setBankStatementMovements([]);
             setCreditSettlements([]);
             setSupplierAdvanceSettlements([]);
+            setSupplierDirectAdvances([]);
             setIslrFiscalEvents([]);
             // No reutilizar stateSnapshot aquí: fue capturada antes de que React
             // aplicara los setState de limpieza y podría reintroducir datos antiguos
@@ -601,6 +607,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               bankStatementMovements: [],
               creditSettlements: [],
               supplierAdvanceSettlements: [],
+              supplierDirectAdvances: [],
               islrFiscalEvents: [],
               displayCurrency: 'DUAL' as const
             };
@@ -671,7 +678,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       console.error('Error guardando datos locales de desarrollo:', normalized);
       waitersForSnapshot.forEach(waiter => waiter.reject(normalized));
     }
-  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, islrFiscalEvents, displayCurrency]);
+  }, [storageReady, companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements, vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency]);
 
   const addCompany = (comp: Omit<Company, 'id'>): Company => {
     const newComp: Company = {
@@ -811,6 +818,47 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const getSupplierAdvanceBalance = (supplierRif: string): SupplierAdvanceBalance =>
     calculateOutstandingSupplierAdvance(supplierRif, purchases, supplierAdvanceSettlements, currentCompany.id);
+
+  const addSupplierDirectAdvance = async (draft: SupplierDirectAdvanceDraft): Promise<SupplierDirectAdvance> => {
+    if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) {
+      throw new Error('SQLite no está disponible. No se registró el anticipo.');
+    }
+    const validation = validateSupplierDirectAdvanceDraft(draft, currentCompany.id, accounts);
+    if (validation) throw new Error(validation);
+    if (currentCompany.closedThroughDate && draft.date <= currentCompany.closedThroughDate) {
+      throw new Error('El período está cerrado hasta ' + currentCompany.closedThroughDate + '. El anticipo no se registró.');
+    }
+    const rif = String(draft.supplierRif).trim().toUpperCase();
+    const duplicate = supplierDirectAdvances.some(item => item.companyId === currentCompany.id &&
+      !item.isReversed && item.treasuryAccountCode === draft.treasuryAccountCode &&
+      item.date === draft.date && item.reference.trim().toUpperCase() === draft.reference.trim().toUpperCase());
+    if (duplicate) throw new Error('La referencia ya fue utilizada en un anticipo de este proveedor/cuenta.');
+    const advanceAccount = accounts.find(item => item.code === '1.1.2.03' && item.isMovement && item.type === 'ACTIVO');
+    const treasuryAccount = accounts.find(item => item.code === draft.treasuryAccountCode && item.isMovement && item.type === 'ACTIVO');
+    if (!advanceAccount || !treasuryAccount) {
+      throw new Error('El plan de cuentas no tiene un auxiliar activo válido para anticipos y la cuenta real de Caja/Banco.');
+    }
+    const amountUsd = Math.round(draft.amountUsd * 1000000) / 1000000;
+    const bookValueBs = Math.round(amountUsd * draft.bcvRate * 100) / 100;
+    const entry = addJournalEntry({
+      entryNumber: 0, date: draft.date,
+      description: 'Anticipo directo a proveedor ' + rif + ' · ' + draft.supplierName.trim(),
+      type: 'ANTICIPO_PROVEEDOR', bcvRate: draft.bcvRate, referenceDoc: draft.reference.trim(),
+      items: [
+        { accountCode: advanceAccount.code, accountName: advanceAccount.name, debitBs: bookValueBs, creditBs: 0, debitUsd: amountUsd, creditUsd: 0, description: 'Reconocimiento de anticipo directo a proveedor' },
+        { accountCode: treasuryAccount.code, accountName: treasuryAccount.name, debitBs: 0, creditBs: bookValueBs, debitUsd: 0, creditUsd: amountUsd, description: 'Desembolso documentado desde Caja/Banco' }
+      ]
+    });
+    const record: SupplierDirectAdvance = {
+      ...draft, supplierRif: rif, supplierName: draft.supplierName.trim(),
+      id: 'supplier-direct-advance-' + currentCompany.id + '-' + Date.now(),
+      companyId: currentCompany.id, amountUsd, bookValueBs,
+      reference: draft.reference.trim(), journalEntryId: entry.id, createdAt: new Date().toISOString()
+    };
+    setSupplierDirectAdvances(prev => [...prev, record]);
+    await waitForPersistence();
+    return record;
+  };
 
   const addSupplierAdvanceSettlement = async (draft: SupplierAdvanceSettlementDraft): Promise<SupplierAdvanceSettlement> => {
     if (persistenceFaultRef.current || (window.sicovenStore && !storageReady)) throw new Error('SQLite no está disponible. No se registró la liquidación.');
@@ -3663,6 +3711,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setBankStatementMovements(data.bankStatementMovements);
       setCreditSettlements(settlements);
       setSupplierAdvanceSettlements(advanceSettlements);
+      setSupplierDirectAdvances(Array.isArray(data.supplierDirectAdvances) ? data.supplierDirectAdvances : []);
       setIslrFiscalEvents(islrFiscalEvents);
       setCurrentCompanyId(data.companies[0].id);
       return true;
@@ -3698,6 +3747,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         getSupplierAdvanceBalance,
         supplierAdvanceSettlements: supplierAdvanceSettlements.filter(item => item.companyId === currentCompany.id),
         addSupplierAdvanceSettlement,
+        supplierDirectAdvances: supplierDirectAdvances.filter(item => item.companyId === currentCompany.id),
+        addSupplierDirectAdvance,
         purchases: purchases.filter(p => p.companyId === currentCompany.id),
         addPurchase,
         addPurchaseCreditNote,
