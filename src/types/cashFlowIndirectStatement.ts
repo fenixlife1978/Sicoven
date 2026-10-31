@@ -176,11 +176,12 @@ export function buildCashFlowIndirectReport(
   const unclassifiedPnl = accounts.some(account =>
     account.isMovement && ['INGRESOS', 'COSTOS', 'GASTOS'].includes(account.type) &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
-    account.cashFlowIndirectTreatment === undefined
+    account.cashFlowActivity !== 'OPERACION' && account.cashFlowIndirectTreatment === undefined
   );
   const unclassifiedBalanceChanges = accounts.some(account =>
     account.isMovement && ['ACTIVO', 'PASIVO'].includes(account.type) &&
     !account.code.startsWith('1.1.1.') && account.cashFlowActivity !== 'EFECTIVO_EQUIVALENTE' &&
+    account.cashFlowActivity !== 'INVERSION' && account.cashFlowActivity !== 'FINANCIACION' &&
     periodEntries.some(entry => entry.items.some(item => item.accountCode === account.code)) &&
     account.cashFlowIndirectTreatment === undefined
   );
