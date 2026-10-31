@@ -1426,3 +1426,118 @@ test('SQLite rejects a cash-purchase credit note that posts any amount to a fict
   noteEntry.items.push({ accountCode: '2.1.1.01', debitBs: 1, creditBs: 0, debitUsd: 0.01, creditUsd: 0 });
   assert.throws(() => validateAccountingSnapshot(prior, next), /no está balanceado|no revierte CxP|modalidad de pago/);
 });
+
+test('SQLite validates the full contado purchase matrix: cash/bank, currencies, VAT and withholdings without fictitious AP', () => {
+  const makeFixture = ({
+    invoiceNumber, accountCode, taxable = 200, exempt = 0, vat = 32,
+    vatWithheld = 0, islrWithheld = 0, expense = false, reference = 'PAY-REF'
+  }) => {
+    const rate = 100;
+    const total = taxable + exempt + vat;
+    const net = total - vatWithheld - islrWithheld;
+    const purchaseId = 'cash-matrix-' + invoiceNumber;
+    const entryId = purchaseId + '-entry';
+    const items = [{
+      accountCode: expense ? '6.1.1.04' : '1.1.4.01',
+      accountName: expense ? 'Gastos operativos' : 'Inventario',
+      debitBs: taxable + exempt, creditBs: 0,
+      debitUsd: (taxable + exempt) / rate, creditUsd: 0
+    }];
+    if (vat > 0) items.push({
+      accountCode: '1.1.3.01', accountName: 'IVA Crédito Fiscal',
+      debitBs: vat, creditBs: 0, debitUsd: vat / rate, creditUsd: 0
+    });
+    if (vatWithheld > 0) items.push({
+      accountCode: '2.1.2.03', accountName: 'Retenciones IVA por enterar',
+      debitBs: 0, creditBs: vatWithheld, debitUsd: 0, creditUsd: vatWithheld / rate
+    });
+    if (islrWithheld > 0) items.push({
+      accountCode: '2.1.2.04', accountName: 'Retenciones ISLR por enterar',
+      debitBs: 0, creditBs: islrWithheld, debitUsd: 0, creditUsd: islrWithheld / rate
+    });
+    items.push({
+      accountCode, accountName: 'Caja/Banco seleccionado',
+      debitBs: 0, creditBs: net, debitUsd: 0, creditUsd: net / rate,
+      description: 'Pago contado con soporte ' + reference
+    });
+    const purchase = {
+      id: purchaseId, companyId: 'company-1', invoiceDate: '2026-10-10',
+      accountCreditDate: '2026-10-10', supplierRif: 'J-12345678-9',
+      supplierName: 'Proveedor', invoiceNumber, documentType: '01',
+      totalAmountBs: total, taxableBaseBs: taxable, exemptAmountBs: exempt,
+      taxRate: taxable > 0 ? 16 : 0, vatAmountBs: vat,
+      vatWithheldBs: vatWithheld, islrWithheldBs: islrWithheld,
+      igtfAmountBs: 0, bcvRate: rate,
+      totalAmountUsd: total / rate, taxableBaseUsd: taxable / rate,
+      vatAmountUsd: vat / rate, vatWithheldUsd: vatWithheld / rate,
+      islrWithheldUsd: islrWithheld / rate, igtfAmountUsd: 0,
+      journalEntryId: entryId, paymentTerm: 'CONTADO',
+      paymentAccountCode: accountCode, paymentReference: reference,
+      ...(expense ? {} : { inventoryLines: [{ productId: 'matrix-product', quantity: 1, unitCostBs: taxable + exempt }] })
+    };
+    const entry = {
+      id: entryId, companyId: 'company-1', entryNumber: 1,
+      date: '2026-10-10', description: 'Compra contado ' + invoiceNumber,
+      type: 'COMPRA', bcvRate: rate, referenceDoc: 'FAC-' + invoiceNumber,
+      items, createdAt: '2026-10-10T10:00:00.000Z'
+    };
+    const accounts = [
+      { code: '1.1.1.01', name: 'Caja Principal Bs.', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.1.02', name: 'Caja Moneda Extranjera USD', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.1.03', name: 'Banco Nacional Bs.', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.1.04', name: 'Banco USD', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.4.01', name: 'Inventario', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '1.1.3.01', name: 'IVA Crédito Fiscal', type: 'ACTIVO', level: 4, isMovement: true },
+      { code: '2.1.2.03', name: 'Retenciones IVA', type: 'PASIVO', level: 4, isMovement: true },
+      { code: '2.1.2.04', name: 'Retenciones ISLR', type: 'PASIVO', level: 4, isMovement: true },
+      { code: '6.1.1.04', name: 'Gastos operativos', type: 'GASTOS', level: 4, isMovement: true }
+    ];
+    const product = { id: 'matrix-product', companyId: 'company-1', inventoryAccountCode: '1.1.4.01' };
+    const movement = {
+      id: purchaseId + '-movement', companyId: 'company-1', productId: 'matrix-product',
+      date: '2026-10-10', type: 'ENTRADA', concept: 'COMPRA',
+      documentRef: 'FAC-' + invoiceNumber, counterpartyRif: 'J-12345678-9',
+      quantity: 1, unitCostBs: taxable + exempt, unitCostUsd: (taxable + exempt) / rate,
+      totalCostBs: taxable + exempt, totalCostUsd: (taxable + exempt) / rate, bcvRate: rate
+    };
+    return {
+      purchase, entry, accounts, product, movement,
+      state: {
+        ...emptyState([entry]), accounts, purchases: [purchase],
+        products: expense ? [] : [product], movements: expense ? [] : [movement]
+      }
+    };
+  };
+
+  const scenarios = [
+    { invoiceNumber: 'M-001', accountCode: '1.1.1.01', reference: 'CASH-BS' },
+    { invoiceNumber: 'M-002', accountCode: '1.1.1.02', reference: 'CASH-USD' },
+    { invoiceNumber: 'M-003', accountCode: '1.1.1.03', reference: 'BANK-BS' },
+    { invoiceNumber: 'M-004', accountCode: '1.1.1.04', reference: 'BANK-USD' },
+    { invoiceNumber: 'M-005', accountCode: '1.1.1.01', vatWithheld: 24, reference: 'VAT-RET' },
+    { invoiceNumber: 'M-006', accountCode: '1.1.1.01', islrWithheld: 5, reference: 'ISLR-RET' },
+    { invoiceNumber: 'M-007', accountCode: '1.1.1.01', vatWithheld: 24, islrWithheld: 5, reference: 'BOTH-RET' },
+    { invoiceNumber: 'M-008', accountCode: '1.1.1.01', taxable: 0, exempt: 200, vat: 0, reference: 'EXEMPT' },
+    { invoiceNumber: 'M-009', accountCode: '1.1.1.03', expense: true, reference: 'EXPENSE-BANK' }
+  ];
+  for (const scenario of scenarios) {
+    const fixture = makeFixture(scenario);
+    assert.doesNotThrow(() => validateAccountingSnapshot(emptyState(), fixture.state), scenario.invoiceNumber);
+    assert.equal(fixture.entry.items.some(item => String(item.accountCode).startsWith('2.1.1.')), false,
+      'contado no debe crear una CxP ficticia: ' + scenario.invoiceNumber);
+    const cashLine = fixture.entry.items.find(item => item.accountCode === scenario.accountCode);
+    assert.equal(cashLine.creditBs, fixture.purchase.totalAmountBs -
+      fixture.purchase.vatWithheldBs - fixture.purchase.islrWithheldBs);
+  }
+
+  const base = makeFixture({ invoiceNumber: 'M-NEG', accountCode: '1.1.1.01' });
+  for (const invalidCode of ['6.1.1.04', '1.1.4.01', '2.1.1.01']) {
+    const invalid = structuredClone(base.state);
+    invalid.purchases[0].paymentAccountCode = invalidCode;
+    invalid.journalEntries[0].items.find(item => item.accountCode === '1.1.1.01').accountCode = invalidCode;
+    assert.throws(() => validateAccountingSnapshot(emptyState(), invalid), /asiento no reconoce en Bs\. y USD/);
+  }
+  const missingReference = structuredClone(base.state);
+  missingReference.purchases[0].paymentReference = '';
+  assert.throws(() => validateAccountingSnapshot(emptyState(), missingReference), /asiento no reconoce en Bs\. y USD/);
+});
