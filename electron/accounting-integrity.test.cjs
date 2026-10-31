@@ -38,6 +38,39 @@ test('SQLite rejects reuse of a lower unused journal sequence number', () => {
 });
 
 
+test('SQLite validates direct supplier advance disbursements against the exact cash/bank journal', () => {
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true },
+    { code: '6.1.1.01', name: 'Gastos', type: 'GASTOS', isMovement: true }
+  ];
+  const journal = {
+    id: 'advance-journal', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Anticipo directo proveedor',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: 'TRX-ADV-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const advance = {
+    id: 'advance-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100,
+    bookValueBs: 10000, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-ADV-1',
+    journalEntryId: 'advance-journal', createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const previous = { ...emptyState(), supplierDirectAdvances: [] };
+  const next = { ...emptyState([journal]), accounts, supplierDirectAdvances: [advance] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, supplierDirectAdvances: [{ ...advance, treasuryAccountCode: '6.1.1.01' }]
+  }), /cuenta de tesorería inválidos/);
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next, supplierDirectAdvances: [{ ...advance, bookValueBs: 9000 }]
+  }), /importes, moneda, referencia o cuenta/);
+});
+
 test('SQLite validates ISLR event structure and historical UT during every state save', () => {
   const invalidUtEvent = {
     id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
