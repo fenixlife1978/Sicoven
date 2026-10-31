@@ -96,14 +96,15 @@ export function calculateIslrRetention(baseAmountBs: number, concept: IslrConcep
     throw new Error('El concepto ISLR no tiene parámetros de cálculo válidos.');
   }
 
-  const subtrahend = concept.appliesSubtrahend
-    ? VALOR_UNIDAD_TRIBUTARIA_BS * ISLR_FORMULA_FACTOR * (concept.rate / 100)
-    : 0;
   const taxableBase = baseAmountBs * (concept.basePercentage / 100);
   const minimumBase = concept.minBaseUt
     ? VALOR_UNIDAD_TRIBUTARIA_BS * concept.minBaseUt
     : 0;
-  const rawWithheld = concept.appliesSubtrahend && baseAmountBs <= minimumBase
+  const thresholdNotReached = concept.appliesSubtrahend && baseAmountBs <= minimumBase;
+  const subtrahend = concept.appliesSubtrahend && !thresholdNotReached
+    ? VALOR_UNIDAD_TRIBUTARIA_BS * ISLR_FORMULA_FACTOR * (concept.rate / 100)
+    : 0;
+  const rawWithheld = thresholdNotReached
     ? 0
     : taxableBase * (concept.rate / 100) - subtrahend;
   const withheld = Math.max(0, Math.round((rawWithheld + Number.EPSILON) * 100) / 100);
