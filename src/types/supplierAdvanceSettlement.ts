@@ -151,8 +151,8 @@ export function allocateSupplierAdvanceCreditNotes(
     const allocationError = validateSupplierAdvanceCreditNoteAllocations(
       allocations,
       settlement.sourceCreditNoteIds,
-      settlement.amountUsd,
-      settlement.advanceBookValueBs ?? allocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0)
+      allocations.reduce((sum, item) => sum + Number(item?.amountUsd || 0), 0),
+      allocations.reduce((sum, item) => sum + Number(item?.bookValueBs || 0), 0)
     );
     if (allocationError) {
       throw new Error('La liquidación histórica ' + String(settlement.id || '') + ' no es conciliable: ' + allocationError);
