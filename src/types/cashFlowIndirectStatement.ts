@@ -92,9 +92,18 @@ export function buildCashFlowIndirectReport(
   if (!companyId.trim() || !Number.isInteger(year) || year < 1) {
     throw new Error('La empresa y el ejercicio seleccionado deben ser válidos.');
   }
+  const end = String(year).padStart(4, '0') + '-12-31';
+  for (const entry of entries) {
+    if (entry.companyId !== companyId || entry.date > end) continue;
+    for (const item of entry.items) {
+      finite(item.debitBs);
+      finite(item.creditBs);
+      finite(item.debitUsd);
+      finite(item.creditUsd);
+    }
+  }
   const direct = buildCashFlowReport(entries, accounts, bankAccounts, companyId, year);
   const start = String(year).padStart(4, '0') + '-01-01';
-  const end = String(year).padStart(4, '0') + '-12-31';
   const companyEntries = entries.filter(entry =>
     entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end
   );
