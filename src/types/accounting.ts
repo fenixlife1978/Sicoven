@@ -23,6 +23,12 @@ export interface Company {
 export type AccountType = 'ACTIVO' | 'PASIVO' | 'PATRIMONIO' | 'INGRESOS' | 'COSTOS' | 'GASTOS';
 
 export type CashFlowActivity = 'EFECTIVO_EQUIVALENTE' | 'OPERACION' | 'INVERSION' | 'FINANCIACION' | 'NO_MONETARIO' | 'SIN_CLASIFICAR';
+export type CashFlowIndirectTreatment =
+  | 'NON_CASH_EXPENSE_ADD_BACK'
+  | 'NON_CASH_INCOME_DEDUCT'
+  | 'OPERATING_ASSET_INCREASE_DEDUCT'
+  | 'OPERATING_LIABILITY_INCREASE_ADD'
+  | 'EXCLUDE';
 
 export interface Account {
   code: string; // e.g. "1.1.1.01"
@@ -33,6 +39,8 @@ export interface Account {
   parentCode?: string;
   /** Clasificación explícita usada por el Estado de Flujos de Efectivo; opcional para compatibilidad histórica. */
   cashFlowActivity?: CashFlowActivity;
+  /** Tratamiento explícito para el método indirecto; nunca se infiere por el nombre de la cuenta. */
+  cashFlowIndirectTreatment?: CashFlowIndirectTreatment;
 }
 
 export interface JournalEntryItem {
