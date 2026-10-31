@@ -39,7 +39,7 @@ function createHarness({ authorized = true, validSession = true } = {}) {
       return validSession && token === 'valid-session' ? { id: 1, username: 'auditor', role: 'admin' } : null;
     }
   });
-  return { db, handler: handlers.get('sicoven:save-state'), calls };
+  return { db, handler: handlers.get('sicoven:save-state'), reopenHandler: handlers.get('sicoven:reopen-accounting-period'), calls };
 }
 
 test('Electron IPC rejects persistence without an authorized license', () => {
@@ -192,4 +192,134 @@ test('SQLite audit records an accounting year opening as a dedicated event in th
   } finally {
     harness.db.close();
   }
+});
+
+
+function closedCompanyState() {
+  return {
+    ...emptyState(),
+    companies: [
+      { id: 'company-1', name: 'Empresa Uno', closedThroughDate: '2026-12-31' },
+      { id: 'company-2', name: 'Empresa Dos', closedThroughDate: '2026-06-30' }
+    ],
+    journalEntries: [{
+      id: 'historical-entry', companyId: 'company-1', entryNumber: 1,
+      date: '2026-05-15', description: 'Asiento histórico preservado',
+      type: 'AJUSTE', items: [
+        { accountCode: '1.1.1', debitBs: 100, creditBs: 0, debitUsd: 1, creditUsd: 0 },
+        { accountCode: '3.1.1', debitBs: 0, creditBs: 100, debitUsd: 0, creditUsd: 1 }
+      ]
+    }]
+  };
+}
+
+function persistClosedCompanyFixture(db) {
+  const state = closedCompanyState();
+  const openState = {
+    ...state,
+    companies: state.companies.map(({ closedThroughDate, ...company }) => company)
+  };
+  persistAccountingSnapshot(db, openState);
+  persistAccountingSnapshot(db, state);
+}
+
+test('period reopening IPC requires an authenticated active administrator', () => {
+  const unauthorized = createHarness({ validSession: false });
+  try {
+    persistClosedCompanyFixture(unauthorized.db);
+    assert.throws(() => unauthorized.reopenHandler({}, 'expired-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.'
+    }), /Sesión no válida/);
+    assert.equal(JSON.parse(unauthorized.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json)
+      .companies[0].closedThroughDate, '2026-12-31');
+  } finally { unauthorized.db.close(); }
+
+  const nonAdminDb = new Database(':memory:');
+  nonAdminDb.exec(`
+    CREATE TABLE app_state (state_key TEXT PRIMARY KEY,state_json TEXT NOT NULL,updated_at TEXT NOT NULL DEFAULT (datetime('now')));
+    CREATE TABLE audit_events (id INTEGER PRIMARY KEY AUTOINCREMENT,event_type TEXT NOT NULL,details_json TEXT NOT NULL,created_at TEXT NOT NULL DEFAULT (datetime('now')));
+  `);
+  const handlers = new Map();
+  registerAccountingPersistenceHandler({
+    ipcMain: { handle: (channel, handler) => handlers.set(channel, handler) },
+    db: nonAdminDb, licenseView: () => ({ authorized: true }),
+    getActiveSession: () => ({ id: 2, username: 'operator', role: 'operator' })
+  });
+  try {
+    persistClosedCompanyFixture(nonAdminDb);
+    assert.throws(() => handlers.get('sicoven:reopen-accounting-period')({}, 'valid', {
+      companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'Corrección documentada del período.'
+    }), /solo un administrador/);
+  } finally { nonAdminDb.close(); }
+});
+
+test('period reopening requires a reason and an effective earlier date', () => {
+  const harness = createHarness();
+  try {
+    persistClosedCompanyFixture(harness.db);
+    assert.throws(() => harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-12-31', reason: 'Reapertura válida por ajuste.'
+    }), /anterior al cierre vigente/);
+    assert.throws(() => harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-09-30', reason: 'corto'
+    }), /motivo de reapertura es obligatorio/);
+    assert.throws(() => harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-02-30', reason: 'Corrección documentada del período.'
+    }), /no existe en el calendario/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 0);
+  } finally { harness.db.close(); }
+});
+
+test('period reopening is transactional, company-scoped, audited and preserves closure and accounting history', () => {
+  const harness = createHarness();
+  try {
+    persistClosedCompanyFixture(harness.db);
+    const result = harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-09-30',
+      reason: 'Se detectó un documento omitido; soporte de auditoría REF-2026-09.'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.company.closedThroughDate, '2026-09-30');
+    const saved = JSON.parse(harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.companies.find(item => item.id === 'company-1').closedThroughDate, '2026-09-30');
+    assert.equal(saved.companies.find(item => item.id === 'company-2').closedThroughDate, '2026-06-30');
+    assert.equal(saved.journalEntries[0].id, 'historical-entry');
+    const closureHistory = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='accounting_period_closed'").get();
+    assert.ok(closureHistory);
+    assert.equal(JSON.parse(closureHistory.details_json).closedThroughDate, '2026-12-31');
+    const reopening = harness.db.prepare('SELECT * FROM period_reopenings').get();
+    assert.equal(reopening.company_id, 'company-1');
+    assert.equal(reopening.previous_closed_through_date, '2026-12-31');
+    assert.equal(reopening.reopened_through_date, '2026-09-30');
+    assert.equal(reopening.actor_user_id, 1);
+    assert.equal(reopening.actor_username, 'auditor');
+    const event = harness.db.prepare("SELECT details_json FROM audit_events WHERE event_type='accounting_period_reopened'").get();
+    assert.ok(event);
+    assert.equal(JSON.parse(event.details_json).reason, 'Se detectó un documento omitido; soporte de auditoría REF-2026-09.');
+    assert.throws(() => harness.db.prepare("UPDATE period_reopenings SET reason='alterado' WHERE id=?").run(reopening.id), /append-only/);
+    assert.throws(() => harness.db.prepare("DELETE FROM period_reopenings WHERE id=?").run(reopening.id), /append-only/);
+    assert.throws(() => harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: '2026-09-30',
+      reason: 'Segundo intento duplicado que no debe producir otro evento.'
+    }), /anterior al cierre vigente/);
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+  } finally { harness.db.close(); }
+});
+
+test('full period reopening clears only the active boundary and retains its immutable closure record', () => {
+  const harness = createHarness();
+  try {
+    persistClosedCompanyFixture(harness.db);
+    const result = harness.reopenHandler({}, 'valid-session', {
+      companyId: 'company-1', reopenedThroughDate: null,
+      reason: 'Reapertura integral autorizada para corregir el ejercicio completo.'
+    });
+    assert.equal(result.ok, true);
+    assert.equal(result.company.closedThroughDate, undefined);
+    const saved = JSON.parse(harness.db.prepare("SELECT state_json FROM app_state WHERE state_key='accounting'").get().state_json);
+    assert.equal(saved.companies.find(item => item.id === 'company-1').closedThroughDate, undefined);
+    assert.equal(saved.companies.find(item => item.id === 'company-2').closedThroughDate, '2026-06-30');
+    assert.equal(harness.db.prepare('SELECT COUNT(*) AS count FROM period_reopenings').get().count, 1);
+    assert.equal(harness.db.prepare("SELECT COUNT(*) AS count FROM audit_events WHERE event_type='accounting_period_closed'").get().count, 2);
+  } finally { harness.db.close(); }
 });

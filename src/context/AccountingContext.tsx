@@ -77,6 +77,7 @@ interface AccountingContextType {
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
   closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
+  reopenAccountingPeriod: (reopenedThroughDate: string | null, reason: string) => Promise<void>;
   createAccountingYearOpening: (input: { periodStartDate: string; periodEndDate: string; openingDate: string; retainedEarningsAccountCode?: string }) => Promise<JournalEntry>;
 
   // Liquidaciones de crédito
@@ -445,6 +446,45 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     }
   };
 
+  const reopenAccountingPeriod = async (reopenedThroughDate: string | null, reason: string): Promise<void> => {
+    if (periodReopeningInFlightRef.current) throw new Error('Ya hay una reapertura contable en proceso.');
+    const store = window.sicovenStore;
+    if (persistenceFaultRef.current || !store || !storageReady) {
+      throw new Error('La reapertura formal requiere SQLite de escritorio disponible y sin errores.');
+    }
+    if (!currentCompany.id || !currentCompany.closedThroughDate) {
+      throw new Error('La empresa seleccionada no tiene un cierre vigente para reabrir.');
+    }
+    const normalizedReason = String(reason || '').trim();
+    if (normalizedReason.length < 10 || normalizedReason.length > 1000) {
+      throw new Error('Explique el motivo de la reapertura (entre 10 y 1000 caracteres).');
+    }
+    if (reopenedThroughDate !== null && (!isValidIsoDate(reopenedThroughDate) ||
+        reopenedThroughDate >= currentCompany.closedThroughDate)) {
+      throw new Error('La nueva fecha de cierre debe ser válida y anterior al cierre vigente.');
+    }
+    periodReopeningInFlightRef.current = true;
+    try {
+      await saveQueueRef.current;
+      const result = await store.reopenAccountingPeriod(token, {
+        companyId: currentCompany.id,
+        reopenedThroughDate,
+        reason: normalizedReason
+      });
+      if (result?.ok !== true || !result.company) {
+        throw new Error('SQLite no confirmó la reapertura contable.');
+      }
+      const reopenedCompany = result.company;
+      const persistenceConfirmation = waitForPersistence();
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id
+        ? { ...company, ...(reopenedCompany.closedThroughDate ? { closedThroughDate: reopenedCompany.closedThroughDate } : { closedThroughDate: undefined }) }
+        : company));
+      await persistenceConfirmation;
+    } finally {
+      periodReopeningInFlightRef.current = false;
+    }
+  };
+
   const reverseJournalEntry = async (
     id: string,
     effectiveDate: string,
@@ -611,6 +651,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const journalReversalInFlightRef = useRef(false);
   const productionInFlightRef = useRef(false);
   const periodClosureInFlightRef = useRef(false);
+  const periodReopeningInFlightRef = useRef(false);
   const yearOpeningInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
@@ -3956,6 +3997,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         deleteJournalEntry,
         reverseJournalEntry,
         closeAccountingPeriod,
+        reopenAccountingPeriod,
         createAccountingYearOpening,
         creditSettlements: creditSettlements.filter(s => s.companyId === currentCompany.id),
         getCreditBalance,

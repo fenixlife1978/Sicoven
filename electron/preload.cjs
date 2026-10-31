@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('sicovenStore', Object.freeze({
   load: (token) => ipcRenderer.invoke('sicoven:load-state', token),
   listAuditEvents: (token, limit) => ipcRenderer.invoke('sicoven:audit-list', token, limit),
   save: (token, state) => ipcRenderer.invoke('sicoven:save-state', token, state),
+  reopenAccountingPeriod: (token, input) => ipcRenderer.invoke('sicoven:reopen-accounting-period', token, input),
   resetAccounting: (token) => ipcRenderer.invoke('sicoven:reset-accounting', token)
 }));
