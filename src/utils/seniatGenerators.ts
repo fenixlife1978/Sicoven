@@ -1,4 +1,5 @@
 import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
+import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { cleanRif } from './formatters';
 
 /**
@@ -86,59 +87,92 @@ export function generateSeniatIslrXml(company: Company, vouchers: IslrRetentionV
  * Incluye operaciones con retención cero; los comprobantes históricos se usan
  * como respaldo cuando la compra original no conserva metadatos ISLR.
  */
-export function generateSeniatIslrOperationsXml(
-  company: Company,
-  purchases: PurchaseRecord[],
-  vouchers: IslrRetentionVoucher[],
-  period: string
-): string {
-  const agentRif = cleanRif(company.rif);
-  const xmlEscape = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
-  const operations = purchases
-    .filter(p => p.companyId === company.id && p.documentType === '01' && p.invoiceDate.slice(0, 7).replace('-', '') === period && p.islrConceptCode && !p.isCancelled)
-    .map(p => ({
-      supplierRif: p.supplierRif,
-      invoiceNumber: p.invoiceNumber,
-      controlNumber: p.controlNumber,
-      invoiceDate: p.invoiceDate,
-      conceptCode: p.islrConceptCode as string,
-      baseAmountBs: Number(p.taxableBaseBs),
-      retentionRate: Number(p.islrRate || 0),
-      key: [p.supplierRif, p.invoiceNumber, p.invoiceDate, p.islrConceptCode].join('|')
-    }));
-  const known = new Set(operations.map(item => item.key));
+type IslrOperationRow = {
+  supplierRif: string; invoiceNumber: string; controlNumber: string; invoiceDate: string;
+  conceptCode: string; baseAmountBs: number; retentionRate: number;
+  subtrahendBs: number; withheldAmountBs: number; key: string;
+};
+
+/** Eventos inmutables primero; compras y comprobantes completan únicamente el legado. */
+function buildIslrOperationRows(
+  company: Company, purchases: PurchaseRecord[], vouchers: IslrRetentionVoucher[],
+  period: string, events?: IslrFiscalEvent[]
+): IslrOperationRow[] {
+  const purchaseById = new Map(purchases.map(p => [p.id, p]));
+  const eventPurchaseIds = new Set<string>();
+  const rows: IslrOperationRow[] = [];
+  for (const event of events || []) {
+    if (event.companyId !== company.id || event.fiscalDate.slice(0, 7).replace('-', '') !== period || event.kind === 'REVERSAL') continue;
+    for (const allocation of event.allocations) {
+      const purchase = purchaseById.get(allocation.purchaseId);
+      if (!purchase) continue;
+      eventPurchaseIds.add(purchase.id);
+      rows.push({
+        supplierRif: event.supplierRif, invoiceNumber: purchase.invoiceNumber,
+        controlNumber: purchase.controlNumber, invoiceDate: event.fiscalDate,
+        conceptCode: event.conceptCode, baseAmountBs: Number(allocation.baseAmountBs),
+        retentionRate: Number(purchase.islrRate || 0),
+        subtrahendBs: Number(purchase.islrSubtrahendBs || 0),
+        withheldAmountBs: Number(purchase.islrWithheldBs || 0),
+        key: 'EVENT:' + event.id + ':' + allocation.purchaseId
+      });
+    }
+  }
+  for (const purchase of purchases) {
+    if (purchase.companyId !== company.id || purchase.documentType !== '01' ||
+        purchase.invoiceDate.slice(0, 7).replace('-', '') !== period ||
+        !purchase.islrConceptCode || purchase.isCancelled || eventPurchaseIds.has(purchase.id)) continue;
+    rows.push({
+      supplierRif: purchase.supplierRif, invoiceNumber: purchase.invoiceNumber,
+      controlNumber: purchase.controlNumber, invoiceDate: purchase.invoiceDate,
+      conceptCode: purchase.islrConceptCode, baseAmountBs: Number(purchase.taxableBaseBs),
+      retentionRate: Number(purchase.islrRate || 0),
+      subtrahendBs: Number(purchase.islrSubtrahendBs || 0),
+      withheldAmountBs: Number(purchase.islrWithheldBs || 0),
+      key: [purchase.supplierRif, purchase.invoiceNumber, purchase.invoiceDate, purchase.islrConceptCode].join('|')
+    });
+  }
+  const known = new Set(rows.map(row => row.key));
+  const eventVoucherIds = new Set((events || []).filter(event => event.voucherId).map(event => event.voucherId));
   for (const voucher of vouchers) {
     const key = [voucher.supplierRif, voucher.invoiceNumber, voucher.invoiceDate, voucher.conceptCode].join('|');
-    if (voucher.companyId !== company.id || voucher.period !== period || known.has(key)) continue;
-    operations.push({
-      supplierRif: voucher.supplierRif,
-      invoiceNumber: voucher.invoiceNumber,
-      controlNumber: voucher.controlNumber,
-      invoiceDate: voucher.invoiceDate,
-      conceptCode: voucher.conceptCode,
-      baseAmountBs: Number(voucher.baseAmountBs),
-      retentionRate: Number(voucher.retentionRate),
-      key
+    const linkedPurchase = purchases.find(p => p.companyId === company.id && p.supplierRif === voucher.supplierRif &&
+      p.invoiceNumber === voucher.invoiceNumber && p.invoiceDate === voucher.invoiceDate && p.islrConceptCode === voucher.conceptCode);
+    if (voucher.companyId !== company.id || voucher.period !== period || known.has(key) ||
+        eventVoucherIds.has(voucher.id) || (linkedPurchase && eventPurchaseIds.has(linkedPurchase.id))) continue;
+    rows.push({
+      supplierRif: voucher.supplierRif, invoiceNumber: voucher.invoiceNumber,
+      controlNumber: voucher.controlNumber, invoiceDate: voucher.invoiceDate,
+      conceptCode: voucher.conceptCode, baseAmountBs: Number(voucher.baseAmountBs),
+      retentionRate: Number(voucher.retentionRate), subtrahendBs: Number(voucher.subtrahendBs),
+      withheldAmountBs: Number(voucher.withheldAmountBs), key
     });
     known.add(key);
   }
-  operations.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.invoiceNumber.localeCompare(b.invoiceNumber));
-  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\n`;
-  xml += `<RelacionRetencionesISLR RifAgente="${xmlEscape(agentRif)}" Periodo="${xmlEscape(period)}">\n`;
-  for (const operation of operations) {
-    const parts = operation.invoiceDate.split('-');
-    const date = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : operation.invoiceDate;
-    xml += `  <DetalleRetencion>\n`;
-    xml += `    <RifRetenido>${xmlEscape(cleanRif(operation.supplierRif))}</RifRetenido>\n`;
-    xml += `    <NumeroFactura>${xmlEscape(operation.invoiceNumber)}</NumeroFactura>\n`;
-    xml += `    <NumeroControl>${xmlEscape(operation.controlNumber)}</NumeroControl>\n`;
-    xml += `    <FechaOperacion>${xmlEscape(date)}</FechaOperacion>\n`;
-    xml += `    <CodigoConcepto>${xmlEscape(operation.conceptCode.padStart(3, '0'))}</CodigoConcepto>\n`;
-    xml += `    <MontoOperacion>${operation.baseAmountBs.toFixed(2)}</MontoOperacion>\n`;
-    xml += `    <PorcentajeRetencion>${operation.retentionRate.toFixed(2)}</PorcentajeRetencion>\n`;
-    xml += `  </DetalleRetencion>\n`;
+  return rows.sort((x, y) => x.invoiceDate.localeCompare(y.invoiceDate) || x.invoiceNumber.localeCompare(y.invoiceNumber));
+}
+
+export function generateSeniatIslrOperationsXml(
+  company: Company, purchases: PurchaseRecord[], vouchers: IslrRetentionVoucher[],
+  period: string, events?: IslrFiscalEvent[]
+): string {
+  const esc = (value: unknown) => String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+  let xml = '<?xml version="1.0" encoding="ISO-8859-1"?>\n';
+  xml += '<RelacionRetencionesISLR RifAgente="' + esc(cleanRif(company.rif)) + '" Periodo="' + esc(period) + '">\n';
+  for (const row of buildIslrOperationRows(company, purchases, vouchers, period, events)) {
+    const parts = row.invoiceDate.split('-');
+    const date = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : row.invoiceDate;
+    xml += '  <DetalleRetencion>\n';
+    xml += '    <RifRetenido>' + esc(cleanRif(row.supplierRif)) + '</RifRetenido>\n';
+    xml += '    <NumeroFactura>' + esc(row.invoiceNumber) + '</NumeroFactura>\n';
+    xml += '    <NumeroControl>' + esc(row.controlNumber) + '</NumeroControl>\n';
+    xml += '    <FechaOperacion>' + esc(date) + '</FechaOperacion>\n';
+    xml += '    <CodigoConcepto>' + esc(row.conceptCode.padStart(3, '0')) + '</CodigoConcepto>\n';
+    xml += '    <MontoOperacion>' + row.baseAmountBs.toFixed(2) + '</MontoOperacion>\n';
+    xml += '    <PorcentajeRetencion>' + row.retentionRate.toFixed(2) + '</PorcentajeRetencion>\n';
+    xml += '  </DetalleRetencion>\n';
   }
-  return xml + `</RelacionRetencionesISLR>`;
+  return xml + '</RelacionRetencionesISLR>';
 }
 
 /**
@@ -179,36 +213,12 @@ export function generateSeniatIslrTxt(company: Company, vouchers: IslrRetentionV
  * incluidas las operaciones cuyo importe retenido sea cero.
  */
 export function generateSeniatIslrOperationsTxt(
-  company: Company,
-  purchases: PurchaseRecord[],
-  vouchers: IslrRetentionVoucher[],
-  period: string
+  company: Company, purchases: PurchaseRecord[], vouchers: IslrRetentionVoucher[],
+  period: string, events?: IslrFiscalEvent[]
 ): string {
-  const rows = purchases
-    .filter(p => p.companyId === company.id && p.documentType === '01' && p.invoiceDate.slice(0, 7).replace('-', '') === period && p.islrConceptCode && !p.isCancelled)
-    .map(p => ({
-      supplierRif: p.supplierRif, invoiceNumber: p.invoiceNumber, controlNumber: p.controlNumber,
-      invoiceDate: p.invoiceDate, conceptCode: p.islrConceptCode as string,
-      baseAmountBs: Number(p.taxableBaseBs), retentionRate: Number(p.islrRate || 0),
-      subtrahendBs: Number(p.islrSubtrahendBs || 0), withheldAmountBs: Number(p.islrWithheldBs || 0),
-      key: [p.supplierRif, p.invoiceNumber, p.invoiceDate, p.islrConceptCode].join('|')
-    }));
-  const known = new Set(rows.map(row => row.key));
-  for (const voucher of vouchers) {
-    const key = [voucher.supplierRif, voucher.invoiceNumber, voucher.invoiceDate, voucher.conceptCode].join('|');
-    if (voucher.companyId !== company.id || voucher.period !== period || known.has(key)) continue;
-    rows.push({
-      supplierRif: voucher.supplierRif, invoiceNumber: voucher.invoiceNumber, controlNumber: voucher.controlNumber,
-      invoiceDate: voucher.invoiceDate, conceptCode: voucher.conceptCode,
-      baseAmountBs: Number(voucher.baseAmountBs), retentionRate: Number(voucher.retentionRate),
-      subtrahendBs: Number(voucher.subtrahendBs), withheldAmountBs: Number(voucher.withheldAmountBs), key
-    });
-    known.add(key);
-  }
-  rows.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.invoiceNumber.localeCompare(b.invoiceNumber));
-  return rows.map(row => {
+  return buildIslrOperationRows(company, purchases, vouchers, period, events).map(row => {
     const parts = row.invoiceDate.split('-');
-    const date = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : row.invoiceDate;
+    const date = parts.length === 3 ? parts[2] + '/' + parts[1] + '/' + parts[0] : row.invoiceDate;
     return [
       cleanRif(company.rif), period, cleanRif(row.supplierRif), row.conceptCode.padStart(3, '0'),
       row.invoiceNumber, row.controlNumber, date, row.baseAmountBs.toFixed(2),

@@ -106,6 +106,7 @@ interface AccountingContextType {
   // Retenciones
   vatVouchers: VatRetentionVoucher[];
   islrVouchers: IslrRetentionVoucher[];
+  islrFiscalEvents: IslrFiscalEvent[];
   deleteVatVoucher: (id: string) => void;
   deleteIslrVoucher: (id: string) => void;
 
@@ -3641,6 +3642,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         addMovement,
         vatVouchers: vatVouchers.filter(v => v.companyId === currentCompany.id),
         islrVouchers: islrVouchers.filter(v => v.companyId === currentCompany.id),
+        islrFiscalEvents: islrFiscalEvents.filter(event => event.companyId === currentCompany.id),
         deleteVatVoucher,
         deleteIslrVoucher,
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),

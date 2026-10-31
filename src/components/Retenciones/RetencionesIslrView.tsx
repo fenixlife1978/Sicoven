@@ -19,7 +19,7 @@ import {
 } from '../../utils/seniatGenerators';
 
 export const RetencionesIslrView: React.FC = () => {
-  const { currentCompany, islrVouchers, purchases, displayCurrency } = useAccounting();
+  const { currentCompany, islrVouchers, purchases, islrFiscalEvents, displayCurrency } = useAccounting();
 
   const [selectedVoucher, setSelectedVoucher] = useState<IslrRetentionVoucher | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -29,7 +29,8 @@ export const RetencionesIslrView: React.FC = () => {
   const fiscalPurchases = purchases.filter(p => p.companyId === currentCompany.id && p.documentType === '01' && Boolean(p.islrConceptCode));
   const availablePeriods = [...new Set([
     ...islrVouchers.filter(v => v.companyId === currentCompany.id).map(v => v.period),
-    ...fiscalPurchases.map(p => p.invoiceDate.slice(0, 7).replace('-', ''))
+    ...fiscalPurchases.map(p => p.invoiceDate.slice(0, 7).replace('-', '')),
+    ...islrFiscalEvents.filter(event => event.companyId === currentCompany.id).map(event => event.fiscalDate.slice(0, 7).replace('-', ''))
   ])].sort((a, b) => b.localeCompare(a));
   const activePeriod = availablePeriods.includes(selectedPeriod)
     ? selectedPeriod
@@ -37,7 +38,9 @@ export const RetencionesIslrView: React.FC = () => {
   const periodVouchers = islrVouchers
     .filter(v => v.companyId === currentCompany.id && v.period === activePeriod)
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
-  const periodPurchases = fiscalPurchases.filter(p => p.invoiceDate.slice(0, 7).replace('-', '') === activePeriod);
+  const periodEvents = islrFiscalEvents.filter(event => event.companyId === currentCompany.id && event.fiscalDate.slice(0, 7).replace('-', '') === activePeriod);
+  const eventPurchaseIds = new Set(periodEvents.flatMap(event => event.allocations.map(allocation => allocation.purchaseId)));
+  const periodPurchases = fiscalPurchases.filter(p => p.invoiceDate.slice(0, 7).replace('-', '') === activePeriod || eventPurchaseIds.has(p.id));
   const activeOperations = periodPurchases.filter(p => !p.isCancelled);
   const incompleteFiscalOperations = activeOperations.filter(p =>
     !p.islrConceptName ||
@@ -53,7 +56,7 @@ export const RetencionesIslrView: React.FC = () => {
     p.supplierRif === v.supplierRif && p.invoiceNumber === v.invoiceNumber &&
     p.invoiceDate === v.invoiceDate && p.islrConceptCode === v.conceptCode
   ));
-  const hasFiscalOperations = activeOperations.length > 0 || legacyVouchers.length > 0;
+  const hasFiscalOperations = periodEvents.some(event => event.kind !== 'REVERSAL') || activeOperations.length > 0 || legacyVouchers.length > 0;
 
   const filteredOperations = periodPurchases.filter(p => {
     if (!searchTerm.trim()) return true;
@@ -78,13 +81,13 @@ export const RetencionesIslrView: React.FC = () => {
     })
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
-  const hasPendingFiscalCorrection = periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
+  const hasPendingFiscalCorrection = periodEvents.some(event => event.kind === 'REVERSAL') || periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
   const totalRetenidoBs = periodVouchers.reduce((s, v) => s + v.withheldAmountBs, 0);
   const totalRetenidoUsd = periodVouchers.reduce((s, v) => s + v.withheldAmountUsd, 0);
   const totalBaseBs = activeOperations.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
 
-  const generatedXml = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod);
-  const generatedTxt = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod);
+  const generatedXml = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
+  const generatedTxt = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
 
   const handleDownloadXml = () => {
     if (hasPendingFiscalCorrection) {

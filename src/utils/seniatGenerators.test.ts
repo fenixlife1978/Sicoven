@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { generateSeniatIslrOperationsXml, generateSeniatIslrOperationsTxt } from './seniatGenerators';
 import type { Company, PurchaseRecord, IslrRetentionVoucher } from '../types/accounting';
+import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 
 const company = { id: 'c1', rif: 'J-12345678-9', name: 'Empresa', address: '', phone: '', email: '', taxpayerType: 'ORDINARIO', defaultIvaRetentionRate: 75, fiscalYear: 2026, bcvRate: 1 } as Company;
 const purchase = (overrides: Partial<PurchaseRecord> = {}) => ({
@@ -58,4 +59,37 @@ test('SENIAT XML escapes invoice text and limits output to selected period', () 
 test('ISLR TXT includes zero-withholding operations', () => {
   const txt = generateSeniatIslrOperationsTxt(company, [purchase()], [], '202610');
   assert.match(txt, /\t1000\.00\t3\.00\t107\.50\t0\.00$/);
+});
+
+
+test('SENIAT XML uses fiscal event date and allocation instead of invoice date', () => {
+  const event: IslrFiscalEvent = {
+    id: 'e1', companyId: 'c1', supplierRif: 'J-98765432-1', conceptCode: '002',
+    fiscalDate: '2026-10-10', sequence: 1, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: 800 }],
+    basePercentage: 100, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'j1', createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const xml = generateSeniatIslrOperationsXml(company, [purchase()], [], '202610', [event]);
+  assert.match(xml, /<FechaOperacion>10\\/10\\/2026<\\/FechaOperacion>/);
+  assert.match(xml, /<MontoOperacion>800\\.00<\\/MontoOperacion>/);
+});
+
+test('SENIAT event-backed purchase is not duplicated by its legacy voucher', () => {
+  const event: IslrFiscalEvent = {
+    id: 'e1', companyId: 'c1', supplierRif: 'J-98765432-1', conceptCode: '002',
+    fiscalDate: '2026-10-05', sequence: 1, kind: 'ACCOUNT_CREDIT',
+    allocations: [{ purchaseId: 'p1', baseAmountBs: 1000 }],
+    basePercentage: 100, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'j1', voucherId: 'v1', createdAt: '2026-10-05T10:00:00.000Z'
+  };
+  const xml = generateSeniatIslrOperationsXml(company, [purchase()], [voucher()], '202610', [event]);
+  assert.equal((xml.match(/<DetalleRetencion>/g) || []).length, 1);
+});
+
+test('SENIAT XML keeps legacy purchase and voucher fallback when no fiscal event exists', () => {
+  const xml = generateSeniatIslrOperationsXml(company, [purchase()], [voucher({
+    id: 'v2', invoiceNumber: 'LEGACY-2', supplierRif: 'J-11111111-1'
+  })], '202610', []);
+  assert.equal((xml.match(/<DetalleRetencion>/g) || []).length, 2);
 });
