@@ -586,19 +586,19 @@ export const ConfiguracionView: React.FC = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Inicio del ejercicio</label>
-            <input type="date" value={openingPeriodStart} onChange={e => setOpeningPeriodStart(e.target.value)} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <input type="date" value={openingPeriodStart} onChange={e => { setOpeningPeriodStart(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Cierre del ejercicio</label>
-            <input type="date" value={openingPeriodEnd} onChange={e => setOpeningPeriodEnd(e.target.value)} disabled={openingBusy || !isStorageReady || Boolean(currentCompany.closedThroughDate)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <input type="date" value={openingPeriodEnd} onChange={e => { setOpeningPeriodEnd(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady || Boolean(currentCompany.closedThroughDate)} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Fecha de apertura</label>
-            <input type="date" value={openingDate} onChange={e => setOpeningDate(e.target.value)} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
+            <input type="date" value={openingDate} onChange={e => { setOpeningDate(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm font-mono disabled:bg-slate-100" />
           </div>
           <div>
             <label className="block text-xs font-semibold text-slate-700 mb-1">Cuenta patrimonial para resultado</label>
-            <select value={retainedEarningsAccountCode} onChange={e => setRetainedEarningsAccountCode(e.target.value)} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
+            <select value={retainedEarningsAccountCode} onChange={e => { setRetainedEarningsAccountCode(e.target.value); setOpeningPreview(null); setOpeningError(null); }} disabled={openingBusy || !isStorageReady} className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm disabled:bg-slate-100">
               <option value="">Seleccionar si hay resultado del ejercicio</option>
               {accounts.filter(account => account.type === 'PATRIMONIO' && account.isMovement).map(account => (
                 <option key={account.code} value={account.code}>{account.code} — {account.name}</option>
@@ -637,7 +637,7 @@ export const ConfiguracionView: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {openingPreview.map((item, index) => (
+                {openingPreview.map(item => (
                   <tr key={item.accountCode} className="border-t border-slate-100">
                     <td className="px-3 py-2"><span className="font-mono">{item.accountCode}</span> — {item.accountName}</td>
                     <td className="px-3 py-2 text-right font-mono">{item.debitBs.toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
