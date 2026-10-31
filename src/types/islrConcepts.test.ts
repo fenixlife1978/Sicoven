@@ -34,6 +34,13 @@ test('code 002 does not withhold when the payment base does not exceed 83.3334 U
   assert.equal(result.subtrahendBs, 0);
 });
 
+
+test('code 002 records the sustraendo only when the base exceeds the exact UT threshold', () => {
+  const result = calculateIslrRetention(3583.34, concept('002'));
+  assert.equal(result.subtrahendBs, 107.5);
+  assert.equal(result.withheldAmountBs, 0);
+});
+
 test('code 003 applies 34% to 90% of the non-resident professional fee', () => {
   const result = calculateIslrRetention(10000, concept('003'));
   assert.equal(result.subtrahendBs, 0);
