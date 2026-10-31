@@ -149,7 +149,7 @@ export function buildEquityChangesReport(
   const resultTransferredToEquity = periodClosingEntries.length > 0;
 
   for (const entry of periodEntries) {
-    if (openingEntry && entry.id === openingEntry.id) continue;
+    if (entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate) continue;
     for (const item of entry.items) {
       if (!equityCodes.has(item.accountCode)) continue;
       const account = accountsByCode.get(item.accountCode);
