@@ -99,7 +99,8 @@ describe('historical report period selection', () => {
   });
 
   it('rejects invalid years and isolates companies', () => {
-    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-2', 2026, 'SITUACION').map(entry => entry.id), []);
+    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-2', 2026, 'SITUACION').map(entry => entry.id), ['other-company']);
+    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-3', 2026, 'SITUACION'), []);
     assert.deepEqual(selectHistoricalReportEntries(entries, 'co-1', 0, 'SITUACION'), []);
   });
 });
