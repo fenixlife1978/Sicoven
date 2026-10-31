@@ -213,7 +213,7 @@ export function validateIslrFiscalEventLedger(
     }
     const allocationIds = new Set<string>();
     for (const allocation of event.allocations) {
-      const eligible = Number(eligibleBaseByPurchase[allocation.purchaseId]);
+      const eligible = Number(eligibleBaseByPurchase[[event.companyId, allocation.purchaseId].join('|')] ?? eligibleBaseByPurchase[allocation.purchaseId]);
       if (!allocation.purchaseId || allocationIds.has(allocation.purchaseId) ||
           !Number.isFinite(allocation.baseAmountBs) || allocation.baseAmountBs <= 0 ||
           !Number.isFinite(eligible) || eligible <= 0) {
@@ -251,7 +251,7 @@ export function validateIslrFiscalEventLedger(
     }
   }
   for (const [purchaseKey, allocated] of activeByPurchase) {
-    const eligible = Number(eligibleBaseByPurchase[purchaseKey]);
+    const eligible = Number(eligibleBaseByPurchase[purchaseKey] ?? eligibleBaseByPurchase[purchaseKey.split('|').slice(1).join('|')]);
     if (!Number.isFinite(eligible) || eligible <= 0 || allocated > eligible + 0.01) {
       fail('La base fiscal asignada supera la base elegible de la factura; se bloquearía una doble retención por pago y abono en cuenta.');
     }
