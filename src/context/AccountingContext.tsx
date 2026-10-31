@@ -35,6 +35,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
+import { FinancialDisclosure, validateFinancialDisclosure } from '../types/financialDisclosures';
 import { IslrFiscalEvent, allocateIslrFiscalReversal, resolvePurchaseIslrFiscalTrigger, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
@@ -115,6 +116,10 @@ interface AccountingContextType {
   updateProduct: (product: InventoryProduct) => void;
   movements: InventoryMovement[];
   addMovement: (movement: Omit<InventoryMovement, 'id' | 'companyId'>) => InventoryMovement;
+
+  // Notas y revelaciones de estados financieros
+  financialDisclosures: FinancialDisclosure[];
+  saveFinancialDisclosure: (draft: Omit<FinancialDisclosure, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>) => Promise<FinancialDisclosure>;
 
   // Retenciones
   vatVouchers: VatRetentionVoucher[];
@@ -275,6 +280,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
 
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
   const [islrFiscalEvents, setIslrFiscalEvents] = useState<IslrFiscalEvent[]>([]);
+  const [financialDisclosures, setFinancialDisclosures] = useState<FinancialDisclosure[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const [supplierDirectAdvances, setSupplierDirectAdvances] = useState<SupplierDirectAdvance[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
@@ -665,7 +671,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, displayCurrency
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, supplierDirectAdvances, islrFiscalEvents, financialDisclosures, displayCurrency
   };
 
   useEffect(() => {
@@ -700,6 +706,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.supplierAdvanceSettlements)) setSupplierAdvanceSettlements(saved.supplierAdvanceSettlements as SupplierAdvanceSettlement[]);
             if (Array.isArray(saved.supplierDirectAdvances)) setSupplierDirectAdvances(saved.supplierDirectAdvances as SupplierDirectAdvance[]);
             if (Array.isArray(saved.islrFiscalEvents)) setIslrFiscalEvents(saved.islrFiscalEvents as IslrFiscalEvent[]);
+            if (Array.isArray(saved.financialDisclosures)) setFinancialDisclosures(saved.financialDisclosures as FinancialDisclosure[]);
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
           } else {
             // Arranque limpio sin datos ficticios para ambas ediciones (completa y DEMO)
@@ -739,6 +746,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               supplierAdvanceSettlements: [],
               supplierDirectAdvances: [],
               islrFiscalEvents: [],
+              financialDisclosures: [],
               displayCurrency: 'DUAL' as const
             };
             const initialSave = await window.sicovenStore.save(token, emptyAccountingState);
@@ -3640,6 +3648,21 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return adjustingEntry;
   };
 
+  const saveFinancialDisclosure = async (draft: Omit<FinancialDisclosure, 'id' | 'companyId' | 'createdAt' | 'updatedAt'>): Promise<FinancialDisclosure> => {
+    const now = new Date().toISOString();
+    const record: FinancialDisclosure = {
+      ...draft, id: crypto.randomUUID(), companyId: currentCompany.id, createdAt: now, updatedAt: now
+    };
+    const error = validateFinancialDisclosure(record, new Set(companies.map(company => company.id)));
+    if (error) throw new Error(error);
+    setFinancialDisclosures(previous => {
+      const existing = previous.find(item => item.id === record.id);
+      return existing ? previous.map(item => item.id === record.id ? record : item) : [...previous, record];
+    });
+    await waitForPersistence();
+    return record;
+  };
+
   const resetToSampleData = () => {
     // Mantiene el comportamiento anterior del restablecimiento de datos de muestra.
     setCompanies([]);
@@ -3658,6 +3681,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierAdvanceSettlements([]);
     setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
+    setFinancialDisclosures([]);
   };
 
   const resetFactoryData = async () => {
@@ -3684,6 +3708,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setSupplierAdvanceSettlements([]);
     setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
+    setFinancialDisclosures([]);
     setDisplayCurrency('DUAL');
   };
 
@@ -3705,7 +3730,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       creditSettlements,
       supplierAdvanceSettlements,
       supplierDirectAdvances,
-      islrFiscalEvents
+      islrFiscalEvents,
+      financialDisclosures
     };
     return JSON.stringify(backup, null, 2);
   };
@@ -3766,6 +3792,10 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         companyIds.add(c.id);
         return false;
       })) throw new Error('El respaldo contiene empresas inválidas o IDs de empresa duplicados.');
+      const financialDisclosures: FinancialDisclosure[] = data?.financialDisclosures === undefined ? [] : data.financialDisclosures;
+      if (!Array.isArray(financialDisclosures) || financialDisclosures.some(item => validateFinancialDisclosure(item, companyIds) !== null)) {
+        throw new Error('El respaldo contiene notas o revelaciones financieras inválidas o vinculadas a otra empresa.');
+      }
       const journalIds = new Set<string>();
       const journalNumbers = new Set<string>();
       if (data.journalEntries.some((entry: any) => {
@@ -3795,6 +3825,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         if (account.parentCode && !accountByCode.has(account.parentCode.toLowerCase())) {
           throw new Error('La cuenta ' + account.code + ' referencia una cuenta padre inexistente.');
         }
+      }
+      const disclosureNumbers = new Set<string>();
+      for (const note of financialDisclosures) {
+        const numberKey = note.companyId + '|' + note.fiscalYear + '|' + note.noteNumber;
+        if (disclosureNumbers.has(numberKey)) throw new Error('El respaldo contiene números de nota duplicados dentro de una empresa y ejercicio.');
+        disclosureNumbers.add(numberKey);
+        if (note.sourceAccountCodes.some(code => !accountByCode.has(code.toLowerCase()))) {
+          throw new Error('Una nota financiera referencia cuentas inexistentes.');
+        }
+        if (note.sourceEntryIds.some(id => {
+          const entry = (data.journalEntries as JournalEntry[]).find(item => item.id === id);
+          return !entry || entry.companyId !== note.companyId || !entry.date.startsWith(String(note.fiscalYear)) || entry.type === 'CIERRE';
+        })) throw new Error('Una nota financiera referencia asientos inexistentes, de otra empresa o de otro ejercicio.');
       }
       for (const entry of data.journalEntries as JournalEntry[]) {
         if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
@@ -4020,6 +4063,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setSupplierAdvanceSettlements(advanceSettlements);
       setSupplierDirectAdvances(directAdvances);
       setIslrFiscalEvents(islrFiscalEvents);
+      setFinancialDisclosures(financialDisclosures);
       setCurrentCompanyId(data.companies[0].id);
       return true;
     } catch (e) {
@@ -4079,6 +4123,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         vatVouchers: vatVouchers.filter(v => v.companyId === currentCompany.id),
         islrVouchers: islrVouchers.filter(v => v.companyId === currentCompany.id),
         islrFiscalEvents: islrFiscalEvents.filter(event => event.companyId === currentCompany.id),
+        financialDisclosures: financialDisclosures.filter(item => item.companyId === currentCompany.id),
+        saveFinancialDisclosure,
         deleteVatVoucher,
         deleteIslrVoucher,
         bankAccounts: bankAccounts.filter(b => b.companyId === currentCompany.id),
