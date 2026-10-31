@@ -64,9 +64,14 @@ const isOpening = (entry: JournalEntry, year: number) =>
   entry.type === 'APERTURA' && entry.exerciseLink?.nextPeriodStartDate?.slice(0, 4) === String(year);
 const isExcludedFromIncome = (entry: JournalEntry) => entry.type === 'APERTURA' || entry.type === 'CIERRE';
 const balanceMovement = (entry: JournalEntry, code: string, normal: 'DEBIT' | 'CREDIT') =>
-  entry.items.filter(item => item.accountCode === code).reduce((sum, item) => normal === 'DEBIT'
-    ? sum + finite(item.debitBs) - finite(item.creditBs)
-    : sum + finite(item.creditBs) - finite(item.debitBs), { bs: 0, usd: 0 });
+  entry.items.filter(item => item.accountCode === code).reduce((sum, item) => ({
+    bs: sum.bs + (normal === 'DEBIT'
+      ? finite(item.debitBs) - finite(item.creditBs)
+      : finite(item.creditBs) - finite(item.debitBs)),
+    usd: sum.usd + (normal === 'DEBIT'
+      ? finite(item.debitUsd) - finite(item.creditUsd)
+      : finite(item.creditUsd) - finite(item.debitUsd))
+  }), { bs: 0, usd: 0 });
 
 /**
  * Indirect cash flow. Every non-cash adjustment and working-capital account must
