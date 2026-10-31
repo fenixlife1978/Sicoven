@@ -42,7 +42,8 @@ export const RetencionesIslrView: React.FC = () => {
   const periodEvents = companyFiscalEvents.filter(event => event.fiscalDate.slice(0, 7).replace('-', '') === activePeriod);
   const eventBackedPurchaseIds = new Set(companyFiscalEvents.flatMap(event => event.allocations.map(allocation => allocation.purchaseId)));
   const eventVoucherIds = new Set(companyFiscalEvents.filter(event => event.voucherId).map(event => event.voucherId));
-  const eventOperations = periodEvents.filter(event => event.kind !== 'REVERSAL').flatMap(event => {
+  const eventOperations = periodEvents.flatMap(event => {
+    const isReversal = event.kind === 'REVERSAL';
     const eventBaseTotal = event.allocations.reduce((sum, allocation) => sum + Number(allocation.baseAmountBs), 0);
     return event.allocations.flatMap(allocation => {
       const purchase = purchases.find(item => item.id === allocation.purchaseId && item.companyId === currentCompany.id);
@@ -54,9 +55,10 @@ export const RetencionesIslrView: React.FC = () => {
         ...purchase,
         id: purchase.id + ':' + event.id,
         invoiceDate: event.fiscalDate,
-        taxableBaseBs: Number(allocation.baseAmountBs),
+        taxableBaseBs: (isReversal ? -1 : 1) * Number(allocation.baseAmountBs),
         islrConceptCode: event.conceptCode,
-        islrWithheldBs: allocationWithheld
+        islrWithheldBs: (isReversal ? -1 : 1) * allocationWithheld,
+        isCancelled: isReversal || purchase.isCancelled
       }];
     });
   });
@@ -106,23 +108,23 @@ export const RetencionesIslrView: React.FC = () => {
     .sort((a, b) => b.voucherNumber.localeCompare(a.voucherNumber));
 
   const hasPendingFiscalCorrection = periodEvents.some(event => event.kind === 'REVERSAL') || periodVouchers.some(voucher => voucher.requiresFiscalCorrection) || periodPurchases.some(purchase => purchase.isCancelled) || hasIncompleteFiscalOperation;
-  const fiscalEventRetainedBs = periodEvents.filter(event => event.kind !== 'REVERSAL')
-    .reduce((sum, event) => sum + Number(event.withheldAmountBs || 0), 0);
-  const fiscalEventRetainedUsd = periodEvents.filter(event => event.kind !== 'REVERSAL')
-    .reduce((sum, event) => {
-      const totalBase = event.allocations.reduce((base, allocation) => base + Number(allocation.baseAmountBs), 0);
-      return sum + event.allocations.reduce((allocationSum, allocation) => {
-        const purchase = purchases.find(item => item.id === allocation.purchaseId && item.companyId === currentCompany.id);
-        const rate = Number(purchase?.bcvRate || 0);
-        const share = totalBase > 0 ? Number(event.withheldAmountBs) * Number(allocation.baseAmountBs) / totalBase : 0;
-        return allocationSum + (rate > 0 ? share / rate : 0);
-      }, 0);
+  const fiscalEventRetainedBs = periodEvents.reduce((sum, event) =>
+    sum + (event.kind === 'REVERSAL' ? -1 : 1) * Number(event.withheldAmountBs || 0), 0);
+  const fiscalEventRetainedUsd = periodEvents.reduce((sum, event) => {
+    const totalBase = event.allocations.reduce((base, allocation) => base + Number(allocation.baseAmountBs), 0);
+    const sign = event.kind === 'REVERSAL' ? -1 : 1;
+    return sum + sign * event.allocations.reduce((allocationSum, allocation) => {
+      const purchase = purchases.find(item => item.id === allocation.purchaseId && item.companyId === currentCompany.id);
+      const rate = Number(purchase?.bcvRate || 0);
+      const share = totalBase > 0 ? Number(event.withheldAmountBs) * Number(allocation.baseAmountBs) / totalBase : 0;
+      return allocationSum + (rate > 0 ? share / rate : 0);
     }, 0);
+  }, 0);
   const legacyRetainedBs = legacyVouchers.reduce((sum, voucher) => sum + Number(voucher.withheldAmountBs || 0), 0);
   const legacyRetainedUsd = legacyVouchers.reduce((sum, voucher) => sum + Number(voucher.withheldAmountUsd || 0), 0);
   const totalRetenidoBs = fiscalEventRetainedBs + legacyRetainedBs;
   const totalRetenidoUsd = fiscalEventRetainedUsd + legacyRetainedUsd;
-  const totalBaseBs = activeOperations.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
+  const totalBaseBs = periodPurchases.reduce((sum, purchase) => sum + Number(purchase.taxableBaseBs || 0), 0) + legacyVouchers.reduce((sum, voucher) => sum + voucher.baseAmountBs, 0);
 
   const generatedXml = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsXml(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
   const generatedTxt = hasIncompleteFiscalOperation ? '' : generateSeniatIslrOperationsTxt(currentCompany, periodPurchases, periodVouchers, activePeriod, islrFiscalEvents);
