@@ -123,20 +123,20 @@ export function generateSeniatIslrOperationsXml(
     known.add(key);
   }
   operations.sort((a, b) => a.invoiceDate.localeCompare(b.invoiceDate) || a.invoiceNumber.localeCompare(b.invoiceNumber));
-  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\\n`;
-  xml += `<RelacionRetencionesISLR RifAgente="${xmlEscape(agentRif)}" Periodo="${xmlEscape(period)}">\\n`;
+  let xml = `<?xml version="1.0" encoding="ISO-8859-1"?>\n`;
+  xml += `<RelacionRetencionesISLR RifAgente="${xmlEscape(agentRif)}" Periodo="${xmlEscape(period)}">\n`;
   for (const operation of operations) {
     const parts = operation.invoiceDate.split('-');
     const date = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : operation.invoiceDate;
-    xml += `  <DetalleRetencion>\\n`;
-    xml += `    <RifRetenido>${xmlEscape(cleanRif(operation.supplierRif))}</RifRetenido>\\n`;
-    xml += `    <NumeroFactura>${xmlEscape(operation.invoiceNumber)}</NumeroFactura>\\n`;
-    xml += `    <NumeroControl>${xmlEscape(operation.controlNumber)}</NumeroControl>\\n`;
-    xml += `    <FechaOperacion>${xmlEscape(date)}</FechaOperacion>\\n`;
-    xml += `    <CodigoConcepto>${xmlEscape(operation.conceptCode.padStart(3, '0'))}</CodigoConcepto>\\n`;
-    xml += `    <MontoOperacion>${operation.baseAmountBs.toFixed(2)}</MontoOperacion>\\n`;
-    xml += `    <PorcentajeRetencion>${operation.retentionRate.toFixed(2)}</PorcentajeRetencion>\\n`;
-    xml += `  </DetalleRetencion>\\n`;
+    xml += `  <DetalleRetencion>\n`;
+    xml += `    <RifRetenido>${xmlEscape(cleanRif(operation.supplierRif))}</RifRetenido>\n`;
+    xml += `    <NumeroFactura>${xmlEscape(operation.invoiceNumber)}</NumeroFactura>\n`;
+    xml += `    <NumeroControl>${xmlEscape(operation.controlNumber)}</NumeroControl>\n`;
+    xml += `    <FechaOperacion>${xmlEscape(date)}</FechaOperacion>\n`;
+    xml += `    <CodigoConcepto>${xmlEscape(operation.conceptCode.padStart(3, '0'))}</CodigoConcepto>\n`;
+    xml += `    <MontoOperacion>${operation.baseAmountBs.toFixed(2)}</MontoOperacion>\n`;
+    xml += `    <PorcentajeRetencion>${operation.retentionRate.toFixed(2)}</PorcentajeRetencion>\n`;
+    xml += `  </DetalleRetencion>\n`;
   }
   return xml + `</RelacionRetencionesISLR>`;
 }
@@ -213,8 +213,8 @@ export function generateSeniatIslrOperationsTxt(
       cleanRif(company.rif), period, cleanRif(row.supplierRif), row.conceptCode.padStart(3, '0'),
       row.invoiceNumber, row.controlNumber, date, row.baseAmountBs.toFixed(2),
       row.retentionRate.toFixed(2), row.subtrahendBs.toFixed(2), row.withheldAmountBs.toFixed(2)
-    ].join('\\t');
-  }).join('\\r\\n');
+    ].join('\t');
+  }).join('\r\n');
 }
 
 /**
