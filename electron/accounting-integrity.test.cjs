@@ -71,6 +71,61 @@ test('SQLite validates direct supplier advance disbursements against the exact c
   }), /importes, moneda, referencia o cuenta/);
 });
 
+test('SQLite accepts a direct supplier advance refund allocated to its original cash disbursement', () => {
+  const accounts = [
+    { code: '1.1.2.03', name: 'Anticipos a proveedores', type: 'ACTIVO', isMovement: true },
+    { code: '1.1.1.01', name: 'Caja principal', type: 'ACTIVO', isMovement: true }
+  ];
+  const directJournal = {
+    id: 'direct-journal', companyId: 'company-1', entryNumber: 1,
+    date: '2026-10-10', description: 'Anticipo directo',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: 'TRX-DIRECT-1',
+    items: [
+      { accountCode: '1.1.2.03', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '1.1.1.01', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ], createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const refundJournal = {
+    id: 'refund-journal', companyId: 'company-1', entryNumber: 2,
+    date: '2026-10-11', description: 'Reembolso anticipo directo',
+    type: 'ANTICIPO_PROVEEDOR', bcvRate: 100, referenceDoc: 'REFUND-1',
+    items: [
+      { accountCode: '1.1.1.01', debitBs: 10000, creditBs: 0, debitUsd: 100, creditUsd: 0 },
+      { accountCode: '1.1.2.03', debitBs: 0, creditBs: 10000, debitUsd: 0, creditUsd: 100 }
+    ], createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const source = {
+    id: 'direct-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', date: '2026-10-10', amountUsd: 100,
+    bookValueBs: 10000, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
+    paymentCurrency: 'BS', paidAmount: 10000, reference: 'TRX-DIRECT-1',
+    journalEntryId: 'direct-journal', createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const settlement = {
+    id: 'direct-refund-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    supplierName: 'Proveedor', sourceCreditNoteIds: [], sourceCreditNoteAllocations: [],
+    sourceDirectAdvanceIds: ['direct-1'],
+    sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-1', amountUsd: 100, bookValueBs: 10000 }],
+    kind: 'REFUND_RECEIVED', date: '2026-10-11', amountUsd: 100, amountBs: 10000,
+    advanceBookValueBs: 10000, cashReceivedBs: 10000, bcvRate: 100,
+    treasuryAccountCode: '1.1.1.01', journalEntryId: 'refund-journal',
+    reference: 'REFUND-1', createdAt: '2026-10-11T10:00:00.000Z'
+  };
+  const previous = { ...emptyState(), supplierDirectAdvances: [], supplierAdvanceSettlements: [] };
+  const next = {
+    ...emptyState([directJournal, refundJournal]), accounts,
+    supplierDirectAdvances: [source], supplierAdvanceSettlements: [settlement],
+    bankAccounts: [{ id: 'cash-account', companyId: 'company-1', accountCode: '1.1.1.01' }]
+  };
+  assert.doesNotThrow(() => validateAccountingSnapshot(previous, next));
+  assert.throws(() => validateAccountingSnapshot(previous, {
+    ...next,
+    supplierAdvanceSettlements: [{ ...settlement,
+      sourceDirectAdvanceAllocations: [{ directAdvanceId: 'direct-1', amountUsd: 101, bookValueBs: 10100 }]
+    }]
+  }), /exceden el saldo individual de un desembolso directo/);
+});
+
 test('SQLite validates ISLR event structure and historical UT during every state save', () => {
   const invalidUtEvent = {
     id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
@@ -983,7 +1038,7 @@ test('SQLite rejects supplier advance allocations that exceed the individual cre
     bankAccounts: [{ id: 'bank-1', companyId: 'company-1', accountCode: '1.1.1.03' }]
   };
   assert.throws(() => validateAccountingSnapshot(prior, adjustedNext),
-    /liquidaciones de anticipos que exceden el saldo acreditado por notas de crédito/);
+    /liquidaciones de anticipos que exceden los saldos de notas de crédito y desembolsos directos/);
 });
 
 test('SQLite restores an individual credit-note advance allocation after its settlement is reversed', () => {
