@@ -188,3 +188,18 @@ export function calculateMonthlyIslrRetention(
     withheldAmountBs: Math.max(0, incrementalWithheld)
   };
 }
+
+/**
+ * Tarifa T-2 progresiva del artículo 9 del Decreto 1.808.
+ * Devuelve el impuesto acumulado expresado en UT; no convierte a bolívares
+ * ni calcula retenciones incrementales. El llamador debe aportar la UT
+ * legalmente aplicable al cierre del ejercicio y conciliar el historial.
+ */
+export function calculateIslrTariff2Ut(taxableBaseUt: number): number {
+  if (!Number.isFinite(taxableBaseUt) || taxableBaseUt < 0) {
+    throw new Error('La base anual ISLR en UT debe ser un importe finito no negativo.');
+  }
+  if (taxableBaseUt <= 2000) return taxableBaseUt * 0.15;
+  if (taxableBaseUt <= 3000) return 300 + (taxableBaseUt - 2000) * 0.22;
+  return 520 + (taxableBaseUt - 3000) * 0.34;
+}
