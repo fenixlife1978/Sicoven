@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { useAccounting } from '../../context/AccountingContext';
 import { formatBs, formatUsd } from '../../utils/formatters';
+import { buildEquityChangesReport } from '../../types/equityChanges';
 import { ArrowLeft, Download, FileSpreadsheet, Printer, ShieldAlert, TrendingUp } from 'lucide-react';
 
 type AnnualAccountRow = {
@@ -75,6 +76,11 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
     };
   }, [accounts, journalEntries, currentCompany.id, year]);
 
+  const equityReport = useMemo(
+    () => buildEquityChangesReport(journalEntries, accounts, currentCompany.id, Number(year)),
+    [journalEntries, accounts, currentCompany.id, year]
+  );
+
   const money = (bs: number, usd: number) => (
     <span className="text-right font-mono">
       {displayCurrency !== 'USD' && <span>{formatBs(bs)}</span>}
@@ -91,6 +97,17 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       ['Costos', report.costsBs.toFixed(2), report.costsUsd.toFixed(6)],
       ['Gastos', report.expensesBs.toFixed(2), report.expensesUsd.toFixed(6)],
       ['Utilidad / (Pérdida) antes de impuestos', report.netProfitBs.toFixed(2), report.netProfitUsd.toFixed(6)],
+      [],
+      ['ESTADO DE CAMBIOS EN EL PATRIMONIO', 'Bolívares (Bs.)', 'USD'],
+      ['Saldo inicial', equityReport.openingTotalBs.toFixed(2), equityReport.openingTotalUsd.toFixed(6)],
+      ['Movimientos patrimoniales', equityReport.movementTotalBs.toFixed(2), equityReport.movementTotalUsd.toFixed(6)],
+      ['Saldo final', equityReport.closingTotalBs.toFixed(2), equityReport.closingTotalUsd.toFixed(6)],
+      [],
+      ['Cuenta patrimonial', 'Saldo inicial Bs.', 'Saldo inicial USD', 'Movimientos Bs.', 'Movimientos USD', 'Saldo final Bs.', 'Saldo final USD'],
+      ...equityReport.rows.map(r => [r.accountCode, r.openingBs.toFixed(2), r.openingUsd.toFixed(6), r.movementBs.toFixed(2), r.movementUsd.toFixed(6), r.closingBs.toFixed(2), r.closingUsd.toFixed(6)]),
+      [],
+      ['Fecha', 'Asiento', 'Tipo', 'Cuenta', 'Concepto', 'Neto Bs.', 'Neto USD'],
+      ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), m.netUsd.toFixed(6)])
       [],
       ['Código', 'Cuenta', 'Tipo', 'Debe Bs.', 'Haber Bs.', 'Debe USD', 'Haber USD', 'Saldo anual Bs.', 'Saldo anual USD'],
       ...report.rows.map(r => [r.code, r.name, r.type, r.debitBs.toFixed(2), r.creditBs.toFixed(2), r.debitUsd.toFixed(6), r.creditUsd.toFixed(6), r.netBs.toFixed(2), r.netUsd.toFixed(6)])
@@ -156,6 +173,51 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
         <ResultLine label="(-) Gastos operativos y administrativos" bs={-report.expensesBs} usd={-report.expensesUsd} money={money} />
         <ResultLine label="Resultado antes de impuestos" bs={report.netProfitBs} usd={report.netProfitUsd} money={money} bold />
       </div>
+    </section>
+
+    <section className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className="border-b bg-slate-50 p-4">
+        <h2 className="font-bold text-slate-900">Estado de Cambios en el Patrimonio · {year}</h2>
+        <p className="mt-1 text-xs text-slate-500">Roll-forward de cuentas patrimoniales basado exclusivamente en asientos contabilizados de la empresa activa.</p>
+        <p className="mt-1 text-xs text-slate-500">{equityReport.openingEntryId ? 'Saldo inicial tomado del asiento de apertura anual.' : 'Saldo inicial reconstruido desde los movimientos anteriores al ejercicio.'} {equityReport.resultTransferredToEquity ? 'El cierre del ejercicio contiene la transferencia del resultado al patrimonio.' : 'El resultado del ejercicio aún no aparece transferido por un asiento de cierre y se presenta por separado.'}</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="min-w-[980px] w-full text-xs">
+          <thead className="bg-slate-100 text-slate-700"><tr>
+            <th className="p-3 text-left">Cuenta / concepto</th>
+            <th className="p-3 text-right">Saldo inicial Bs.</th><th className="p-3 text-right">Saldo inicial USD</th>
+            <th className="p-3 text-right">Variación Bs.</th><th className="p-3 text-right">Variación USD</th>
+            <th className="p-3 text-right">Saldo final Bs.</th><th className="p-3 text-right">Saldo final USD</th>
+          </tr></thead>
+          <tbody className="divide-y divide-slate-100">
+            {equityReport.rows.map(row => <tr key={row.accountCode}>
+              <td className="p-3"><span className="font-mono text-slate-500">{row.accountCode}</span> · {row.accountName}</td>
+              <td className="p-3 text-right font-mono">{formatBs(row.openingBs)}</td><td className="p-3 text-right font-mono">{formatUsd(row.openingUsd)}</td>
+              <td className="p-3 text-right font-mono">{formatBs(row.movementBs)}</td><td className="p-3 text-right font-mono">{formatUsd(row.movementUsd)}</td>
+              <td className="p-3 text-right font-mono font-semibold">{formatBs(row.closingBs)}</td><td className="p-3 text-right font-mono font-semibold">{formatUsd(row.closingUsd)}</td>
+            </tr>)}
+            {!equityReport.rows.length && <tr><td colSpan={7} className="p-6 text-center text-slate-500">No existen movimientos patrimoniales contabilizados para este ejercicio.</td></tr>}
+          </tbody>
+          <tfoot className="border-t-2 border-slate-300 bg-slate-50 font-bold"><tr>
+            <td className="p-3">TOTAL PATRIMONIO</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.openingTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.openingTotalUsd)}</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.movementTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.movementTotalUsd)}</td>
+            <td className="p-3 text-right font-mono">{formatBs(equityReport.closingTotalBs)}</td><td className="p-3 text-right font-mono">{formatUsd(equityReport.closingTotalUsd)}</td>
+          </tr></tfoot>
+        </table>
+      </div>
+      <div className="border-t border-slate-200 p-4">
+        <h3 className="font-semibold text-slate-800">Trazabilidad de movimientos patrimoniales</h3>
+        {equityReport.movements.length ? <div className="mt-2 overflow-x-auto"><table className="min-w-[760px] w-full text-xs">
+          <thead className="bg-slate-50 text-slate-600"><tr><th className="p-2 text-left">Fecha</th><th className="p-2 text-left">Asiento</th><th className="p-2 text-left">Cuenta</th><th className="p-2 text-left">Concepto</th><th className="p-2 text-right">Neto Bs.</th><th className="p-2 text-right">Neto USD</th></tr></thead>
+          <tbody className="divide-y divide-slate-100">{equityReport.movements.map((movement, index) => <tr key={movement.entryId + movement.accountCode + index}>
+            <td className="p-2">{movement.date}</td><td className="p-2">#{movement.entryNumber} · {movement.type}</td>
+            <td className="p-2 font-mono">{movement.accountCode}</td><td className="p-2">{movement.description}</td>
+            <td className="p-2 text-right font-mono">{formatBs(movement.netBs)}</td><td className="p-2 text-right font-mono">{formatUsd(movement.netUsd)}</td>
+          </tr>)}</tbody>
+        </table></div> : <p className="mt-2 text-xs text-slate-500">No hay movimientos directos en cuentas patrimoniales durante el ejercicio.</p>}
+      </div>
+      <p className="border-t border-slate-200 p-3 text-[11px] text-slate-500">El sistema no atribuye automáticamente movimientos a dividendos, aportes, reservas o ajustes si el asiento no identifica esa naturaleza. Revise el asiento fuente antes de emitir el estado como información financiera formal.</p>
     </section>
 
     <section className="grid grid-cols-1 gap-4 lg:grid-cols-2">
