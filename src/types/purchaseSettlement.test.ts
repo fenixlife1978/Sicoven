@@ -25,7 +25,7 @@ test('mantiene compatibilidad con registros históricos sin condición explícit
 });
 
 test('bloquea un pago anterior al abono en cuenta sin afirmar que ya existe el flujo de anticipos', () => {
-  assert.match(validatePurchasePaymentDate('2026-10-09', '2026-10-10') || '', /anticipos directos a proveedores aún no está disponible/);
+  assert.match(validatePurchasePaymentDate('2026-10-09', '2026-10-10') || '', /Registra el desembolso como anticipo directo/);
 });
 
 test('allows supplier payable settlements on or after account-credit recognition', () => {
