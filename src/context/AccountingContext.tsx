@@ -29,6 +29,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
+import { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
@@ -259,6 +260,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   });
 
   const [creditSettlements, setCreditSettlements] = useState<CreditSettlement[]>([]);
+  const [islrFiscalEvents, setIslrFiscalEvents] = useState<IslrFiscalEvent[]>([]);
   const [supplierAdvanceSettlements, setSupplierAdvanceSettlements] = useState<SupplierAdvanceSettlement[]>([]);
   const settlementInFlightRef = useRef<Set<string>>(new Set());
   const supplierAdvanceSettlementInFlightRef = useRef<Set<string>>(new Set());
@@ -526,7 +528,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
-    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, displayCurrency
+    vatVouchers, islrVouchers, bankAccounts, bankStatementMovements, creditSettlements, supplierAdvanceSettlements, islrFiscalEvents, displayCurrency
   };
 
   useEffect(() => {
@@ -559,6 +561,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             if (Array.isArray(saved.bankStatementMovements)) setBankStatementMovements(saved.bankStatementMovements as BankStatementMovement[]);
             if (Array.isArray(saved.creditSettlements)) setCreditSettlements(saved.creditSettlements as CreditSettlement[]);
             if (Array.isArray(saved.supplierAdvanceSettlements)) setSupplierAdvanceSettlements(saved.supplierAdvanceSettlements as SupplierAdvanceSettlement[]);
+            if (Array.isArray(saved.islrFiscalEvents)) setIslrFiscalEvents(saved.islrFiscalEvents as IslrFiscalEvent[]);
             if (saved.displayCurrency === 'BS' || saved.displayCurrency === 'USD' || saved.displayCurrency === 'DUAL') setDisplayCurrency(saved.displayCurrency);
           } else {
             // Arranque limpio sin datos ficticios para ambas ediciones (completa y DEMO)
@@ -576,6 +579,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             setBankStatementMovements([]);
             setCreditSettlements([]);
             setSupplierAdvanceSettlements([]);
+            setIslrFiscalEvents([]);
             // No reutilizar stateSnapshot aquí: fue capturada antes de que React
             // aplicara los setState de limpieza y podría reintroducir datos antiguos
             // del navegador en una SQLite recién creada.
@@ -594,6 +598,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
               bankStatementMovements: [],
               creditSettlements: [],
               supplierAdvanceSettlements: [],
+              islrFiscalEvents: [],
               displayCurrency: 'DUAL' as const
             };
             const initialSave = await window.sicovenStore.save(token, emptyAccountingState);

@@ -22,7 +22,7 @@ const reversalEntry = () => ({
 });
 const emptyState = (journalEntries = []) => ({
   journalEntries, purchases: [], sales: [], movements: [], creditSettlements: [],
-  bankStatementMovements: [], vatVouchers: [], islrVouchers: [], products: [], companies: [], accounts: []
+  bankStatementMovements: [], vatVouchers: [], islrVouchers: [], islrFiscalEvents: [], products: [], companies: [], accounts: []
 });
 
 test('SQLite rejects reuse of a lower unused journal sequence number', () => {
@@ -1036,4 +1036,23 @@ test('SQLite preserves legacy company history instead of allowing demo-ID deleti
     () => validateAccountingSnapshot(prior, next),
     /bloqueó la eliminación del registro histórico en movements/
   );
+});
+
+
+test('SQLite preserves the ISLR fiscal event ledger as append-only history', () => {
+  const fiscalEvent = {
+    id: 'islr-event-1', companyId: 'company-1', supplierRif: 'J-12345678-9',
+    conceptCode: '005', fiscalDate: '2026-10-10', sequence: 1, kind: 'PAYMENT',
+    allocations: [{ purchaseId: 'purchase-1', baseAmountBs: 100 }],
+    basePercentage: 90, unitTaxValueBs: 43, withheldAmountBs: 0,
+    journalEntryId: 'journal-1', createdAt: '2026-10-10T10:00:00.000Z'
+  };
+  const prior = { ...emptyState(), islrFiscalEvents: [fiscalEvent] };
+  assert.doesNotThrow(() => validateAccountingSnapshot(prior, {
+    ...emptyState(), islrFiscalEvents: [fiscalEvent, { ...fiscalEvent, id: 'islr-event-2', sequence: 2, journalEntryId: 'journal-2' }]
+  }));
+  assert.throws(() => validateAccountingSnapshot(prior, emptyState()), /eliminación del registro histórico en islrFiscalEvents/);
+  assert.throws(() => validateAccountingSnapshot(prior, {
+    ...emptyState(), islrFiscalEvents: [{ ...fiscalEvent, withheldAmountBs: 10 }]
+  }), /modificación de un registro histórico en islrFiscalEvents/);
 });

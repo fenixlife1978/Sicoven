@@ -168,6 +168,8 @@ function validateAccountingSnapshot(previousState, nextState) {
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
   assertAppendOnlyCollection(priorState, nextState, 'islrVouchers',
     ['requiresFiscalCorrection', 'correctionEntryId', 'correctionEntryIds', 'correctionNote'], ['requiresFiscalCorrection']);
+  // Los eventos fiscales ISLR son un libro auxiliar inmutable; las correcciones se registran como reversión.
+  assertAppendOnlyCollection(priorState, nextState, 'islrFiscalEvents');
   const nextBankRows = new Map(asArray(nextState.bankStatementMovements).map(item => [String(item.id), item]));
   for (const oldRow of asArray(priorState.bankStatementMovements)) {
     const nextRow = nextBankRows.get(String(oldRow.id));
