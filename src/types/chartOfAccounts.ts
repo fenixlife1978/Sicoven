@@ -51,6 +51,9 @@ export function prepareAccountForCatalog(account: Account, existing: Account[]):
   if (!parent) {
     throw new Error('No existe una cuenta agrupadora superior para este código. Cree primero su cuenta padre.');
   }
+  if (level - parent.level > 2) {
+    throw new Error('Falta crear un nivel agrupador intermedio. Cree primero la cuenta padre más cercana.');
+  }
   if (parent.isMovement) {
     throw new Error('La cuenta superior es imputable y no puede contener subcuentas. Seleccione otra estructura.');
   }
