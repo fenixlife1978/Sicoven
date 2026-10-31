@@ -32,7 +32,7 @@ export function validatePurchasePaymentDate(settlementDate: string, accountCredi
   };
   if (!isValidDate(settlementDate) || !isValidDate(accountCreditDate)) return 'La fecha de pago o la fecha de abono en cuenta no es válida.';
   if (settlementDate < accountCreditDate) {
-    return 'La fecha de pago es anterior al reconocimiento de la cuenta por pagar (' + accountCreditDate + '). La gestión de anticipos directos a proveedores aún no está disponible; no se puede registrar este pago como liquidación de CxP.';
+    return 'La fecha de pago es anterior al reconocimiento de la cuenta por pagar (' + accountCreditDate + '). Registra el desembolso como anticipo directo a proveedor y no como liquidación de una CxP aún no reconocida.';
   }
   return null;
 }
