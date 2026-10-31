@@ -1002,7 +1002,7 @@ function validateAccountingSnapshot(previousState, nextState) {
         .reduce((sum, item) => sum + Number(item.debitBs || 0) - Number(item.creditBs || 0), 0);
       const allowedCodes = new Set([targetPayableCode, '1.1.2.03',
         ...(expectedFx > 0.009 ? ['4.2.1.01'] : expectedFx < -0.009 ? ['6.1.1.08'] : [])]);
-      if (!target || target.companyId !== companyId || target.documentType !== '01' || target.isCancelled ||
+      if (!target || target.companyId !== companyId || target.documentType !== '01' || target.paymentTerm !== 'CREDITO' || target.isCancelled ||
           String(target.supplierRif || '').trim().toUpperCase() !== rif ||
           !targetPayableCode || payableDebitBs <= 0 ||
           Math.abs(payableDebitBs - expectedPayableDebitBs) > 0.02 ||
