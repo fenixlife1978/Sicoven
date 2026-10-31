@@ -22,7 +22,7 @@ const SECTION_LABELS: Record<CashFlowSection, string> = {
 };
 
 export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, isStorageReady } = useAccounting();
   const availableYears = useMemo(() => {
     const years = journalEntries.filter(entry => /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
       .map(entry => Number(entry.date.slice(0, 4)));
@@ -116,10 +116,11 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
       <h2 className="font-bold text-slate-900">Clasificación de cuentas de contrapartida</h2>
       <p className="mt-1 text-xs text-slate-500">La clasificación se guarda en la ficha contable de la cuenta y se conserva localmente en SQLite. No se infiere por el nombre de la cuenta.</p>
       {message && <p className="mt-2 text-xs text-emerald-700">{message}</p>}
+      {!isStorageReady && <p className="mt-2 text-xs font-semibold text-rose-700">SQLite no está disponible. Las clasificaciones permanecen bloqueadas para proteger la fuente de verdad.</p>}
       <div className="mt-3 space-y-2">
         {report.classificationCandidates.map(candidate => <div key={candidate.accountCode} className="grid grid-cols-1 items-center gap-2 rounded-lg border border-slate-100 p-3 sm:grid-cols-[1fr_260px]">
           <div><span className="font-mono text-xs text-slate-500">{candidate.accountCode}</span><span className="ml-2 text-sm font-medium text-slate-800">{candidate.accountName}</span></div>
-          <select value={candidate.activity || 'SIN_CLASIFICAR'} onChange={event => handleClassify(candidate.accountCode, event.target.value as CashFlowActivity)} className="rounded-lg border border-slate-300 bg-white p-2 text-xs">
+          <select value={candidate.activity || 'SIN_CLASIFICAR'} onChange={event => handleClassify(candidate.accountCode, event.target.value as CashFlowActivity)} className="rounded-lg border border-slate-300 bg-white p-2 text-xs" disabled={!isStorageReady}>
             {(Object.keys(ACTIVITY_LABELS) as CashFlowActivity[]).map(activity => <option key={activity} value={activity}>{ACTIVITY_LABELS[activity]}</option>)}
           </select>
         </div>)}
