@@ -37,11 +37,38 @@ describe('cash flow statement', () => {
     ];
     const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2026);
     assert.equal(report.openingCashBs, 50);
+    assert.equal(report.openingCashUsd, 5);
     assert.equal(report.netChangeBs, 60);
+    assert.equal(report.netChangeUsd, 6);
     assert.equal(report.closingCashBs, 110);
+    assert.equal(report.closingCashUsd, 11);
     assert.equal(report.activities.OPERACION.receiptsBs, 100);
     assert.equal(report.activities.OPERACION.paymentsBs, 40);
     assert.equal(report.activities.OPERACION.netBs, 60);
+    assert.equal(report.activities.OPERACION.receiptsUsd, 10);
+    assert.equal(report.activities.OPERACION.paymentsUsd, 4);
+    assert.equal(report.activities.OPERACION.netUsd, 6);
+    assert.equal(report.isFullyClassified, true);
+    assert.equal(report.isReconciled, true);
+  });
+
+  it('separates investing payments from financing receipts', () => {
+    const entries = [
+      entry('investment-1', '2026-02-01', 'MANUAL', [
+        line('1.2', 'Propiedad, planta y equipo', 75, 0, 7.5, 0),
+        line('1.1.1.01', 'Caja principal', 0, 75, 0, 7.5)
+      ]),
+      entry('financing-1', '2026-03-01', 'MANUAL', [
+        line('1.1.1.01', 'Caja principal', 200, 0, 20, 0),
+        line('3.1', 'Capital social', 0, 200, 0, 20)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts, banks, 'co-1', 2026);
+    assert.equal(report.activities.INVERSION.paymentsBs, 75);
+    assert.equal(report.activities.INVERSION.netBs, -75);
+    assert.equal(report.activities.FINANCIACION.receiptsBs, 200);
+    assert.equal(report.activities.FINANCIACION.netBs, 200);
+    assert.equal(report.netChangeBs, 125);
     assert.equal(report.isFullyClassified, true);
     assert.equal(report.isReconciled, true);
   });
