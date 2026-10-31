@@ -852,7 +852,7 @@ test('SQLite applies a direct supplier advance to a future payable and reduces t
     id: 'direct-source-1', companyId: 'company-1', supplierRif: originalPurchase.supplierRif,
     supplierName: originalPurchase.supplierName, date: '2026-10-10', amountUsd: 1,
     bookValueBs: 100, bcvRate: 100, treasuryAccountCode: '1.1.1.01',
-    paymentCurrency: 'BS', paidAmount: 100, reference: 'DIRECT-1',
+    paymentCurrency: 'BS', paidAmount: 100, reference: 'DIRECT-1', support: 'REC-DIRECT-1',
     journalEntryId: 'direct-source-journal', createdAt: '2026-10-10T10:00:00.000Z'
   };
   const settlement = {
