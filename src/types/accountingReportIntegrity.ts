@@ -88,10 +88,10 @@ export function getAccountBalanceNature(
 export type HistoricalReportKind = 'SITUACION' | 'RESULTADOS';
 
 /**
- * A statement of financial position is cumulative at year-end, while the
- * income statement reports activity for the selected fiscal year only.
- * Closing entries remain part of the cumulative ledger position but are
- * excluded from the annual operating result.
+ * A statement of financial position uses the latest opening journal as its
+ * carry-forward boundary, preventing prior-year balances from being counted
+ * again when the opening entry already contains them. The income statement
+ * reports activity for the selected fiscal year only.
  */
 export function selectHistoricalReportEntries<T extends {
   companyId: string;
@@ -109,7 +109,7 @@ export function selectHistoricalReportEntries<T extends {
   const end = String(year).padStart(4, '0') + '-12-31';
   const validCompanyEntries = entries.filter(entry =>
     entry.companyId === companyId &&
-    /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date) &&
+    /^\d{4}-\d{2}-\d{2}$/.test(entry.date) &&
     entry.date <= end
   );
 
