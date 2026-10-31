@@ -100,11 +100,10 @@ export function getUnclosedResultContribution(
   debitUsd: number,
   creditUsd: number
 ): ResultContribution {
-  if (accountType === 'INGRESOS') {
+  if (accountType === 'INGRESOS' || accountType === 'COSTOS' || accountType === 'GASTOS') {
+    // The signed equity contribution is always credit minus debit:
+    // revenue credits increase equity; cost/expense debits decrease it.
     return { bs: creditBs - debitBs, usd: creditUsd - debitUsd };
-  }
-  if (accountType === 'COSTOS' || accountType === 'GASTOS') {
-    return { bs: debitBs - creditBs, usd: debitUsd - creditUsd };
   }
   return { bs: 0, usd: 0 };
 }
