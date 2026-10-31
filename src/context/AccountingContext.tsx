@@ -75,7 +75,7 @@ interface AccountingContextType {
   addJournalEntry: (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>) => JournalEntry;
   deleteJournalEntry: (id: string) => void;
   reverseJournalEntry: (id: string, effectiveDate: string, reason: string, workpaperNote: string, priorPeriodAdjustment?: boolean, retainedEarningsAccountCode?: string) => Promise<JournalEntry>;
-  closeAccountingPeriod: (closedThroughDate: string) => void;
+  closeAccountingPeriod: (closedThroughDate: string) => Promise<void>;
 
   // Liquidaciones de crédito
   creditSettlements: CreditSettlement[];
@@ -353,7 +353,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     return result.events || [];
   }, [token]);
 
-  const closeAccountingPeriod = (closedThroughDate: string) => {
+  const closeAccountingPeriod = async (closedThroughDate: string): Promise<void> => {
+    if (periodClosureInFlightRef.current) throw new Error('Ya hay un cierre contable en proceso.');
     if (!isValidIsoDate(closedThroughDate)) throw new Error('Indique una fecha de cierre válida.');
     const now = new Date();
     const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
@@ -375,9 +376,18 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         purchases.some(purchase => purchase.companyId === currentCompany.id && purchase.invoiceDate <= closedThroughDate && !purchase.journalEntryId)) {
       throw new Error('No se puede cerrar el período: hay facturas sin asiento contable vinculado. Regularice la integridad documental primero.');
     }
-    setCompanies(prev => prev.map(company => company.id === currentCompany.id
-      ? { ...company, closedThroughDate }
-      : company));
+    periodClosureInFlightRef.current = true;
+    try {
+      // Registrar el waiter antes de publicar el estado evita perder la confirmación
+      // cuando React programa el efecto de persistencia en el siguiente ciclo.
+      const persistenceConfirmation = waitForPersistence();
+      setCompanies(prev => prev.map(company => company.id === currentCompany.id
+        ? { ...company, closedThroughDate }
+        : company));
+      await persistenceConfirmation;
+    } finally {
+      periodClosureInFlightRef.current = false;
+    }
   };
 
   const reverseJournalEntry = async (
@@ -545,6 +555,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   const persistenceFaultRef = useRef(false);
   const journalReversalInFlightRef = useRef(false);
   const productionInFlightRef = useRef(false);
+  const periodClosureInFlightRef = useRef(false);
   const persistenceWaitersRef = useRef<Array<{ resolve: () => void; reject: (error: Error) => void }>>([]);
   const stateSnapshot = {
     companies, currentCompanyId, accounts, journalEntries, purchases, sales, products, movements,
