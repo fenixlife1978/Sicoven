@@ -107,7 +107,7 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       ...equityReport.rows.map(r => [r.accountCode, r.openingBs.toFixed(2), r.openingUsd.toFixed(6), r.movementBs.toFixed(2), r.movementUsd.toFixed(6), r.closingBs.toFixed(2), r.closingUsd.toFixed(6)]),
       [],
       ['Fecha', 'Asiento', 'Tipo', 'Cuenta', 'Concepto', 'Neto Bs.', 'Neto USD'],
-      ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), m.netUsd.toFixed(6)])
+      ...equityReport.movements.map(m => [m.date, m.entryNumber, m.type, m.accountCode, m.description, m.netBs.toFixed(2), m.netUsd.toFixed(6)]),
       [],
       ['Código', 'Cuenta', 'Tipo', 'Debe Bs.', 'Haber Bs.', 'Debe USD', 'Haber USD', 'Saldo anual Bs.', 'Saldo anual USD'],
       ...report.rows.map(r => [r.code, r.name, r.type, r.debitBs.toFixed(2), r.creditBs.toFixed(2), r.debitUsd.toFixed(6), r.creditUsd.toFixed(6), r.netBs.toFixed(2), r.netUsd.toFixed(6)])
