@@ -129,7 +129,7 @@ test('rejects duplicate ISLR withholding events when partial payments follow the
     journalEntries: [journal('j-purchase', '2026-10-01'), journal('j-payment-1', '2026-10-05', 'PAGO'), journal('j-payment-2', '2026-10-06', 'PAGO')],
     islrVouchers: [voucher], islrFiscalEvents: [accountCredit, paymentOne, paymentTwo]
   };
-  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /base fiscal asignada supera la base elegible/);
+  assert.throws(() => validateIslrFiscalEventLedger(previous, next), /asignaciones acumuladas exceden la base elegible/);
 });
 
 test('requires and reconciles an ISLR voucher for positive account-credit withholding', () => {
