@@ -1279,14 +1279,14 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             : (concept.isResident ? 'DOMICILED' : 'NON_DOMICILED'))) {
         throw new Error('La retención ISLR requiere un concepto vigente y la clasificación fiscal explícita del beneficiario.');
       }
+      const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
+      const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
       const expectedUnitTaxValueBs = getIslrUnitTaxValueForPeriod(monthKey);
       if (expectedUnitTaxValueBs == null || purchaseData.islrUnitTaxValueBs !== expectedUnitTaxValueBs ||
           purchaseData.islrFormulaFactor !== ISLR_FORMULA_FACTOR ||
           purchaseData.islrBasePercentage !== concept.basePercentage) {
         throw new Error('Los parámetros históricos de cálculo ISLR no coinciden con el concepto fiscal seleccionado.');
       }
-      const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
-      const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
       const matchingMonthlyOperations = purchases.filter(item =>
         item.companyId === currentCompany.id &&
         item.documentType === '01' &&
