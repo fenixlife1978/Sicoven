@@ -109,8 +109,14 @@ export function validateIslrFiscalEventLedger(
     }
   }
 
-  const sequences = new Set<string>();
+  // Reservar correlativos históricos sin invalidar duplicados legacy.
+  // Solo los eventos agregados en esta operación deben ser únicos.
+  const sequences = new Set(previous
+    .filter(event => event && event.companyId && validDate(event.fiscalDate) &&
+      Number.isInteger(event.sequence) && event.sequence > 0)
+    .map(event => [event.companyId, event.fiscalDate, event.sequence].join('|')));
   for (const event of next) {
+    if (oldById.has(String(event.id))) continue;
     const key = [event.companyId, event.fiscalDate, event.sequence].join('|');
     if (sequences.has(key)) fail('La secuencia de eventos fiscales del día está duplicada en la empresa.');
     sequences.add(key);
