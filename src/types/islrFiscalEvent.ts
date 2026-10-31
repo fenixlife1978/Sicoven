@@ -49,7 +49,8 @@ export interface IslrFiscalReversalAllocation {
 export function allocateIslrFiscalReversal(
   events: IslrFiscalEvent[],
   purchaseId: string,
-  requestedBaseAmountBs: number
+  requestedBaseAmountBs: number,
+  companyId?: string
 ): IslrFiscalReversalAllocation[] {
   const money = (value: number) => Math.round((value + Number.EPSILON) * 100) / 100;
   if (!Array.isArray(events) || !purchaseId ||
@@ -57,7 +58,7 @@ export function allocateIslrFiscalReversal(
     throw new Error('La base de reversión ISLR no es válida.');
   }
   const sources = events
-    .filter(event => event.kind !== 'REVERSAL' &&
+    .filter(event => event.kind !== 'REVERSAL' && (!companyId || event.companyId === companyId) &&
       event.allocations.some(allocation => allocation.purchaseId === purchaseId))
     .sort((a, b) => a.fiscalDate.localeCompare(b.fiscalDate) ||
       a.sequence - b.sequence || a.id.localeCompare(b.id))
@@ -69,7 +70,8 @@ export function allocateIslrFiscalReversal(
       const originalBase = Number(allocations[0].baseAmountBs);
       const originalWithheld = Number(originalEvent.withheldAmountBs);
       const priorReversals = events.filter(event =>
-        event.kind === 'REVERSAL' && event.reversalOfEventId === originalEvent.id);
+        event.kind === 'REVERSAL' && event.reversalOfEventId === originalEvent.id &&
+        (!companyId || event.companyId === companyId));
       const alreadyReversedBase = priorReversals.flatMap(event => event.allocations)
         .filter(item => item.purchaseId === purchaseId)
         .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
@@ -238,18 +240,19 @@ export function validateIslrFiscalEventLedger(
   for (const event of next) {
     if (event.kind === 'REVERSAL') continue;
     for (const allocation of event.allocations) {
-      const reversed = next.filter(item => item.kind === 'REVERSAL' && item.reversalOfEventId === event.id)
+      const key = [event.companyId, allocation.purchaseId].join('|');
+      const reversed = next.filter(item => item.kind === 'REVERSAL' &&
+          item.reversalOfEventId === event.id && item.companyId === event.companyId)
         .flatMap(item => item.allocations)
         .filter(item => item.purchaseId === allocation.purchaseId)
         .reduce((sum, item) => sum + Number(item.baseAmountBs), 0);
       const remaining = Math.max(0, Number(allocation.baseAmountBs) - reversed);
-      activeByPurchase.set(allocation.purchaseId,
-        (activeByPurchase.get(allocation.purchaseId) || 0) + remaining);
+      activeByPurchase.set(key, (activeByPurchase.get(key) || 0) + remaining);
     }
   }
-  for (const [purchaseId, allocated] of activeByPurchase) {
-    const eligible = Number(eligibleBaseByPurchase[purchaseId]);
-    if (allocated > eligible + 0.01) {
+  for (const [purchaseKey, allocated] of activeByPurchase) {
+    const eligible = Number(eligibleBaseByPurchase[purchaseKey]);
+    if (!Number.isFinite(eligible) || eligible <= 0 || allocated > eligible + 0.01) {
       fail('La base fiscal asignada supera la base elegible de la factura; se bloquearía una doble retención por pago y abono en cuenta.');
     }
   }
