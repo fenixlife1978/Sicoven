@@ -74,6 +74,23 @@ describe('cash flow statement', () => {
     assert.equal(report.isReconciled, true);
   });
 
+  it('does not mark offsetting unclassified receipts and payments as complete', () => {
+    const entries = [
+      entry('unclassified-in', '2026-02-01', 'MANUAL', [
+        line('1.1.1.01', 'Caja principal', 0, 0, 0, 0),
+        line('3.1', 'Capital social', 0, 25, 0, 2.5)
+      ]),
+      entry('unclassified-out', '2026-03-01', 'MANUAL', [
+        line('1.1.1.01', 'Caja principal', 25, 0, 2.5, 0),
+        line('3.1', 'Capital social', 0, 25, 0, 2.5)
+      ])
+    ];
+    const report = buildCashFlowReport(entries, accounts.map(account => account.code === '3.1' ? { ...account, cashFlowActivity: undefined } : account), banks, 'co-1', 2026);
+    assert.equal(report.unclassifiedNetBs, 0);
+    assert.equal(report.activities.SIN_CLASIFICAR.receiptsBs + report.activities.SIN_CLASIFICAR.paymentsBs, 50);
+    assert.equal(report.isFullyClassified, false);
+  });
+
   it('treats a linked annual opening as opening cash, not as a period cash flow', () => {
     const entries = [
       entry('annual-opening-2026', '2026-01-01', 'APERTURA', [
