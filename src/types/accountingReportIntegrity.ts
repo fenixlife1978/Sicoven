@@ -103,7 +103,7 @@ export function selectHistoricalReportEntries<T extends { companyId: string; dat
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
   return entries.filter(entry => {
-    if (entry.companyId !== companyId || !/^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date)) return false;
+    if (entry.companyId !== companyId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
     if (entry.date > end) return false;
     if (kind === 'SITUACION') return true;
     return entry.date >= start && entry.type !== 'CIERRE';
