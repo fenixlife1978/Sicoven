@@ -3689,21 +3689,47 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         return !data.bankAccounts.some((b: any) => b.companyId === item.companyId && b.accountCode === item.treasuryAccountCode);
       })) throw new Error('El respaldo contiene liquidaciones de anticipos duplicadas, inválidas o sin documento/asiento/tesorería verificable.');
       const advanceConsumedByNote = new Map<string, { usd: number; bs: number }>();
+      const advanceConsumedByDirect = new Map<string, { usd: number; bs: number }>();
+      const directById = new Map((directAdvances as SupplierDirectAdvance[]).map(item => [item.id, item]));
       for (const settlement of advanceSettlements as SupplierAdvanceSettlement[]) {
-        // Liquidaciones históricas ya reversadas no consumen saldo; se tolera
-        // que las anteriores al control FIFO no conserven desglose por nota.
-        if (settlement.isReversed && !Array.isArray(settlement.sourceCreditNoteAllocations)) continue;
+        const noteAllocations = settlement.sourceCreditNoteAllocations || [];
+        const directAllocations = settlement.sourceDirectAdvanceAllocations || [];
+        const noteIds = settlement.sourceCreditNoteIds || [];
+        const directIds = settlement.sourceDirectAdvanceIds || [];
+        if (!noteAllocations.length && !directAllocations.length) {
+          if (settlement.isReversed) continue;
+          throw new Error('El respaldo contiene una liquidación sin asignación a sus orígenes de anticipo.');
+        }
+        if (noteAllocations.length) {
+          const allocationError = validateSupplierAdvanceCreditNoteAllocations(
+            noteAllocations, noteIds,
+            noteAllocations.reduce((sum, item) => sum + Number(item.amountUsd), 0),
+            noteAllocations.reduce((sum, item) => sum + Number(item.bookValueBs), 0)
+          );
+          if (allocationError) throw new Error('El respaldo contiene una asignación de nota de crédito inválida: ' + allocationError);
+        } else if (noteIds.length) {
+          throw new Error('El respaldo contiene IDs de notas de crédito sin distribución individual.');
+        }
+        if (directAllocations.length !== directIds.length ||
+            new Set(directIds).size !== directIds.length ||
+            directAllocations.some(item => !item || !directIds.includes(item.directAdvanceId) ||
+              !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
+              !Number.isFinite(item.bookValueBs) || item.bookValueBs < 0) ||
+            new Set(directAllocations.map(item => item.directAdvanceId)).size !== directAllocations.length) {
+          throw new Error('El respaldo contiene una asignación individual de anticipos directos inválida.');
+        }
+        const allocatedUsd = [...noteAllocations, ...directAllocations].reduce((sum, item) => sum + Number(item.amountUsd), 0);
+        const allocatedBs = [...noteAllocations, ...directAllocations].reduce((sum, item) => sum + Number(item.bookValueBs), 0);
+        if (Math.abs(allocatedUsd - Number(settlement.amountUsd)) > 0.01 ||
+            Math.abs(allocatedBs - Number(settlement.advanceBookValueBs ?? settlement.amountBs)) > 0.02) {
+          throw new Error('La asignación total del anticipo no concilia con el importe liquidado y su valor histórico.');
+        }
         const sourceNotes = (data.purchases as PurchaseRecord[]).filter(note =>
           note.companyId === settlement.companyId && note.documentType === '03' && !note.isCancelled &&
           String(note.supplierRif || '').trim().toUpperCase() === String(settlement.supplierRif || '').trim().toUpperCase() &&
           Number(note.supplierAdvanceUsd || 0) > 0);
         const sourceById = new Map(sourceNotes.map(note => [note.id, note]));
-        const allocationError = validateSupplierAdvanceCreditNoteAllocations(
-          settlement.sourceCreditNoteAllocations || [], settlement.sourceCreditNoteIds || [],
-          Number(settlement.amountUsd), Number(settlement.advanceBookValueBs ?? settlement.amountBs)
-        );
-        if (allocationError) throw new Error('El respaldo contiene una liquidación de anticipo inválida: ' + allocationError);
-        for (const allocation of settlement.sourceCreditNoteAllocations || []) {
+        for (const allocation of noteAllocations) {
           const source = sourceById.get(allocation.creditNoteId);
           if (!source) throw new Error('Una liquidación de anticipo referencia una nota de crédito inexistente o de otro proveedor.');
           if (!settlement.isReversed) {
@@ -3713,12 +3739,32 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
             advanceConsumedByNote.set(source.id, used);
           }
         }
+        for (const allocation of directAllocations) {
+          const source = directById.get(allocation.directAdvanceId);
+          if (!source || source.companyId !== settlement.companyId || source.isReversed ||
+              String(source.supplierRif || '').trim().toUpperCase() !== String(settlement.supplierRif || '').trim().toUpperCase()) {
+            throw new Error('Una liquidación de anticipo referencia un desembolso directo inexistente, reversado o de otro proveedor/empresa.');
+          }
+          if (!settlement.isReversed) {
+            const used = advanceConsumedByDirect.get(source.id) || { usd: 0, bs: 0 };
+            used.usd = Math.round((used.usd + allocation.amountUsd) * 100) / 100;
+            used.bs = Math.round((used.bs + allocation.bookValueBs) * 100) / 100;
+            advanceConsumedByDirect.set(source.id, used);
+          }
+        }
       }
       for (const [noteId, used] of advanceConsumedByNote) {
         const source = (data.purchases as PurchaseRecord[]).find(note => note.id === noteId)!;
         if (used.usd > Number(source.supplierAdvanceUsd || 0) + 0.01 ||
             used.bs > Number(source.supplierAdvanceBs || 0) + 0.02) {
           throw new Error('El respaldo consume más anticipo del disponible en una nota de crédito de proveedor.');
+        }
+      }
+      for (const [directId, used] of advanceConsumedByDirect) {
+        const source = directById.get(directId)!;
+        if (used.usd > Number(source.amountUsd || 0) + 0.005 ||
+            used.bs > Number(source.bookValueBs || 0) + 0.02) {
+          throw new Error('El respaldo consume más anticipo del disponible en un desembolso directo.');
         }
       }
       const settlementIds = new Set<string>();
