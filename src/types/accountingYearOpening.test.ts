@@ -25,7 +25,7 @@ test('traslada cuentas de balance y lleva la utilidad a resultados acumulados en
     line('6.1.1', 200, 0, 2, 0)
   ])];
   const items = buildOpeningEntryItems({
-    companyId: 'co-1', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
+    companyId: 'co-1', periodStartDate: '2026-01-01', periodEndDate: '2026-12-31', openingDate: '2027-01-01',
     accounts, journalEntries: journal, retainedEarningsAccountCode: '3.1.1'
   });
   assert.equal(items.length, 3);
