@@ -163,6 +163,15 @@ export const NewPurchaseModal: React.FC<NewPurchaseModalProps> = ({ isOpen, onCl
       islrRate: applyIslr ? islrRate : 0,
       islrSubtrahendBs: applyIslr ? islrSubtrahendBs : 0,
       islrWithheldBs: applyIslr ? islrWithheldBs : 0,
+      islrBeneficiaryType: applyIslr ? selectedConcept?.category : undefined,
+      islrResidency: applyIslr && selectedConcept
+        ? (selectedConcept.category === 'PN'
+          ? (selectedConcept.isResident ? 'RESIDENT' : 'NON_RESIDENT')
+          : (selectedConcept.isResident ? 'DOMICILED' : 'NON_DOMICILED'))
+        : undefined,
+      islrBasePercentage: applyIslr ? selectedConcept?.basePercentage : undefined,
+      islrUnitTaxValueBs: applyIslr ? VALOR_UNIDAD_TRIBUTARIA_BS : undefined,
+      islrFormulaFactor: applyIslr ? ISLR_FORMULA_FACTOR : undefined,
       bcvRate,
       totalAmountUsd,
       taxableBaseUsd,
