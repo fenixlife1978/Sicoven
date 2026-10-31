@@ -70,7 +70,7 @@ export function calculateOutstandingSupplierAdvance(
   const usedBs = active.reduce((sum, item) => sum + Number(item.advanceBookValueBs ?? item.amountBs ?? 0), 0);
   const outstandingUsd = moneyUsd(balance.totalCreditUsd - usedUsd);
   const outstandingBs = moneyBs(balance.totalCreditBs - usedBs);
-  if (outstandingUsd < -0.005 || outstandingBs < -0.02) {
+  if (outstandingUsd < -0.00001 || outstandingBs < -0.02) {
     throw new Error('Las liquidaciones históricas exceden los anticipos registrados. Se requiere conciliación antes de continuar.');
   }
   return { ...balance, outstandingUsd: Math.max(0, outstandingUsd), outstandingBs: Math.max(0, outstandingBs) };
