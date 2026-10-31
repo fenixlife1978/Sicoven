@@ -47,6 +47,17 @@ describe('chart of accounts hierarchy validation', () => {
     assert.throws(() => prepareAccountForCatalog(account({ code: '1.1.01', level: 3 }), movementParent), /imputable/);
   });
 
+  it('rejects blank names and a root account with an incompatible type', () => {
+    assert.throws(
+      () => prepareAccountForCatalog(account({ name: '   ' }), DEFAULT_CHART_OF_ACCOUNTS),
+      /denominación/
+    );
+    assert.throws(
+      () => prepareAccountForCatalog(account({ code: '1', type: 'PASIVO', level: 1 }), []),
+      /clasificación/
+    );
+  });
+
   it('keeps the new account under the same accounting classification as its parent', () => {
     assert.throws(
       () => prepareAccountForCatalog(account({ code: '2.1.1.06', type: 'ACTIVO' }), DEFAULT_CHART_OF_ACCOUNTS),
