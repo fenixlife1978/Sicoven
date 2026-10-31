@@ -3826,6 +3826,19 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
           throw new Error('La cuenta ' + account.code + ' referencia una cuenta padre inexistente.');
         }
       }
+      const disclosureNumbers = new Set<string>();
+      for (const note of financialDisclosures) {
+        const numberKey = note.companyId + '|' + note.fiscalYear + '|' + note.noteNumber;
+        if (disclosureNumbers.has(numberKey)) throw new Error('El respaldo contiene números de nota duplicados dentro de una empresa y ejercicio.');
+        disclosureNumbers.add(numberKey);
+        if (note.sourceAccountCodes.some(code => !accountByCode.has(code.toLowerCase()))) {
+          throw new Error('Una nota financiera referencia cuentas inexistentes.');
+        }
+        if (note.sourceEntryIds.some(id => {
+          const entry = (data.journalEntries as JournalEntry[]).find(item => item.id === id);
+          return !entry || entry.companyId !== note.companyId || !entry.date.startsWith(String(note.fiscalYear)) || entry.type === 'CIERRE';
+        })) throw new Error('Una nota financiera referencia asientos inexistentes, de otra empresa o de otro ejercicio.');
+      }
       for (const entry of data.journalEntries as JournalEntry[]) {
         if (!entry || !companyIds.has(entry.companyId) || !Array.isArray(entry.items) ||
             !isValidIsoDate(entry.date) ||
