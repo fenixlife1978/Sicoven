@@ -948,7 +948,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     if (validation) throw new Error(validation);
     if (draft.kind === 'APPLIED_TO_PURCHASE') {
       const payable = getCreditBalance(target!.id, 'PURCHASE_PAYMENT');
-      if (draft.amountUsd > payable.outstandingUsd + 0.005) throw new Error('La aplicación supera el saldo pendiente de la factura destino.');
+      if (draft.amountUsd > payable.outstandingUsd + 0.000005) throw new Error('La aplicación supera el saldo pendiente de la factura destino.');
     }
 
     // La descarga del anticipo se mide a su valor histórico en libros, no a la tasa del día.
@@ -997,12 +997,12 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const noteAvailableUsd = Math.max(0, sourceNotes.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) - noteConsumedUsd);
     const directAvailableUsd = Math.max(0, sourceDirectAdvances.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0) - directConsumedUsd);
-    if (amountUsd > noteAvailableUsd + directAvailableUsd + 0.005) {
+    if (amountUsd > noteAvailableUsd + directAvailableUsd + 0.000005) {
       throw new Error('La liquidación supera los anticipos disponibles de notas de crédito y desembolsos directos.');
     }
     const noteRequestedUsd = Math.min(amountUsd, noteAvailableUsd);
     const directRequestedUsd = Math.max(0, amountUsd - noteRequestedUsd);
-    const sourceCreditNoteAllocations = noteRequestedUsd > 0.005
+    const sourceCreditNoteAllocations = noteRequestedUsd > 0.000005
       ? allocateSupplierAdvanceCreditNotes(
           sourceNotes.map(note => ({
             id: note.id,
@@ -1013,7 +1013,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         )
       : [];
     const sourceCreditNoteIds = sourceCreditNoteAllocations.map(item => item.creditNoteId);
-    const sourceDirectAdvanceAllocations = directRequestedUsd > 0.005
+    const sourceDirectAdvanceAllocations = directRequestedUsd > 0.000005
       ? allocateDirectSupplierAdvance(
           sourceDirectAdvances,
           activeSettlements.map(item => ({
@@ -1035,7 +1035,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       );
       if (allocationError) throw new Error(allocationError);
     }
-    if (sourceDirectAdvanceAllocations.reduce((sum, item) => sum + item.amountUsd, 0) + 0.005 < directRequestedUsd) {
+    if (sourceDirectAdvanceAllocations.reduce((sum, item) => sum + item.amountUsd, 0) + 0.000005 < directRequestedUsd) {
       throw new Error('No se pudo distribuir el importe completo entre los desembolsos directos disponibles.');
     }
 
