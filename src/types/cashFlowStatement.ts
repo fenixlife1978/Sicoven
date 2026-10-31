@@ -124,6 +124,19 @@ export function buildCashFlowReport(
     SIN_CLASIFICAR: zeroTotals()
   };
   const lines: CashFlowLine[] = [];
+  const addLine = (line: CashFlowLine) => {
+    const existing = lines.find(item =>
+      item.entryId === line.entryId && item.accountCode === line.accountCode && item.activity === line.activity
+    );
+    if (existing) {
+      existing.receiptsBs += line.receiptsBs;
+      existing.paymentsBs += line.paymentsBs;
+      existing.receiptsUsd += line.receiptsUsd;
+      existing.paymentsUsd += line.paymentsUsd;
+      return;
+    }
+    lines.push(line);
+  };
   const candidates = new Map<string, CashFlowClassificationCandidate>();
   let netChangeBs = 0, netChangeUsd = 0;
   let unclassifiedNetBs = 0, unclassifiedNetUsd = 0;
@@ -159,7 +172,7 @@ export function buildCashFlowReport(
     );
     if (Math.abs(counterpartTotal - Math.abs(net)) > tolerance || counterpartLines.length === 0) {
       recordUnclassified(net, currency);
-      lines.push({
+      addLine({
         entryId: entry.id, entryNumber: entry.entryNumber, date: entry.date,
         description: 'Movimiento de efectivo sin contrapartida conciliada: ' + entry.description,
         referenceDoc: entry.referenceDoc, accountCode: 'NO-CLASIFICADO',
@@ -182,7 +195,7 @@ export function buildCashFlowReport(
       if (section === 'SIN_CLASIFICAR') {
         const signedValue = net > 0 ? value : -value;
         recordUnclassified(signedValue, currency);
-        lines.push({
+        addLine({
           entryId: entry.id, entryNumber: entry.entryNumber, date: entry.date,
           description: item.description || entry.description, referenceDoc: entry.referenceDoc,
           accountCode: item.accountCode, accountName: account?.name || item.accountName,
