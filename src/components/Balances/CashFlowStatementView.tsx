@@ -22,7 +22,7 @@ const SECTION_LABELS: Record<CashFlowSection, string> = {
 };
 
 export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack }) => {
-  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, isStorageReady } = useAccounting();
+  const { currentCompany, accounts, bankAccounts, journalEntries, setAccountCashFlowActivity, isStorageReady, waitForPersistence } = useAccounting();
   const availableYears = useMemo(() => {
     const years = journalEntries.filter(entry => /^\d{4}-\d{2}-\d{2}$/.test(entry.date))
       .map(entry => Number(entry.date.slice(0, 4)));
@@ -38,12 +38,14 @@ export const CashFlowStatementView: React.FC<{ onBack: () => void }> = ({ onBack
     <span>{formatBs(bs)}</span><span className="block text-[10px] text-slate-500">{formatUsd(usd)}</span>
   </span>;
 
-  const handleClassify = (code: string, value: CashFlowActivity) => {
+  const handleClassify = async (code: string, value: CashFlowActivity) => {
     try {
       setAccountCashFlowActivity(code, value);
-      setMessage('Clasificación guardada para la cuenta ' + code + '.');
+      setMessage('Guardando clasificación de la cuenta ' + code + ' en SQLite…');
+      await waitForPersistence();
+      setMessage('SQLite confirmó la clasificación de la cuenta ' + code + '.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'No se pudo guardar la clasificación.');
+      setMessage(error instanceof Error ? error.message : 'No se pudo confirmar la clasificación en SQLite.');
     }
   };
 
