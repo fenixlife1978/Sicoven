@@ -5,7 +5,8 @@ import {
   getAccountBalanceNature,
   hasAccountMovement,
   isBalanceSheetBalanced,
-  isTrialBalanceBalanced
+  isTrialBalanceBalanced,
+  selectHistoricalReportEntries
 } from './accountingReportIntegrity';
 
 describe('accounting report integrity', () => {
@@ -67,5 +68,39 @@ describe('accounting report integrity', () => {
     assert.equal(getAccountBalanceNature(-25, true), 'ACREEDOR');
     assert.equal(getAccountBalanceNature(25, false), 'ACREEDOR');
     assert.equal(getAccountBalanceNature(-25, false), 'DEUDOR');
+  });
+});
+
+
+describe('historical report period selection', () => {
+  const entries = [
+    { id: 'opening-2025', companyId: 'co-1', date: '2025-01-01', type: 'APERTURA' },
+    { id: 'sale-2025', companyId: 'co-1', date: '2025-06-30', type: 'VENTA' },
+    { id: 'closing-2025', companyId: 'co-1', date: '2025-12-31', type: 'CIERRE' },
+    { id: 'opening-2026', companyId: 'co-1', date: '2026-01-01', type: 'APERTURA' },
+    { id: 'sale-2026', companyId: 'co-1', date: '2026-03-15', type: 'VENTA' },
+    { id: 'closing-2026', companyId: 'co-1', date: '2026-12-31', type: 'CIERRE' },
+    { id: 'future-2027', companyId: 'co-1', date: '2027-01-01', type: 'MANUAL' },
+    { id: 'other-company', companyId: 'co-2', date: '2025-04-01', type: 'MANUAL' }
+  ];
+
+  it('uses cumulative ledger entries through year-end for historical situation reports', () => {
+    assert.deepEqual(
+      selectHistoricalReportEntries(entries, 'co-1', 2026, 'SITUACION').map(entry => entry.id),
+      ['opening-2025', 'sale-2025', 'closing-2025', 'opening-2026', 'sale-2026', 'closing-2026']
+    );
+  });
+
+  it('uses only selected-year operating entries for historical income statements', () => {
+    assert.deepEqual(
+      selectHistoricalReportEntries(entries, 'co-1', 2026, 'RESULTADOS').map(entry => entry.id),
+      ['opening-2026', 'sale-2026']
+    );
+  });
+
+  it('rejects invalid years and isolates companies', () => {
+    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-2', 2026, 'SITUACION').map(entry => entry.id), ['other-company']);
+    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-3', 2026, 'SITUACION'), []);
+    assert.deepEqual(selectHistoricalReportEntries(entries, 'co-1', 0, 'SITUACION'), []);
   });
 });

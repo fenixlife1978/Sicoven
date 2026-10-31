@@ -83,3 +83,29 @@ export function getAccountBalanceNature(
   const isNormalBalance = balance > 0;
   return isNormalBalance === isDebitNature ? 'DEUDOR' : 'ACREEDOR';
 }
+
+
+export type HistoricalReportKind = 'SITUACION' | 'RESULTADOS';
+
+/**
+ * A statement of financial position is cumulative at year-end, while the
+ * income statement reports activity for the selected fiscal year only.
+ * Closing entries remain part of the cumulative ledger position but are
+ * excluded from the annual operating result.
+ */
+export function selectHistoricalReportEntries<T extends { companyId: string; date: string; type: string }>(
+  entries: T[],
+  companyId: string,
+  year: number,
+  kind: HistoricalReportKind
+): T[] {
+  if (!Number.isInteger(year) || year < 1) return [];
+  const start = String(year).padStart(4, '0') + '-01-01';
+  const end = String(year).padStart(4, '0') + '-12-31';
+  return entries.filter(entry => {
+    if (entry.companyId !== companyId || !/^\d{4}-\d{2}-\d{2}$/.test(entry.date)) return false;
+    if (entry.date > end) return false;
+    if (kind === 'SITUACION') return true;
+    return entry.date >= start && entry.type !== 'CIERRE';
+  });
+}
