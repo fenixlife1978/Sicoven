@@ -93,13 +93,19 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
         throw new Error('SQLite rechazó una asignación ISLR superior a la base de la factura antes del IVA.');
       }
       if (event.kind === 'ACCOUNT_CREDIT') {
+        const purchaseBasePercentage = Number(purchase.islrBasePercentage);
+        const purchaseUnitTaxValue = Number(purchase.islrUnitTaxValueBs);
+        const purchaseWithheld = Number(purchase.islrWithheldBs);
         if (purchase.islrConceptCode !== event.conceptCode ||
-            Math.abs(Number(purchase.islrBasePercentage) - Number(event.basePercentage)) > 0.000001 ||
-            Math.abs(Number(purchase.islrUnitTaxValueBs) - Number(event.unitTaxValueBs)) > 0.000001 ||
+            !Number.isFinite(purchaseBasePercentage) ||
+            !Number.isFinite(purchaseUnitTaxValue) ||
+            !Number.isFinite(purchaseWithheld) || purchaseWithheld < 0 ||
+            Math.abs(purchaseBasePercentage - Number(event.basePercentage)) > 0.000001 ||
+            Math.abs(purchaseUnitTaxValue - Number(event.unitTaxValueBs)) > 0.000001 ||
             Math.abs(Number(allocation.baseAmountBs) - Number(purchase.taxableBaseBs)) > 0.01) {
           throw new Error('SQLite rechazó un abono ISLR que no coincide con el concepto, base y snapshot fiscal de la factura.');
         }
-        accountCreditWithheldTotal += Number(purchase.islrWithheldBs || 0);
+        accountCreditWithheldTotal += purchaseWithheld;
       }
       allocationIds.add(String(allocation.purchaseId));
     }
