@@ -133,7 +133,7 @@ export function buildOpeningEntryItems(input: OpeningEntryBuildInput): JournalEn
   }), emptyTotals());
   if (Math.abs(total.debitBs - total.creditBs) > 0.02 ||
       Math.abs(total.debitUsd - total.creditUsd) > 0.0001) {
-    throw new Error('Los saldos históricos no cuadran en ambas monedas. Regularice el balance antes de abrir el ejercicio.');
+    throw new Error('Los saldos históricos no cuadran en ambas monedas (Bs debe ' + total.debitBs + ', Bs haber ' + total.creditBs + ', USD debe ' + total.debitUsd + ', USD haber ' + total.creditUsd + '). Regularice el balance antes de abrir el ejercicio.');
   }
   return items;
 }
