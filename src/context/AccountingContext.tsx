@@ -15,6 +15,7 @@ import {
   BankStatementMovement
 } from '../types/accounting';
 import { DEFAULT_CHART_OF_ACCOUNTS } from '../data/defaultChartOfAccounts';
+import { prepareAccountForCatalog } from '../types/chartOfAccounts';
 import { ISLR_CONCEPTS, calculateMonthlyIslrRetention, getIslrUnitTaxValueForPeriod, ISLR_FORMULA_FACTOR } from '../data/islrConcepts';
 import {
   INITIAL_COMPANIES,
@@ -724,12 +725,8 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
   };
 
   const addAccount = (account: Account) => {
-    setAccounts(prev => {
-      if (prev.some(a => a.code === account.code)) {
-        return prev.map(a => (a.code === account.code ? account : a));
-      }
-      return [...prev, account].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true }));
-    });
+    const validatedAccount = prepareAccountForCatalog(account, accounts);
+    setAccounts(prev => [...prev, validatedAccount].sort((a, b) => a.code.localeCompare(b.code, undefined, { numeric: true })));
   };
 
   const addJournalEntry = (entry: Omit<JournalEntry, 'id' | 'companyId' | 'createdAt'>): JournalEntry => {
