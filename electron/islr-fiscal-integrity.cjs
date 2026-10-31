@@ -109,9 +109,12 @@ function validateIslrFiscalEventLedger(previousState, nextState) {
   const reversedIds = new Set(next.filter(event => event.kind === 'REVERSAL').map(event => String(event.reversalOfEventId)));
   const activeByPurchase = new Map();
   for (const event of next) {
-    if (event.kind === 'REVERSAL' || reversedIds.has(String(event.id))) continue;
+    if (event.kind === 'REVERSAL' || reversedIds.has(String(event.id)) || !Array.isArray(event.allocations)) continue;
     for (const allocation of event.allocations) {
       const id = String(allocation.purchaseId);
+      // Los eventos legacy conservados sin factura vinculada no se pueden
+      // reasignar retrospectivamente; los eventos nuevos sí se validan arriba.
+      if (!purchaseById.has(id)) continue;
       activeByPurchase.set(id, (activeByPurchase.get(id) || 0) + Number(allocation.baseAmountBs));
     }
   }
