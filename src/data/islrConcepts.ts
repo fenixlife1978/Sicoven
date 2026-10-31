@@ -89,7 +89,7 @@ export const ISLR_FORMULA_FACTOR = 83.3334;
  * anteriores a noviembre de 2021, cuando cambió la escala monetaria.
  */
 export function getIslrUnitTaxValueForPeriod(period: string): number | null {
-  if (!/^\\d{4}-(0[1-9]|1[0-2])$/.test(period)) return null;
+  if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(period)) return null;
   if (period >= '2025-07') return 43;
   if (period >= '2023-06') return 9;
   if (period >= '2022-05') return 0.4;
