@@ -83,7 +83,7 @@ export function buildEquityChangesReport(
   const start = String(year).padStart(4, '0') + '-01-01';
   const end = String(year).padStart(4, '0') + '-12-31';
   const companyEntries = entries
-    .filter(entry => entry.companyId === companyId && /^\\d{4}-\\d{2}-\\d{2}$/.test(entry.date) && entry.date <= end)
+    .filter(entry => entry.companyId === companyId && /^\d{4}-\d{2}-\d{2}$/.test(entry.date) && entry.date <= end)
     .sort((a, b) => a.date.localeCompare(b.date) || a.entryNumber - b.entryNumber);
   const accountsByCode = new Map(accounts.map(account => [account.code, account] as const));
   const equityAccounts = accounts.filter(account => account.isMovement && account.type === 'PATRIMONIO');
