@@ -108,3 +108,19 @@ test('SENIAT export does not reclassify an event-backed purchase into its invoic
   assert.match(eventMonth, /<FechaOperacion>10\/11\/2026<\/FechaOperacion>/);
   assert.match(eventMonth, /<MontoOperacion>1000\.00<\/MontoOperacion>/);
 });
+
+
+test('SENIAT legacy purchase uses account-credit date to select and date the fiscal period', () => {
+  const crossMonth = purchase({ invoiceDate: '2026-10-31', accountCreditDate: '2026-11-02' });
+  const invoiceMonth = generateSeniatIslrOperationsXml(company, [crossMonth], [], '202610');
+  const creditMonth = generateSeniatIslrOperationsXml(company, [crossMonth], [], '202611');
+  assert.doesNotMatch(invoiceMonth, /<DetalleRetencion>/);
+  assert.match(creditMonth, /<FechaOperacion>02\\/11\\/2026<\\/FechaOperacion>/);
+  assert.match(creditMonth, /<MontoOperacion>1000\\.00<\\/MontoOperacion>/);
+});
+
+test('SENIAT legacy purchase without account-credit date falls back to invoice date', () => {
+  const historical = purchase({ invoiceDate: '2026-10-05', accountCreditDate: undefined });
+  const xml = generateSeniatIslrOperationsXml(company, [historical], [], '202610');
+  assert.match(xml, /<FechaOperacion>05\\/10\\/2026<\\/FechaOperacion>/);
+});

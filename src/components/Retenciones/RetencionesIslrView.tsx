@@ -10,7 +10,7 @@ import {
   Receipt
 } from 'lucide-react';
 import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatters';
-import { IslrRetentionVoucher } from '../../types/accounting';
+import { getPurchaseAccountCreditDate, IslrRetentionVoucher } from '../../types/accounting';
 import { IslrVoucherModal } from './IslrVoucherModal';
 import {
   generateSeniatIslrOperationsXml,
@@ -29,7 +29,7 @@ export const RetencionesIslrView: React.FC = () => {
   const fiscalPurchases = purchases.filter(p => p.companyId === currentCompany.id && p.documentType === '01' && Boolean(p.islrConceptCode));
   const availablePeriods = [...new Set([
     ...islrVouchers.filter(v => v.companyId === currentCompany.id).map(v => v.period),
-    ...fiscalPurchases.map(p => p.invoiceDate.slice(0, 7).replace('-', '')),
+    ...fiscalPurchases.map(p => getPurchaseAccountCreditDate(p).slice(0, 7).replace('-', '')),
     ...islrFiscalEvents.filter(event => event.companyId === currentCompany.id).map(event => event.fiscalDate.slice(0, 7).replace('-', ''))
   ])].sort((a, b) => b.localeCompare(a));
   const activePeriod = availablePeriods.includes(selectedPeriod)
@@ -63,7 +63,7 @@ export const RetencionesIslrView: React.FC = () => {
     });
   });
   const legacyPeriodPurchases = fiscalPurchases.filter(p =>
-    p.invoiceDate.slice(0, 7).replace('-', '') === activePeriod && !eventBackedPurchaseIds.has(p.id)
+    getPurchaseAccountCreditDate(p).slice(0, 7).replace('-', '') === activePeriod && !eventBackedPurchaseIds.has(p.id)
   );
   const periodPurchases = [...legacyPeriodPurchases, ...eventOperations];
   const activeOperations = periodPurchases.filter(p => !p.isCancelled);

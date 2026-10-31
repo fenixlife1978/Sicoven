@@ -1,6 +1,7 @@
 import { Company, VatRetentionVoucher, IslrRetentionVoucher, PurchaseRecord } from '../types/accounting';
 import type { IslrFiscalEvent } from '../types/islrFiscalEvent';
 import { cleanRif } from './formatters';
+import { getPurchaseAccountCreditDate } from '../types/accounting';
 
 /**
  * Genera el archivo TXT oficial de Retenciones de IVA para el portal SENIAT
@@ -125,11 +126,11 @@ function buildIslrOperationRows(
   }
   for (const purchase of purchases) {
     if (purchase.companyId !== company.id || purchase.documentType !== '01' ||
-        purchase.invoiceDate.slice(0, 7).replace('-', '') !== period ||
+        getPurchaseAccountCreditDate(purchase).slice(0, 7).replace('-', '') !== period ||
         !purchase.islrConceptCode || purchase.isCancelled || eventPurchaseIds.has(purchase.id)) continue;
     rows.push({
       supplierRif: purchase.supplierRif, invoiceNumber: purchase.invoiceNumber,
-      controlNumber: purchase.controlNumber, invoiceDate: purchase.invoiceDate,
+      controlNumber: purchase.controlNumber, invoiceDate: getPurchaseAccountCreditDate(purchase),
       conceptCode: purchase.islrConceptCode, baseAmountBs: Number(purchase.taxableBaseBs),
       retentionRate: Number(purchase.islrRate || 0),
       subtrahendBs: Number(purchase.islrSubtrahendBs || 0),
