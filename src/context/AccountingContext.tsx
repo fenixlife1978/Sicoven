@@ -29,7 +29,7 @@ import {
 } from '../data/initialData';
 import { formatVoucherNumber, validateVenezuelanRif } from '../utils/formatters';
 import { CreditSettlement, CreditBalance, CreditSettlementDraft, calculateCreditBalance, validateCreditSettlement } from '../types/creditSettlement';
-import { IslrFiscalEvent } from '../types/islrFiscalEvent';
+import { IslrFiscalEvent, validateIslrFiscalEventLedger } from '../types/islrFiscalEvent';
 import { calculateFxFiscalAdjustment } from '../types/fxFiscalAdjustment';
 import { buildReversalItems, assessJournalReversal, validateBankStatementReversal, validatePurchaseInventoryReconciliation } from '../types/journalReversal';
 import { calculateFifoIssue, calculateWeightedAverageCost, calculateWeightedAverageCostDual, validateInventoryMovement, normalizeProductionRecipe, getDefaultInventoryAccountCode, reconstructFifoLayers } from '../types/inventoryAccounting';
@@ -3513,6 +3513,29 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
         const source = s.kind === 'SALE_COLLECTION' ? salesById.get(s.documentId) : purchasesById.get(s.documentId);
         return !source || source.companyId !== s.companyId;
       })) throw new Error('El respaldo contiene liquidaciones duplicadas, inválidas o sin factura/asiento contable válido.');
+      // Validar el libro ISLR contra facturas, asientos y UT histórica antes
+      // de aplicar cualquier cambio de estado durante la restauración.
+      const eligibleBaseByPurchase: Record<string, number> = {};
+      for (const purchase of data.purchases as PurchaseRecord[]) {
+        if (purchase.documentType === '01' && !purchase.isCancelled) {
+          eligibleBaseByPurchase[purchase.id] = Number(purchase.taxableBaseBs);
+        }
+      }
+      validateIslrFiscalEventLedger([], islrFiscalEvents, eligibleBaseByPurchase);
+      for (const event of islrFiscalEvents) {
+        const sourcePurchases = event.allocations.map(allocation => purchasesById.get(allocation.purchaseId));
+        if (sourcePurchases.some((purchase: any) => !purchase ||
+            purchase.documentType !== '01' || purchase.isCancelled ||
+            purchase.companyId !== event.companyId ||
+            String(purchase.supplierRif || '').trim().toUpperCase() !== event.supplierRif.trim().toUpperCase())) {
+          throw new Error('Un evento fiscal ISLR referencia una factura inexistente, anulada o de otro proveedor/empresa.');
+        }
+        const journal = data.journalEntries.find((entry: any) =>
+          entry.id === event.journalEntryId && entry.companyId === event.companyId);
+        if (!journal || journal.date !== event.fiscalDate) {
+          throw new Error('El evento fiscal ISLR no coincide con la fecha y empresa de su asiento contable.');
+        }
+      }
       setCompanies(data.companies);
       // Migración aditiva del plan contable: incorpora cuentas nuevas sin alterar códigos ni saldos existentes.
       const loadedAccountCodes = new Set(data.accounts.map((account: Account) => account.code));
