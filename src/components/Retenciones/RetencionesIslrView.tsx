@@ -13,8 +13,8 @@ import { formatBs, formatUsd, formatDate, cleanRif } from '../../utils/formatter
 import { IslrRetentionVoucher } from '../../types/accounting';
 import { IslrVoucherModal } from './IslrVoucherModal';
 import {
-  generateSeniatIslrXml,
-  generateSeniatIslrTxt,
+  generateSeniatIslrOperationsXml,
+  generateSeniatIslrOperationsTxt,
   downloadFile
 } from '../../utils/seniatGenerators';
 
@@ -141,7 +141,7 @@ export const RetencionesIslrView: React.FC = () => {
             </button>
             <button
               onClick={handleDownloadXml}
-              disabled={filteredVouchers.length === 0 || hasPendingFiscalCorrection}
+              disabled={!hasFiscalOperations || hasPendingFiscalCorrection}
               className="flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 rounded-xl transition shadow cursor-pointer"
             >
               <Download className="w-4 h-4" />
