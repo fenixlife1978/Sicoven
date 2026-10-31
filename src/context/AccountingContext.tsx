@@ -3421,6 +3421,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
     setBankStatementMovements([]);
     setCreditSettlements([]);
     setSupplierAdvanceSettlements([]);
+    setSupplierDirectAdvances([]);
     setIslrFiscalEvents([]);
   };
 
@@ -3467,6 +3468,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       bankStatementMovements,
       creditSettlements,
       supplierAdvanceSettlements,
+      supplierDirectAdvances,
       islrFiscalEvents
     };
     return JSON.stringify(backup, null, 2);
@@ -3611,6 +3613,24 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       // debe ser todo-o-nada desde la perspectiva de la interfaz.
       const settlements = Array.isArray(data.creditSettlements) ? data.creditSettlements : [];
       const advanceSettlements = Array.isArray(data.supplierAdvanceSettlements) ? data.supplierAdvanceSettlements : [];
+      const directAdvances = data.supplierDirectAdvances === undefined ? [] : data.supplierDirectAdvances;
+      if (!Array.isArray(directAdvances) || directAdvances.some((item: any) => {
+        const account = data.accounts.find((candidate: Account) => candidate.code === item?.treasuryAccountCode);
+        const journal = data.journalEntries.find((candidate: JournalEntry) => candidate.id === item?.journalEntryId);
+        return !item || typeof item.id !== 'string' || !item.id.trim() ||
+          !companyIds.has(item.companyId) || typeof item.supplierRif !== 'string' || !item.supplierRif.trim() ||
+          !isValidIsoDate(item.date) || !Number.isFinite(item.amountUsd) || item.amountUsd <= 0 ||
+          !Number.isFinite(item.bookValueBs) || item.bookValueBs <= 0 ||
+          !Number.isFinite(item.bcvRate) || item.bcvRate <= 0 ||
+          !['BS', 'USD'].includes(item.paymentCurrency) || !Number.isFinite(item.paidAmount) || item.paidAmount <= 0 ||
+          !String(item.reference || '').trim() || !account || account.type !== 'ACTIVO' || !account.isMovement ||
+          !account.code.startsWith('1.1.1.') || !journal || journal.companyId !== item.companyId ||
+          journal.type !== 'ANTICIPO_PROVEEDOR' || journal.date !== item.date;
+      })) throw new Error('El respaldo contiene anticipos directos de proveedor inválidos o sin asiento contable.');
+      const directAdvanceIds = new Set<string>();
+      if (directAdvances.some((item: any) => directAdvanceIds.has(item.id) || (directAdvanceIds.add(item.id), false))) {
+        throw new Error('El respaldo contiene IDs duplicados de anticipos directos.');
+      }
       const advanceIds = new Set<string>();
       if (advanceSettlements.some((item: any) => {
         if (!item || typeof item.id !== 'string' || !item.id.trim() || advanceIds.has(item.id) ||
@@ -3711,7 +3731,7 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       setBankStatementMovements(data.bankStatementMovements);
       setCreditSettlements(settlements);
       setSupplierAdvanceSettlements(advanceSettlements);
-      setSupplierDirectAdvances(Array.isArray(data.supplierDirectAdvances) ? data.supplierDirectAdvances : []);
+      setSupplierDirectAdvances(directAdvances);
       setIslrFiscalEvents(islrFiscalEvents);
       setCurrentCompanyId(data.companies[0].id);
       return true;
