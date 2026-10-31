@@ -836,6 +836,7 @@ function validateAccountingSnapshot(previousState, nextState) {
   const advanceIds = new Set();
   const advanceTotals = new Map();
   const advanceAllocationsByNote = new Map();
+  const advanceAllocationsByDirect = new Map();
   const nextBankAccounts = asArray(nextState.bankAccounts);
   for (const settlement of advanceSettlements) {
     const id = String(settlement.id || '');
@@ -852,20 +853,29 @@ function validateAccountingSnapshot(previousState, nextState) {
       throw new Error('SQLite rechazó una liquidación de anticipo con proveedor, fecha, moneda o tasa inválidos.');
     }
     const sources = Array.isArray(settlement.sourceCreditNoteIds) ? settlement.sourceCreditNoteIds : [];
-    if (!sources.length || new Set(sources).size !== sources.length) {
-      throw new Error('SQLite rechazó una liquidación sin notas de crédito fuente únicas.');
+    const directSources = Array.isArray(settlement.sourceDirectAdvanceIds) ? settlement.sourceDirectAdvanceIds : [];
+    if ((!sources.length && !directSources.length) ||
+        new Set(sources).size !== sources.length || new Set(directSources).size !== directSources.length) {
+      throw new Error('SQLite rechazó una liquidación sin orígenes de anticipo únicos.');
     }
     const allocations = Array.isArray(settlement.sourceCreditNoteAllocations) ? settlement.sourceCreditNoteAllocations : [];
-    if (!allocations.length || allocations.length !== sources.length ||
+    const directAllocations = Array.isArray(settlement.sourceDirectAdvanceAllocations) ? settlement.sourceDirectAdvanceAllocations : [];
+    if (allocations.length !== sources.length ||
         allocations.some(item => !item || typeof item.creditNoteId !== 'string' ||
           !Number.isFinite(Number(item.amountUsd)) || Number(item.amountUsd) <= 0 ||
           !Number.isFinite(Number(item.bookValueBs)) || Number(item.bookValueBs) < 0) ||
         new Set(allocations.map(item => item.creditNoteId)).size !== allocations.length ||
-        allocations.some(item => !sources.includes(item.creditNoteId))) {
-      throw new Error('SQLite rechazó una liquidación sin distribución individual válida por nota de crédito.');
+        allocations.some(item => !sources.includes(item.creditNoteId)) ||
+        directAllocations.length !== directSources.length ||
+        directAllocations.some(item => !item || typeof item.directAdvanceId !== 'string' ||
+          !Number.isFinite(Number(item.amountUsd)) || Number(item.amountUsd) <= 0 ||
+          !Number.isFinite(Number(item.bookValueBs)) || Number(item.bookValueBs) < 0) ||
+        new Set(directAllocations.map(item => item.directAdvanceId)).size !== directAllocations.length ||
+        directAllocations.some(item => !directSources.includes(item.directAdvanceId))) {
+      throw new Error('SQLite rechazó una liquidación sin distribución individual válida por cada origen.');
     }
-    const allocatedUsd = allocations.reduce((sum, item) => sum + Number(item.amountUsd), 0);
-    const allocatedBs = allocations.reduce((sum, item) => sum + Number(item.bookValueBs), 0);
+    const allocatedUsd = [...allocations, ...directAllocations].reduce((sum, item) => sum + Number(item.amountUsd), 0);
+    const allocatedBs = [...allocations, ...directAllocations].reduce((sum, item) => sum + Number(item.bookValueBs), 0);
     if (Math.abs(allocatedUsd - amountUsd) > 0.01 || Math.abs(allocatedBs - bookBs) > 0.02) {
       throw new Error('SQLite rechazó una distribución individual que no coincide con el importe liquidado.');
     }
@@ -875,6 +885,13 @@ function validateAccountingSnapshot(previousState, nextState) {
         Number(note.supplierAdvanceUsd || 0) <= 0)) {
       throw new Error('SQLite rechazó una liquidación vinculada a notas de crédito inexistentes, reversadas o de otro proveedor.');
     }
+    const directAdvanceById = new Map(asArray(nextState.supplierDirectAdvances).map(item => [String(item.id), item]));
+    const sourceDirectAdvances = directAllocations.map(allocation => directAdvanceById.get(String(allocation.directAdvanceId)));
+    if (sourceDirectAdvances.some(source => !source || source.companyId !== companyId || source.isReversed ||
+        String(source.supplierRif || '').trim().toUpperCase() !== rif ||
+        Number(source.amountUsd || 0) <= 0)) {
+      throw new Error('SQLite rechazó una liquidación vinculada a un anticipo directo inexistente, reversado o de otra empresa/proveedor.');
+    }
     if (!settlement.isReversed) {
       for (const allocation of allocations) {
         const key = companyId + '|' + allocation.creditNoteId;
@@ -882,6 +899,13 @@ function validateAccountingSnapshot(previousState, nextState) {
         used.usd += Number(allocation.amountUsd);
         used.bs += Number(allocation.bookValueBs);
         advanceAllocationsByNote.set(key, used);
+      }
+      for (const allocation of directAllocations) {
+        const key = companyId + '|' + allocation.directAdvanceId;
+        const used = advanceAllocationsByDirect.get(key) || { usd: 0, bs: 0 };
+        used.usd += Number(allocation.amountUsd);
+        used.bs += Number(allocation.bookValueBs);
+        advanceAllocationsByDirect.set(key, used);
       }
     }
     const journal = nextById.get(String(settlement.journalEntryId || ''));
@@ -1003,10 +1027,15 @@ function validateAccountingSnapshot(previousState, nextState) {
     const credits = asArray(nextState.purchases).filter(item =>
       item.companyId === companyId && item.documentType === '03' && !item.isCancelled &&
       String(item.supplierRif || '').trim().toUpperCase() === rif);
-    const availableUsd = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0);
-    const availableBs = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0);
+    const direct = asArray(nextState.supplierDirectAdvances).filter(item =>
+      item.companyId === companyId && !item.isReversed &&
+      String(item.supplierRif || '').trim().toUpperCase() === rif);
+    const availableUsd = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceUsd || 0), 0) +
+      direct.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
+    const availableBs = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) +
+      direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0);
     if (used.usd > availableUsd + 0.005 || used.bs > availableBs + 0.02) {
-      throw new Error('SQLite rechazó liquidaciones de anticipos que exceden el saldo acreditado por notas de crédito.');
+      throw new Error('SQLite rechazó liquidaciones de anticipos que exceden los saldos de notas de crédito y desembolsos directos.');
     }
   }
   for (const [key, used] of advanceAllocationsByNote) {
@@ -1015,6 +1044,16 @@ function validateAccountingSnapshot(previousState, nextState) {
     if (!note || used.usd > Number(note.supplierAdvanceUsd || 0) + 0.005 ||
         used.bs > Number(note.supplierAdvanceBs || 0) + 0.02) {
       throw new Error('SQLite rechazó liquidaciones que exceden el saldo individual de una nota de crédito.');
+    }
+  }
+  const directAdvanceByIdForCaps = new Map(asArray(nextState.supplierDirectAdvances).map(item => [String(item.id), item]));
+  for (const [key, used] of advanceAllocationsByDirect) {
+    const [companyId, directId] = key.split('|');
+    const source = directAdvanceByIdForCaps.get(directId);
+    if (!source || source.companyId !== companyId ||
+        used.usd > Number(source.amountUsd || 0) + 0.005 ||
+        used.bs > Number(source.bookValueBs || 0) + 0.02) {
+      throw new Error('SQLite rechazó liquidaciones que exceden el saldo individual de un desembolso directo.');
     }
   }
 
