@@ -120,7 +120,7 @@ test('reconciles multiple partial ISLR source-event reversals against one credit
   const originalJournal = { id: 'j0', companyId: 'c1', date: '2026-10-01' };
   const reversalJournal = {
     id: 'j-credit-note', companyId: 'c1', date: '2026-10-20', type: 'AJUSTE',
-    items: [{ accountCode: '2.1.2.04', debitBs: 50, creditBs: 0 }]
+    items: [{ accountCode: '2.1.2.04', debitBs: 30, creditBs: 0 }]
   };
   const original = {
     id: 'e0', companyId: 'c1', supplierRif: 'J-12345678-9', conceptCode: '003',
@@ -160,7 +160,7 @@ test('reconciles multiple partial ISLR source-event reversals against one credit
   assert.doesNotThrow(() => validateIslrFiscalEventLedger(previous, next));
   assert.throws(() => validateIslrFiscalEventLedger(previous, {
     ...next, journalEntries: [...next.journalEntries.slice(0, -1), {
-      ...reversalJournal, items: [{ accountCode: '2.1.2.04', debitBs: 49, creditBs: 0 }]
+      ...reversalJournal, items: [{ accountCode: '2.1.2.04', debitBs: 29, creditBs: 0 }]
     }]
   }), /total de eventos revertidos/);
 });
