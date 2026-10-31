@@ -91,7 +91,7 @@ test('rejects duplicate ISLR withholding events when partial payments follow the
     journalEntryId: 'j-payment-1', voucherId: undefined
   };
   const paymentTwo = {
-    ...paymentOne, id: 'e-payment-2', sequence: 2,
+    ...paymentOne, id: 'e-payment-2', fiscalDate: '2026-10-06', sequence: 1,
     allocations: [{ purchaseId: purchase.id, baseAmountBs: 15 }],
     journalEntryId: 'j-payment-2'
   };
