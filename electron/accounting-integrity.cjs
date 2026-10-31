@@ -882,7 +882,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     }
     const allocatedUsd = [...allocations, ...directAllocations].reduce((sum, item) => sum + Number(item.amountUsd), 0);
     const allocatedBs = [...allocations, ...directAllocations].reduce((sum, item) => sum + Number(item.bookValueBs), 0);
-    if (Math.abs(allocatedUsd - amountUsd) > 0.01 || Math.abs(allocatedBs - bookBs) > 0.02) {
+    if (Math.abs(allocatedUsd - amountUsd) > 0.00001 || Math.abs(allocatedBs - bookBs) > 0.02) {
       throw new Error('SQLite rechazó una distribución individual que no coincide con el importe liquidado.');
     }
     const sourceNotes = allocations.map(allocation => purchaseById.get(String(allocation.creditNoteId)));
@@ -929,10 +929,10 @@ function validateAccountingSnapshot(previousState, nextState) {
       sum + (item.accountCode === '1.1.2.03' ? Number(item.creditUsd || 0) : 0), 0);
     if (Math.abs(totals.debitBs - totals.creditBs) >= 0.01 ||
         Math.abs(totals.debitUsd - totals.creditUsd) >= 0.01 ||
-        Math.abs(totals.debitUsd - amountUsd) >= 0.01 ||
-        Math.abs(totals.creditUsd - amountUsd) >= 0.01 ||
+        Math.abs(totals.debitUsd - amountUsd) >= 0.0001 ||
+        Math.abs(totals.creditUsd - amountUsd) >= 0.0001 ||
         Math.abs(advanceCredit - bookBs) >= 0.01 ||
-        Math.abs(advanceCreditUsd - amountUsd) >= 0.01) {
+        Math.abs(advanceCreditUsd - amountUsd) >= 0.0001) {
       throw new Error('SQLite rechazó un asiento de anticipo descuadrado o que no descarga el valor histórico correcto.');
     }
     if (settlement.kind === 'REFUND_RECEIVED') {
@@ -1003,7 +1003,7 @@ function validateAccountingSnapshot(previousState, nextState) {
           String(target.supplierRif || '').trim().toUpperCase() !== rif ||
           !targetPayableCode || payableDebitBs <= 0 ||
           Math.abs(payableDebitBs - expectedPayableDebitBs) > 0.02 ||
-          Math.abs(payableDebitUsd - amountUsd) > 0.01 ||
+          Math.abs(payableDebitUsd - amountUsd) > 0.0001 ||
           payableCreditBs > 0.02 || payableCreditUsd > 0.0001 ||
           advanceDebitBs > 0.02 || advanceDebitUsd > 0.0001 || !Number.isFinite(invoiceRate) || invoiceRate <= 0 ||
           journal.items.some(item => !allowedCodes.has(item.accountCode)) ||
@@ -1040,14 +1040,14 @@ function validateAccountingSnapshot(previousState, nextState) {
       direct.reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const availableBs = credits.reduce((sum, item) => sum + Number(item.supplierAdvanceBs || 0), 0) +
       direct.reduce((sum, item) => sum + Number(item.bookValueBs || 0), 0);
-    if (used.usd > availableUsd + 0.005 || used.bs > availableBs + 0.02) {
+    if (used.usd > availableUsd + 0.00001 || used.bs > availableBs + 0.02) {
       throw new Error('SQLite rechazó liquidaciones de anticipos que exceden los saldos de notas de crédito y desembolsos directos.');
     }
   }
   for (const [key, used] of advanceAllocationsByNote) {
     const [companyId, noteId] = key.split('|');
     const note = purchaseById.get(noteId);
-    if (!note || used.usd > Number(note.supplierAdvanceUsd || 0) + 0.005 ||
+    if (!note || used.usd > Number(note.supplierAdvanceUsd || 0) + 0.00001 ||
         used.bs > Number(note.supplierAdvanceBs || 0) + 0.02) {
       throw new Error('SQLite rechazó liquidaciones que exceden el saldo individual de una nota de crédito.');
     }
@@ -1057,7 +1057,7 @@ function validateAccountingSnapshot(previousState, nextState) {
     const [companyId, directId] = key.split('|');
     const source = directAdvanceByIdForCaps.get(directId);
     if (!source || source.companyId !== companyId ||
-        used.usd > Number(source.amountUsd || 0) + 0.005 ||
+        used.usd > Number(source.amountUsd || 0) + 0.00001 ||
         used.bs > Number(source.bookValueBs || 0) + 0.02) {
       throw new Error('SQLite rechazó liquidaciones que exceden el saldo individual de un desembolso directo.');
     }
@@ -1079,7 +1079,7 @@ function validateAccountingSnapshot(previousState, nextState) {
       .reduce((sum, item) => sum + Number(item.amountUsd || 0), 0);
     const netUsd = Number(purchase.totalAmountUsd) -
       Number(purchase.vatWithheldUsd || 0) - Number(purchase.islrWithheldUsd || 0);
-    if (paidUsd + creditedUsd + appliedUsd > netUsd + 0.005) {
+    if (paidUsd + creditedUsd + appliedUsd > netUsd + 0.00001) {
       throw new Error('SQLite rechazó pagos, notas de crédito y anticipos aplicados que superan el principal neto de una factura por pagar.');
     }
   }
