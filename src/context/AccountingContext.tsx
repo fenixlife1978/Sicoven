@@ -1286,14 +1286,17 @@ export const AccountingProvider: React.FC<{ children: React.ReactNode; token: st
       }
       const supplierKey = String(purchaseData.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase();
       const monthKey = String(purchaseData.invoiceDate || '').slice(0, 7);
-      const priorMonthlyOperations = purchases.filter(item =>
+      const matchingMonthlyOperations = purchases.filter(item =>
         item.companyId === currentCompany.id &&
-        !item.isCancelled &&
         item.documentType === '01' &&
         String(item.supplierRif || '').replace(/[^A-Z0-9]/gi, '').toUpperCase() === supplierKey &&
         item.islrConceptCode === concept.code &&
         String(item.invoiceDate || '').slice(0, 7) === monthKey
       );
+      if (matchingMonthlyOperations.some(item => item.isCancelled)) {
+        throw new Error('Existe una operación ISLR del mismo proveedor, concepto y mes que fue anulada y requiere rectificación fiscal. No se puede recalcular el acumulado hasta resolver esa corrección.');
+      }
+      const priorMonthlyOperations = matchingMonthlyOperations;
       if (priorMonthlyOperations.some(item =>
         item.islrUnitTaxValueBs !== purchaseData.islrUnitTaxValueBs ||
         item.islrFormulaFactor !== purchaseData.islrFormulaFactor ||
