@@ -148,13 +148,13 @@ export const AnnualReportsView: React.FC<{ onBack: () => void }> = ({ onBack }) 
       [],
       [],
       ['NOTAS Y REVELACIONES', 'Número', 'Categoría', 'Estado', 'Título', 'Contenido', 'Cuentas fuente', 'Asientos fuente'],
-      ...yearDisclosures.map(note => [note.noteNumber, note.kind, note.status, note.title, note.body, note.sourceAccountCodes.join(', '), note.sourceEntryIds.join(', ')]),
+      ...yearDisclosures.map(note => ['', note.noteNumber, note.kind, note.status, note.title, note.body, note.sourceAccountCodes.join(', '), note.sourceEntryIds.join(', ')]),
       [],
       ['ANEXO CUANTITATIVO - MOVIMIENTOS POR CUENTA', 'Cuenta', 'Debe Bs.', 'Haber Bs.', 'Neto Bs.', 'Debe USD', 'Haber USD', 'Neto USD', 'Asientos'],
       ...disclosureMovements.map(row => {
         const account = accounts.find(item => item.code === row.accountCode);
         const creditNormal = account?.type === 'INGRESOS' || account?.type === 'PASIVO' || account?.type === 'PATRIMONIO';
-        return [row.accountCode + ' - ' + row.accountName, row.debitBs.toFixed(2), row.creditBs.toFixed(2), (creditNormal ? row.creditBs-row.debitBs : row.debitBs-row.creditBs).toFixed(2), row.debitUsd.toFixed(6), row.creditUsd.toFixed(6), (creditNormal ? row.creditUsd-row.debitUsd : row.debitUsd-row.creditUsd).toFixed(6), row.entryIds.length];
+        return ['', row.accountCode + ' - ' + row.accountName, row.debitBs.toFixed(2), row.creditBs.toFixed(2), (creditNormal ? row.creditBs-row.debitBs : row.debitBs-row.creditBs).toFixed(2), row.debitUsd.toFixed(6), row.creditUsd.toFixed(6), (creditNormal ? row.creditUsd-row.debitUsd : row.debitUsd-row.creditUsd).toFixed(6), row.entryIds.length];
       }),
       [],
       ['Fecha', 'Asiento', 'Tipo', 'Cuenta', 'Concepto', 'Neto Bs.', 'Neto USD'],
